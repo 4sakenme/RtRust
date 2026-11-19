@@ -35,3 +35,4 @@ ClientAppSettings.local.json
 *.swo
 *~
 .DS_Store
+runners/

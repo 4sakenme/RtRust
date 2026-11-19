@@ -2967,3 +2967,8 @@ select option, .riot-select option {
   transition: width 0.2s ease;
   box-shadow: 0 0 10px rgba(0, 245, 212, 0.5);
 }
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

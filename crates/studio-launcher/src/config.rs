@@ -206,7 +206,7 @@ pub struct LauncherConfig {
     pub first_run_completed: bool,
 
     // Rust DXGI Shim & GPU Resource Controls
-    #[serde(default = "default_true")]
+    #[serde(default = "default_false")]
     pub use_dxgi_shim: bool,
     #[serde(default = "default_true")]
     pub alt_tab_gpu_sleep: bool,
@@ -262,7 +262,7 @@ impl Default for LauncherConfig {
             wallpaper_blur: default_wallpaper_blur(),
             wallpaper_dim: default_wallpaper_dim(),
             first_run_completed: default_false(),
-            use_dxgi_shim: default_true(),
+            use_dxgi_shim: default_false(),
             alt_tab_gpu_sleep: default_true(),
             vram_cap_mb: default_vram_cap(),
             cgroup_ram_limit_gb: default_cgroup_ram(),
@@ -312,8 +312,8 @@ impl LauncherConfig {
                 self.editor_quality_level = 1;
                 self.dxvk_max_vram_mb = 1024;
                 self.block_webview2 = true;
-                self.graphics_backend = "vulkan".to_string();
-                self.use_dxgi_shim = true;
+                self.graphics_backend = "auto".to_string();
+                self.use_dxgi_shim = false;
                 self.alt_tab_gpu_sleep = true;
                 self.vram_cap_mb = 1024;
                 self.cgroup_ram_limit_gb = 4;
@@ -332,8 +332,8 @@ impl LauncherConfig {
                 self.editor_quality_level = 10;
                 self.dxvk_max_vram_mb = 2048;
                 self.block_webview2 = false;
-                self.graphics_backend = "vulkan".to_string();
-                self.use_dxgi_shim = true;
+                self.graphics_backend = "auto".to_string();
+                self.use_dxgi_shim = false;
                 self.alt_tab_gpu_sleep = true;
                 self.vram_cap_mb = 2048;
                 self.cgroup_ram_limit_gb = 6;

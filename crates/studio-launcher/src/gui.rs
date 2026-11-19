@@ -1707,13 +1707,19 @@ async fn run_studio_session_linux(
     cmd.env("WINEDEBUG", "-all");
     cmd.env("WINEFSYNC", "1");
     cmd.env("WINEESYNC", "1");
-    cmd.env("WINEDLLOVERRIDES", "winemenubuilder.exe=d;dxgi=n,b;d3d11=n,b");
+    cmd.env(
+        "WINEDLLOVERRIDES",
+        "winemenubuilder.exe=d;concrt140=n,b;msvcp140=n,b;msvcp140_1=n,b;msvcp140_2=n,b;ucrtbase=n,b;vcruntime140=n,b;vcruntime140_1=n,b",
+    );
     cmd.env("DXVK_HUD", "0");
     cmd.env("DXVK_STATE_CACHE", "1");
     cmd.env("DXVK_STATE_CACHE_PATH", &cache_dir);
     cmd.env("ANV_ENABLE_PIPELINE_CACHE", "1");
     cmd.env("MESA_VK_WSI_PRESENT_MODE", "mailbox");
     cmd.env("QT_QPA_PLATFORM_PLUGIN_PATH", "Qt5/platforms");
+
+    // Configure bundled runner environment (WINESERVER, WINELOADER, LD_LIBRARY_PATH)
+    PrefixManager::setup_wine_env(&mut cmd, &wine_bin);
 
     // Wine mouse & pointer confinement tweaks
     cmd.env("WINE_MOUSE_WARP_OVERRIDE", "force");
@@ -1756,11 +1762,113 @@ async fn run_studio_session_linux(
         });
     }
 
+    // Live log monitor: tails Roblox Studio's newest log file and streams connection progress to UI
+    let stop_log_tail = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop_log_tail_cl = stop_log_tail.clone();
+    let p_logs_proxy = progress_proxy.clone();
+    let prefix_dir_cl = prefix_mgr.prefix_dir.clone();
+
+    std::thread::spawn(move || {
+        let users_dir = prefix_dir_cl.join("drive_c/users");
+        let mut target_log: Option<std::path::PathBuf> = None;
+        for _ in 0..30 {
+            if stop_log_tail_cl.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
+            if let Ok(entries) = std::fs::read_dir(&users_dir) {
+                for entry in entries.flatten() {
+                    let logs_path = entry.path().join("AppData/Local/Roblox/logs");
+                    if logs_path.exists() {
+                        if let Ok(log_files) = std::fs::read_dir(&logs_path) {
+                            let mut newest_time = std::time::SystemTime::UNIX_EPOCH;
+                            for lf in log_files.flatten() {
+                                let path = lf.path();
+                                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                    if name.contains("_Studio_") && name.ends_with("_last.log") {
+                                        if let Ok(meta) = lf.metadata() {
+                                            if let Ok(mtime) = meta.modified() {
+                                                if mtime > newest_time {
+                                                    newest_time = mtime;
+                                                    target_log = Some(path);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if target_log.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+
+        if let Some(log_path) = target_log {
+            info!("Live-tailing Studio log: {:?}", log_path);
+            let mut last_pos: u64 = 0;
+            let mut last_stage = String::new();
+
+            while !stop_log_tail_cl.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Ok(mut file) = std::fs::File::open(&log_path) {
+                    use std::io::{BufRead, BufReader, Seek, SeekFrom};
+                    if let Ok(len) = file.metadata().map(|m| m.len()) {
+                        if len > last_pos {
+                            let _ = file.seek(SeekFrom::Start(last_pos));
+                            let reader = BufReader::new(file);
+                            for line_res in reader.lines() {
+                                if let Ok(line) = line_res {
+                                    let stage = if line.contains("fast flags loading [start]") {
+                                        Some("Applying hardware FastFlags...")
+                                    } else if line.contains("starting Qt main event loop") {
+                                        Some("Starting Qt5 runtime environment...")
+                                    } else if line.contains("Trying graphics mode") {
+                                        Some("Initializing 3D Viewport engine...")
+                                    } else if line.contains("RenderView created") {
+                                        Some("Compiling graphics shaders & geometry...")
+                                    } else if line.contains("Loaded") && line.contains("shaders") {
+                                        Some("Shader pipeline ready")
+                                    } else if line.contains("MainWindow::MainWindow - start") {
+                                        Some("Constructing Studio workspace...")
+                                    } else if line.contains("Acquiring download lock") {
+                                        Some("Synchronizing cloud assets & plugins...")
+                                    } else if line.contains("Create DataModel")
+                                        || line.contains("Loading place")
+                                        || line.contains("openLoadingPage")
+                                    {
+                                        Some("Connecting to server • Loading Place data...")
+                                    } else if line.contains("State: Qt::ApplicationActive") {
+                                        Some("Studio Connected & Active")
+                                    } else {
+                                        None
+                                    };
+
+                                    if let Some(s) = stage {
+                                        if s != last_stage {
+                                            last_stage = s.to_string();
+                                            let _ = p_logs_proxy
+                                                .send_event(UserEvent::StatusUpdate(s.to_string()));
+                                        }
+                                    }
+                                }
+                            }
+                            last_pos = len;
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+        }
+    });
+
     let status = cmd
         .status()
         .context("Failed to execute Wine process. Ensure 'wine' is installed on your PATH.")?;
 
     stop_signal.store(true, std::sync::atomic::Ordering::Relaxed);
+    stop_log_tail.store(true, std::sync::atomic::Ordering::Relaxed);
 
     Ok(status.code().unwrap_or(0))
 }

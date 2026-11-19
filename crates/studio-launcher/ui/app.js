@@ -37,9 +37,10 @@
       { name: "DOORS 👁️", place_id: 6516141723, description: "Atmospheric Horror & Puzzle", playing: "45K+ Playing", thumbnail_url: DEFAULT_THUMBS[2] },
       { name: "Rivals FPS", place_id: 17625359962, description: "High-Octane Competitive FPS", playing: "80K+ Playing", thumbnail_url: DEFAULT_THUMBS[3] }
     ],
-    selectedPlaceId: 95206881,
-    selectedPlaceName: "Default Baseplate",
-    selectedPlaceDesc: "Standard Roblox Studio template with DXVK Vulkan pipeline caching enabled.",
+    selectedPlaceId: null,
+    selectedUniverseId: null,
+    selectedPlaceName: "Roblox Studio IDE",
+    selectedPlaceDesc: "Default Studio start page with template browser and account sync.",
     selectedThumb: DEFAULT_THUMBS[0],
     activeFilter: 'all',
     searchQuery: '',
@@ -414,11 +415,61 @@
   });
 
   // --- Places Rendering & Selection ---
+  function clearSelectedPlace() {
+    appState.selectedPlaceId = null;
+    appState.selectedUniverseId = null;
+    appState.selectedPlaceName = "Roblox Studio IDE";
+    appState.selectedPlaceDesc = "Default Studio start page with template browser and account sync.";
+    appState.selectedThumb = DEFAULT_THUMBS[0];
+
+    if (heroGameTitle) heroGameTitle.textContent = "ROBLOX STUDIO IDE";
+    if (heroGameDesc) heroGameDesc.textContent = "Standard Studio Start Page. Click any experience on the left to edit a specific place instead.";
+    if (summaryPlaceName) summaryPlaceName.textContent = "Roblox Studio IDE";
+    if (summaryPlaceId) summaryPlaceId.textContent = "Start Page • Templates";
+    if (summaryThumbMini) {
+      summaryThumbMini.style.backgroundImage = 'none';
+      summaryThumbMini.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 9h6"/></svg>';
+    }
+
+    if (detailTitle) detailTitle.textContent = "Roblox Studio IDE (Default)";
+    if (detailPlaceId) detailPlaceId.textContent = "--";
+    if (detailUniverseId) detailUniverseId.textContent = "--";
+    if (detailDesc) detailDesc.textContent = "Studio will open directly to Home / Templates. Click any experience on the left to edit a specific place instead.";
+    if (detailCategoryTag) detailCategoryTag.textContent = "IDE MODE";
+    if (detailThumbImg) detailThumbImg.style.backgroundImage = `url("${DEFAULT_THUMBS[0]}")`;
+    if (detailTcBadge) {
+      detailTcBadge.className = 'detail-tc-badge tc-off';
+      detailTcBadge.textContent = 'STANDARD IDE';
+    }
+    if (detailSubplacesWrap) detailSubplacesWrap.classList.add('hidden');
+
+    if (placesGrid) {
+      placesGrid.querySelectorAll('.experience-card').forEach(c => c.classList.remove('active'));
+    }
+
+    const btnLabel = btnStartStudio ? btnStartStudio.querySelector('.btn-label-text') : null;
+    if (btnLabel) btnLabel.textContent = "START ROBLOX STUDIO";
+    applyWallpaper();
+  }
+
   function selectPlace(placeId, name, desc, thumb, universeId, category, isTc, localPath) {
+    // Clicking the already selected place deselects back to IDE mode
+    if (appState.selectedPlaceId === placeId) {
+      clearSelectedPlace();
+      return;
+    }
+
     appState.selectedPlaceId = placeId;
+    appState.selectedUniverseId = universeId;
     appState.selectedPlaceName = name;
     appState.selectedPlaceDesc = desc;
     appState.selectedThumb = thumb;
+
+    const btnLabel = btnStartStudio ? btnStartStudio.querySelector('.btn-label-text') : null;
+    if (btnLabel) {
+      const shortName = name.length > 16 ? name.slice(0, 16) + "…" : name;
+      btnLabel.textContent = `EDIT: ${shortName.toUpperCase()}`;
+    }
 
     if (heroGameTitle) heroGameTitle.textContent = name.toUpperCase();
     if (heroGameDesc) heroGameDesc.textContent = desc || "Experience ready to launch.";
@@ -892,6 +943,89 @@
     }
   }
 
+  // --- Live Studio Launch Progress Modal ---
+  let launchTimer = null;
+  let launchStartTime = 0;
+
+  function showLaunchProgressModal() {
+    const modal = document.getElementById('modal-launch-progress');
+    const targetLabel = document.getElementById('launch-progress-target');
+    const stageText = document.getElementById('launch-stage-text');
+    const elapsedText = document.getElementById('launch-elapsed-text');
+    const progressBar = document.getElementById('launch-progress-bar');
+    const logStream = document.getElementById('launch-log-stream');
+
+    if (!modal) return;
+    modal.classList.remove('hidden');
+
+    if (targetLabel) {
+      targetLabel.textContent = appState.selectedPlaceId
+        ? `Target: ${appState.selectedPlaceName} (Place #${appState.selectedPlaceId})`
+        : `Target: Roblox Studio IDE (Home & Templates)`;
+    }
+
+    if (stageText) stageText.textContent = 'Preparing Kombucha Wine environment...';
+    if (progressBar) progressBar.style.width = '15%';
+    if (elapsedText) elapsedText.textContent = '0s';
+
+    if (logStream) {
+      logStream.innerHTML = `
+        <div style="color: #38BDF8;">[0s] Launching Kombucha Wine runtime...</div>
+        <div style="color: #94A3B8;">[0s] Setting up Wine prefix & Vulkan/OpenGL graphics...</div>
+      `;
+    }
+
+    launchStartTime = Date.now();
+    if (launchTimer) clearInterval(launchTimer);
+    launchTimer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - launchStartTime) / 1000);
+      if (elapsedText) elapsedText.textContent = `${elapsed}s`;
+    }, 1000);
+  }
+
+  function appendLaunchLog(msg) {
+    const logStream = document.getElementById('launch-log-stream');
+    const stageText = document.getElementById('launch-stage-text');
+    const progressBar = document.getElementById('launch-progress-bar');
+    const elapsed = Math.round((Date.now() - (launchStartTime || Date.now())) / 1000);
+
+    if (stageText) stageText.textContent = msg;
+
+    if (progressBar) {
+      if (msg.includes('FastFlags')) progressBar.style.width = '30%';
+      else if (msg.includes('Qt5') || msg.includes('workspace')) progressBar.style.width = '50%';
+      else if (msg.includes('3D') || msg.includes('Viewport') || msg.includes('Shader')) progressBar.style.width = '70%';
+      else if (msg.includes('Connecting') || msg.includes('Place')) progressBar.style.width = '85%';
+      else if (msg.includes('Active') || msg.includes('Ready') || msg.includes('Running')) progressBar.style.width = '100%';
+    }
+
+    if (logStream) {
+      const line = document.createElement('div');
+      line.style.color = msg.includes('Error')
+        ? '#F87171'
+        : (msg.includes('Active') || msg.includes('Ready') || msg.includes('online'))
+        ? '#4ADE80'
+        : '#E2E8F0';
+      line.textContent = `[${elapsed}s] ${msg}`;
+      logStream.appendChild(line);
+      logStream.scrollTop = logStream.scrollHeight;
+    }
+  }
+
+  function hideLaunchProgressModal() {
+    const modal = document.getElementById('modal-launch-progress');
+    if (modal) modal.classList.add('hidden');
+    if (launchTimer) {
+      clearInterval(launchTimer);
+      launchTimer = null;
+    }
+  }
+
+  const btnCloseLaunch = document.getElementById('btn-close-launch-popup');
+  const btnDismissLaunch = document.getElementById('btn-dismiss-launch');
+  if (btnCloseLaunch) btnCloseLaunch.addEventListener('click', hideLaunchProgressModal);
+  if (btnDismissLaunch) btnDismissLaunch.addEventListener('click', hideLaunchProgressModal);
+
   // --- START / UPDATE STUDIO BUTTON ---
   btnStartStudio.addEventListener('click', () => {
     if (appState.isUpdateAvailable) {
@@ -908,6 +1042,8 @@
 
     statusIndicatorDot.className = 'status-indicator-dot busy';
     statusDisplayText.textContent = 'Launching Studio under Wine...';
+
+    showLaunchProgressModal();
 
     sendIpc({
       type: 'play',
@@ -1070,18 +1206,24 @@
 
     if (state.places && state.places.length > 0) {
       appState.places = state.places;
-      const current = appState.places.find(p => p.place_id === appState.selectedPlaceId) || appState.places[0];
-      if (current) {
-        selectPlace(
-          current.place_id,
-          current.name,
-          current.description,
-          current.thumbnail_url,
-          current.universe_id,
-          current.category,
-          current.team_create_enabled,
-          current.local_path
-        );
+      if (appState.selectedPlaceId) {
+        const current = appState.places.find(p => p.place_id === appState.selectedPlaceId);
+        if (current) {
+          selectPlace(
+            current.place_id,
+            current.name,
+            current.description,
+            current.thumbnail_url,
+            current.universe_id,
+            current.category,
+            current.team_create_enabled,
+            current.local_path
+          );
+        } else {
+          clearSelectedPlace();
+        }
+      } else {
+        clearSelectedPlace();
       }
       renderPlaces();
     }
@@ -1182,12 +1324,21 @@
 
     if (state.status_text) {
       statusDisplayText.textContent = state.status_text;
+      appendLaunchLog(state.status_text);
     }
 
     if (state.is_running !== undefined) {
       if (state.is_running) {
         statusIndicatorDot.className = 'status-indicator-dot busy';
-        statusDisplayText.textContent = 'Roblox Studio Running';
+        if (state.status_text && (state.status_text.includes('Active') || state.status_text.includes('Ready'))) {
+          statusIndicatorDot.className = 'status-indicator-dot online';
+          statusDisplayText.textContent = 'Studio Active & Connected';
+          setTimeout(() => {
+            hideLaunchProgressModal();
+          }, 2000);
+        } else {
+          statusDisplayText.textContent = state.status_text || 'Roblox Studio Running';
+        }
         btnStartStudio.disabled = true;
         btnStartStudio.style.opacity = '0.7';
       } else {
@@ -1195,6 +1346,7 @@
         statusDisplayText.textContent = 'System Ready';
         btnStartStudio.disabled = false;
         btnStartStudio.style.opacity = '1';
+        hideLaunchProgressModal();
         window.finishInstallProgress();
       }
     }

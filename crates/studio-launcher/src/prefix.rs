@@ -36,8 +36,8 @@ impl PrefixManager {
         })
     }
 
-    /// Resolves the Wine executable: respects $WINE env var, local RtRust runtime (~/.local/share/rtrust/runtime/wine),
-    /// or detects system Wine from PATH (/usr/bin/wine). Completely independent of external launchers.
+    /// Resolves the Wine executable: respects $WINE env var, bundled RtRust runner (./runners/wine),
+    /// local RtRust runtime (~/.local/share/rtrust/runtime/wine), or detects system Wine from PATH.
     pub fn get_wine_binary() -> PathBuf {
         if let Ok(wine_env) = std::env::var("WINE") {
             if !wine_env.trim().is_empty() {
@@ -49,6 +49,26 @@ impl PrefixManager {
             }
         }
 
+        // 1. Check local project bundled runners directory: ./runners/wine/bin/wine
+        if let Ok(cwd) = std::env::current_dir() {
+            let proj_wine = cwd.join("runners/wine/bin/wine");
+            if proj_wine.exists() {
+                info!("Using bundled RtRust Wine runner from project: {:?}", proj_wine);
+                return proj_wine;
+            }
+        }
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                let exe_wine = exe_dir.join("runners/wine/bin/wine");
+                if exe_wine.exists() {
+                    info!("Using bundled RtRust Wine runner from exe directory: {:?}", exe_wine);
+                    return exe_wine;
+                }
+            }
+        }
+
+        // 2. Check user data runtime directory: ~/.local/share/rtrust/runtime/wine/bin/wine
         if let Some(home) = dirs::home_dir() {
             let local_wine = home.join(".local/share/rtrust/runtime/wine/bin/wine");
             if local_wine.exists() {
@@ -57,6 +77,7 @@ impl PrefixManager {
             }
         }
 
+        // 3. Fallback to system Wine in PATH
         if let Ok(output) = Command::new("which").arg("wine").output() {
             if output.status.success() {
                 let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -71,6 +92,30 @@ impl PrefixManager {
         }
 
         PathBuf::from("wine")
+    }
+
+    /// Sets up environment variables (WINESERVER, WINELOADER, LD_LIBRARY_PATH) for bundled Wine runners.
+    pub fn setup_wine_env(cmd: &mut Command, wine_bin: &Path) {
+        if let Some(wine_dir) = wine_bin.parent().and_then(|p| p.parent()) {
+            let wineserver = wine_dir.join("bin").join("wineserver");
+            if wineserver.exists() {
+                cmd.env("WINESERVER", wineserver);
+            }
+            let wine64 = wine_dir.join("bin").join("wine64");
+            if wine64.exists() {
+                cmd.env("WINELOADER", wine_bin);
+            }
+            let lib_dir = wine_dir.join("lib");
+            if lib_dir.exists() {
+                let current_ld = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+                let new_ld = if current_ld.is_empty() {
+                    lib_dir.display().to_string()
+                } else {
+                    format!("{}:{}", lib_dir.display(), current_ld)
+                };
+                cmd.env("LD_LIBRARY_PATH", new_ld);
+            }
+        }
     }
 
     /// Resolves the Roblox Plugins directory inside the Wine prefix or native Windows user directory.
