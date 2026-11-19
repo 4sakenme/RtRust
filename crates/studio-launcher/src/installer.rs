@@ -33,25 +33,19 @@ impl Installer {
     /// - If `enable` is true: backs up original `WebView2Loader.dll` -> `WebView2Loader.dll.bak`
     ///   and replaces it with the embedded ultra-light stub DLL (`STUB_WEBVIEW2_BYTES`).
     /// - If `enable` is false: restores `WebView2Loader.dll.bak` -> `WebView2Loader.dll`.
-    pub fn safe_swap_webview2(studio_dir: &Path, enable: bool) -> Result<()> {
+    /// Ensures the genuine official WebView2Loader.dll is restored and preserved.
+    pub fn safe_swap_webview2(studio_dir: &Path, _enable: bool) -> Result<()> {
         let dll_path = studio_dir.join("WebView2Loader.dll");
         let bak_path = studio_dir.join("WebView2Loader.dll.bak");
 
-        if enable {
-            if !bak_path.exists() && dll_path.exists() {
-                if let Err(e) = fs::copy(&dll_path, &bak_path) {
-                    tracing::warn!("Could not backup original WebView2Loader.dll: {}", e);
-                } else {
-                    info!("Backed up original WebView2Loader.dll -> WebView2Loader.dll.bak");
-                }
+        if bak_path.exists() {
+            let bak_len = fs::metadata(&bak_path).map(|m| m.len()).unwrap_or(0);
+            let dll_len = fs::metadata(&dll_path).map(|m| m.len()).unwrap_or(0);
+            if bak_len > dll_len || dll_len < 50_000 {
+                fs::copy(&bak_path, &dll_path)
+                    .context("Failed to restore genuine WebView2Loader.dll from backup")?;
+                info!("Restored genuine WebView2Loader.dll ({} bytes) from backup in {:?}", bak_len, studio_dir);
             }
-            fs::write(&dll_path, STUB_WEBVIEW2_BYTES)
-                .context("Failed to write stub WebView2Loader.dll")?;
-            info!("Injected lightweight stub WebView2Loader.dll into {:?}", dll_path);
-        } else if bak_path.exists() {
-            fs::copy(&bak_path, &dll_path)
-                .context("Failed to restore original WebView2Loader.dll from backup")?;
-            info!("Restored original WebView2Loader.dll from backup in {:?}", studio_dir);
         }
         Ok(())
     }
@@ -154,9 +148,8 @@ impl Installer {
         // Ensure AppSettings.xml is written (critical for content resolution)
         Self::write_app_settings(&version_dir)?;
 
-        // Swap or restore WebView2Loader based on active profile & user configuration
-        let potato_mode = cfg.profile_mode == "potato" && cfg.block_webview2 && cfg.place_id.is_none();
-        Self::safe_swap_webview2(&version_dir, potato_mode)?;
+        // Always ensure original WebView2Loader.dll is restored
+        Self::safe_swap_webview2(&version_dir, false)?;
 
         Ok(executable_path)
     }

@@ -56,12 +56,10 @@ impl FFlagsGenerator {
 
         let obj = settings.as_object_mut().unwrap();
 
-        // Webview2 mitigations: only disable start page webviews if NOT loading a cloud place
-        if cfg.block_webview2 && cfg.place_id.is_none() {
-            obj.insert("FFlagStudioWebView2Disabled".to_string(), json!("True"));
-            obj.insert("FFlagStudioDisableEmbeddedWebViews".to_string(), json!("True"));
-            obj.insert("FFlagEnableWebView2".to_string(), json!("False"));
-        }
+        // Ensure WebView2 is explicitly enabled for modern Studio Hub, Toolbox, and Cloud Edit
+        obj.insert("FFlagEnableWebView2".to_string(), json!("True"));
+        obj.remove("FFlagStudioWebView2Disabled");
+        obj.remove("FFlagStudioDisableEmbeddedWebViews");
 
         // Active GPU optimizations:
         // 1. Disable MSAA (reduces 3D viewport pixel fillrate by up to 50% on iGPUs)

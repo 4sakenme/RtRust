@@ -1448,11 +1448,8 @@ async fn run_studio_session_windows(
 
     let studio_dir = studio_exe.parent().context("Invalid studio exe path")?;
 
-    // 2. Safe DLL Swap:
-    // If low-RAM / potato mode AND block_webview2 is active, swap in the embedded stub DLL.
-    // Otherwise, restore original WebView2Loader.dll from .bak if backup exists.
-    let potato_mode = config.profile_mode == "potato" && config.block_webview2 && config.place_id.is_none();
-    Installer::safe_swap_webview2(studio_dir, potato_mode)?;
+    // 2. Safe DLL Swap: Always preserve genuine WebView2Loader.dll for Studio Hub & Toolbox
+    Installer::safe_swap_webview2(studio_dir, false)?;
 
     // Deploy or restore Rust DXGI Proxy Shim for GPU/VRAM control
     let _ = crate::runtime::SlimRuntimeManager::deploy_dxgi_shim(
@@ -1476,7 +1473,32 @@ async fn run_studio_session_windows(
     info!("Starting Roblox Studio native executable: {:?}", studio_exe);
     let mut cmd = Command::new(&studio_exe);
     cmd.current_dir(studio_dir);
-    cmd.arg("-ide");
+
+    // Place Launch Modes: Mode 1 (Cloud Edit Protocol) vs Mode 2 (Local file) vs Mode 3 (IDE Hub)
+    let selected_place = config
+        .place_id
+        .and_then(|pid| config.saved_places.iter().find(|p| p.place_id == pid));
+
+    if let Some(place) = selected_place {
+        if let Some(ref local_path) = place.local_path {
+            info!("Launching Roblox Studio with local file: {}", local_path);
+            cmd.arg(local_path);
+        } else {
+            let universe_id = place.universe_id.unwrap_or(place.place_id);
+            info!("Launching Studio Cloud Edit: placeId={}, universeId={}", place.place_id, universe_id);
+            cmd.args(["-launchmode", "edit"]);
+            cmd.args(["-task", "EditPlace"]);
+            cmd.args(["-placeId", &place.place_id.to_string()]);
+            cmd.args(["-universeId", &universe_id.to_string()]);
+        }
+    } else if let Some(id) = config.place_id {
+        info!("Launching Studio Cloud Edit: placeId={}", id);
+        cmd.args(["-launchmode", "edit"]);
+        cmd.args(["-task", "EditPlace"]);
+        cmd.args(["-placeId", &id.to_string()]);
+    } else {
+        cmd.arg("-ide");
+    }
 
     // Custom user CLI flags
     if let Some(ref flags) = config.custom_cli_flags {
@@ -1511,28 +1533,6 @@ async fn run_studio_session_windows(
         }
     }
 
-    // Place Launch Modes: Mode 1 (Cloud Edit Protocol) vs Mode 2 (Local file)
-    let selected_place = config
-        .place_id
-        .and_then(|pid| config.saved_places.iter().find(|p| p.place_id == pid));
-
-    if let Some(place) = selected_place {
-        if let Some(ref local_path) = place.local_path {
-            info!("Launching Roblox Studio with local file: {}", local_path);
-            cmd.arg(local_path);
-        } else {
-            let universe_id = place.universe_id.unwrap_or(place.place_id);
-            cmd.args(["-task", "EditPlace"]);
-            cmd.args(["-placeId", &place.place_id.to_string()]);
-            if let Some(uid) = place.universe_id {
-                cmd.args(["-universeId", &uid.to_string()]);
-            }
-        }
-    } else if let Some(id) = config.place_id {
-        cmd.args(["-task", "EditPlace"]);
-        cmd.args(["-placeId", &id.to_string()]);
-    }
-
     // Low-RAM / Potato background cleaner for Windows
     let clean_potato = potato_mode;
     let stop_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1542,9 +1542,6 @@ async fn run_studio_session_windows(
         std::thread::spawn(move || {
             while !stop_signal_thread.load(std::sync::atomic::Ordering::Relaxed) {
                 std::thread::sleep(std::time::Duration::from_secs(30));
-                let _ = Command::new("taskkill")
-                    .args(["/F", "/IM", "msedgewebview2.exe"])
-                    .output();
                 let _ = Command::new("taskkill")
                     .args(["/F", "/IM", "RobloxCrashHandler.exe"])
                     .output();
@@ -1620,9 +1617,8 @@ async fn run_studio_session_linux(
     // Inject current FFlags for Studio
     let _ = crate::fflags::FFlagsGenerator::inject_settings(studio_dir, config);
 
-    // Swap or restore WebView2Loader: Keep real WebView2 whenever loading an online cloud place
-    let potato_mode = config.profile_mode == "potato" && config.block_webview2 && config.place_id.is_none();
-    let _ = Installer::safe_swap_webview2(studio_dir, potato_mode);
+    // Preserve genuine WebView2Loader for Studio Start Page
+    let _ = Installer::safe_swap_webview2(studio_dir, false);
 
     // Deploy or restore Rust DXGI Proxy Shim for GPU/VRAM control
     let _ = crate::runtime::SlimRuntimeManager::deploy_dxgi_shim(
@@ -1639,7 +1635,40 @@ async fn run_studio_session_linux(
     }
 
     args.push(studio_exe.to_string_lossy().to_string());
-    args.push("-ide".to_string());
+
+    // Place Launch Modes: Mode 1 (Cloud Edit Protocol) vs Mode 2 (Local Snapshot/File) vs Mode 3 (IDE Hub)
+    let selected_place = config
+        .place_id
+        .and_then(|pid| config.saved_places.iter().find(|p| p.place_id == pid));
+
+    if let Some(place) = selected_place {
+        if let Some(ref local_path) = place.local_path {
+            info!("Launching Roblox Studio with local place snapshot: {}", local_path);
+            let win_path = format!("Z:{}", local_path.replace('/', "\\"));
+            args.push(win_path);
+        } else {
+            let universe_id = place.universe_id.unwrap_or(place.place_id);
+            info!("Launching Studio Cloud Edit: placeId={}, universeId={}", place.place_id, universe_id);
+            args.push("-launchmode".to_string());
+            args.push("edit".to_string());
+            args.push("-task".to_string());
+            args.push("EditPlace".to_string());
+            args.push("-placeId".to_string());
+            args.push(place.place_id.to_string());
+            args.push("-universeId".to_string());
+            args.push(universe_id.to_string());
+        }
+    } else if let Some(id) = config.place_id {
+        info!("Launching Studio Cloud Edit: placeId={}", id);
+        args.push("-launchmode".to_string());
+        args.push("edit".to_string());
+        args.push("-task".to_string());
+        args.push("EditPlace".to_string());
+        args.push("-placeId".to_string());
+        args.push(id.to_string());
+    } else {
+        args.push("-ide".to_string());
+    }
 
     // Custom user CLI flags
     if let Some(ref flags) = config.custom_cli_flags {
@@ -1664,34 +1693,6 @@ async fn run_studio_session_linux(
                 }
             }
         }
-    }
-
-    // Place Launch Modes: Mode 1 (Cloud Edit Protocol) vs Mode 2 (Local Snapshot/File)
-    let selected_place = config
-        .place_id
-        .and_then(|pid| config.saved_places.iter().find(|p| p.place_id == pid));
-
-    if let Some(place) = selected_place {
-        if let Some(ref local_path) = place.local_path {
-            info!("Launching Roblox Studio with local place snapshot: {}", local_path);
-            let win_path = format!("Z:{}", local_path.replace('/', "\\"));
-            args.push(win_path);
-        } else {
-            let universe_id = place.universe_id.unwrap_or(place.place_id);
-            info!("Launching Studio Cloud Edit: placeId={}, universeId={}", place.place_id, universe_id);
-            args.push("-task".to_string());
-            args.push("EditPlace".to_string());
-            args.push("-placeId".to_string());
-            args.push(place.place_id.to_string());
-            args.push("-universeId".to_string());
-            args.push(universe_id.to_string());
-        }
-    } else if let Some(id) = config.place_id {
-        info!("Launching Studio Cloud Edit: placeId={}", id);
-        args.push("-task".to_string());
-        args.push("EditPlace".to_string());
-        args.push("-placeId".to_string());
-        args.push(id.to_string());
     }
 
     // Wrap with Linux cgroups v2 resource scope if configured
@@ -1756,7 +1757,6 @@ async fn run_studio_session_linux(
         std::thread::spawn(move || {
             while !stop_signal_thread.load(std::sync::atomic::Ordering::Relaxed) {
                 std::thread::sleep(std::time::Duration::from_secs(30));
-                let _ = Command::new("pkill").arg("-f").arg("msedgewebview2.exe").output();
                 let _ = Command::new("pkill").arg("-f").arg("RobloxCrashHandler.exe").output();
             }
         });

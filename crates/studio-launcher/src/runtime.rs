@@ -157,8 +157,8 @@ impl SlimRuntimeManager {
                     .status();
             }
 
-            // Explicitly disable winemenubuilder & msedgewebview2
-            let disabled_dlls = ["winemenubuilder.exe", "msedgewebview2.exe"];
+            // Explicitly disable winemenubuilder (prevents creating unwanted host .desktop files)
+            let disabled_dlls = ["winemenubuilder.exe"];
             for dll in &disabled_dlls {
                 let _ = Command::new(&wine_bin)
                     .env("WINEPREFIX", prefix_dir)
@@ -177,6 +177,20 @@ impl SlimRuntimeManager {
                     ])
                     .status();
             }
+
+            // Ensure msedgewebview2.exe is NEVER disabled in DllOverrides (Studio Hub requires it)
+            let _ = Command::new(&wine_bin)
+                .env("WINEPREFIX", prefix_dir)
+                .env("WINEDEBUG", "-all")
+                .args([
+                    "reg",
+                    "delete",
+                    "HKCU\\Software\\Wine\\DllOverrides",
+                    "/v",
+                    "msedgewebview2.exe",
+                    "/f",
+                ])
+                .status();
 
             Ok(())
         }

@@ -75,9 +75,29 @@ impl PrefixManager {
                 info!("Using local RtRust Wine runtime: {:?}", local_wine);
                 return local_wine;
             }
+
+            // 3. Check Vinegar Kombucha Wine runner (~/.var/app/org.vinegarhq.Vinegar/data/vinegar/kombucha*/bin/wine)
+            let kombucha_dir = home.join(".var/app/org.vinegarhq.Vinegar/data/vinegar");
+            let kombucha_link = kombucha_dir.join("kombucha/bin/wine");
+            if kombucha_link.exists() {
+                info!("Using Vinegar Kombucha Wine runner: {:?}", kombucha_link);
+                return kombucha_link;
+            }
+            if let Ok(entries) = fs::read_dir(&kombucha_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() && path.file_name().map_or(false, |n| n.to_string_lossy().starts_with("kombucha")) {
+                        let candidate = path.join("bin/wine");
+                        if candidate.exists() {
+                            info!("Using Vinegar Kombucha Wine runner: {:?}", candidate);
+                            return candidate;
+                        }
+                    }
+                }
+            }
         }
 
-        // 3. Fallback to system Wine in PATH
+        // 4. Fallback to system Wine in PATH
         if let Ok(output) = Command::new("which").arg("wine").output() {
             if output.status.success() {
                 let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
