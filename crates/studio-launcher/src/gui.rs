@@ -1486,14 +1486,12 @@ async fn run_studio_session_windows(
         } else {
             let universe_id = place.universe_id.unwrap_or(place.place_id);
             info!("Launching Studio Cloud Edit: placeId={}, universeId={}", place.place_id, universe_id);
-            cmd.args(["-launchmode", "edit"]);
             cmd.args(["-task", "EditPlace"]);
             cmd.args(["-placeId", &place.place_id.to_string()]);
             cmd.args(["-universeId", &universe_id.to_string()]);
         }
     } else if let Some(id) = config.place_id {
         info!("Launching Studio Cloud Edit: placeId={}", id);
-        cmd.args(["-launchmode", "edit"]);
         cmd.args(["-task", "EditPlace"]);
         cmd.args(["-placeId", &id.to_string()]);
     } else {
@@ -1649,8 +1647,6 @@ async fn run_studio_session_linux(
         } else {
             let universe_id = place.universe_id.unwrap_or(place.place_id);
             info!("Launching Studio Cloud Edit: placeId={}, universeId={}", place.place_id, universe_id);
-            args.push("-launchmode".to_string());
-            args.push("edit".to_string());
             args.push("-task".to_string());
             args.push("EditPlace".to_string());
             args.push("-placeId".to_string());
@@ -1660,8 +1656,6 @@ async fn run_studio_session_linux(
         }
     } else if let Some(id) = config.place_id {
         info!("Launching Studio Cloud Edit: placeId={}", id);
-        args.push("-launchmode".to_string());
-        args.push("edit".to_string());
         args.push("-task".to_string());
         args.push("EditPlace".to_string());
         args.push("-placeId".to_string());
