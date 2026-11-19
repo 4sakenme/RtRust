@@ -15,7 +15,7 @@ provides=('rtrust')
 conflicts=('rtrust')
 source=("https://github.com/4sakenme/RtRust/releases/download/v${pkgver}/rtrust"
         "rtrust.desktop")
-sha256sums=('09dd13eef3a36ad2f0316a460ba3f585727762f1c771aca903b5b776cb83fac3'
+sha256sums=('c71d01979011045de9f5ed3b2a94c1563bccd2c0384ff0d2b8613f43218ec1b4'
             'f3640639e429c4ff5551187fc7631aa7a8439728fe0d5bb9bbe7abfb0931b11d')
 
 package() {

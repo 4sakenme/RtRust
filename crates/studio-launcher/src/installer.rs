@@ -155,7 +155,7 @@ impl Installer {
         Self::write_app_settings(&version_dir)?;
 
         // Swap or restore WebView2Loader based on active profile & user configuration
-        let potato_mode = cfg.profile_mode == "potato" && cfg.block_webview2;
+        let potato_mode = cfg.profile_mode == "potato" && cfg.block_webview2 && cfg.place_id.is_none();
         Self::safe_swap_webview2(&version_dir, potato_mode)?;
 
         Ok(executable_path)

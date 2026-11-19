@@ -1451,7 +1451,7 @@ async fn run_studio_session_windows(
     // 2. Safe DLL Swap:
     // If low-RAM / potato mode AND block_webview2 is active, swap in the embedded stub DLL.
     // Otherwise, restore original WebView2Loader.dll from .bak if backup exists.
-    let potato_mode = config.profile_mode == "potato" && config.block_webview2;
+    let potato_mode = config.profile_mode == "potato" && config.block_webview2 && config.place_id.is_none();
     Installer::safe_swap_webview2(studio_dir, potato_mode)?;
 
     // Deploy or restore Rust DXGI Proxy Shim for GPU/VRAM control
@@ -1522,17 +1522,14 @@ async fn run_studio_session_windows(
             cmd.arg(local_path);
         } else {
             let universe_id = place.universe_id.unwrap_or(place.place_id);
-            let launch_protocol = format!(
-                "roblox-studio:1+launchmode:edit+task:EditPlace+placeId:{}+universeId:{}+robloxLocale:en_us+gameLocale:en_us",
-                place.place_id, universe_id
-            );
-            cmd.arg(launch_protocol);
+            cmd.args(["-task", "EditPlace"]);
             cmd.args(["-placeId", &place.place_id.to_string()]);
             if let Some(uid) = place.universe_id {
                 cmd.args(["-universeId", &uid.to_string()]);
             }
         }
     } else if let Some(id) = config.place_id {
+        cmd.args(["-task", "EditPlace"]);
         cmd.args(["-placeId", &id.to_string()]);
     }
 
@@ -1620,6 +1617,13 @@ async fn run_studio_session_linux(
     info!("Starting Roblox Studio under Wine binary: {:?}", wine_bin);
     let studio_dir = studio_exe.parent().context("Invalid studio exe path")?;
 
+    // Inject current FFlags for Studio
+    let _ = crate::fflags::FFlagsGenerator::inject_settings(studio_dir, config);
+
+    // Swap or restore WebView2Loader: Keep real WebView2 whenever loading an online cloud place
+    let potato_mode = config.profile_mode == "potato" && config.block_webview2 && config.place_id.is_none();
+    let _ = Installer::safe_swap_webview2(studio_dir, potato_mode);
+
     // Deploy or restore Rust DXGI Proxy Shim for GPU/VRAM control
     let _ = crate::runtime::SlimRuntimeManager::deploy_dxgi_shim(
         studio_dir,
@@ -1674,19 +1678,18 @@ async fn run_studio_session_linux(
             args.push(win_path);
         } else {
             let universe_id = place.universe_id.unwrap_or(place.place_id);
-            let launch_protocol = format!(
-                "roblox-studio:1+launchmode:edit+task:EditPlace+placeId:{}+universeId:{}+robloxLocale:en_us+gameLocale:en_us",
-                place.place_id, universe_id
-            );
-            args.push(launch_protocol);
+            info!("Launching Studio Cloud Edit: placeId={}, universeId={}", place.place_id, universe_id);
+            args.push("-task".to_string());
+            args.push("EditPlace".to_string());
             args.push("-placeId".to_string());
             args.push(place.place_id.to_string());
-            if let Some(uid) = place.universe_id {
-                args.push("-universeId".to_string());
-                args.push(uid.to_string());
-            }
+            args.push("-universeId".to_string());
+            args.push(universe_id.to_string());
         }
     } else if let Some(id) = config.place_id {
+        info!("Launching Studio Cloud Edit: placeId={}", id);
+        args.push("-task".to_string());
+        args.push("EditPlace".to_string());
         args.push("-placeId".to_string());
         args.push(id.to_string());
     }
@@ -1704,7 +1707,7 @@ async fn run_studio_session_linux(
     cmd.env("WINEDEBUG", "-all");
     cmd.env("WINEFSYNC", "1");
     cmd.env("WINEESYNC", "1");
-    cmd.env("WINEDLLOVERRIDES", "winemenubuilder.exe=d;msedgewebview2.exe=d;dxgi=n,b;d3d11=n,b");
+    cmd.env("WINEDLLOVERRIDES", "winemenubuilder.exe=d;dxgi=n,b;d3d11=n,b");
     cmd.env("DXVK_HUD", "0");
     cmd.env("DXVK_STATE_CACHE", "1");
     cmd.env("DXVK_STATE_CACHE_PATH", &cache_dir);
