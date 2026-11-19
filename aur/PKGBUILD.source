@@ -1,0 +1,27 @@
+# Maintainer: 4sakenme <kuro>
+pkgname=rtrust-git
+pkgver=0.0.1
+pkgrel=1
+pkgdesc="Ultra-Lightweight Roblox Studio Launcher & Resource Governor for Linux (Source Build)"
+arch=('x86_64')
+url="https://github.com/4sakenme/RtRust"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'libsoup3' 'wine' 'vulkan-icd-loader')
+makedepends=('cargo' 'git')
+provides=('rtrust')
+conflicts=('rtrust' 'rtrust-bin')
+source=("git+https://github.com/4sakenme/RtRust.git"
+        "rtrust.desktop")
+sha256sums=('SKIP'
+            'f3640639e429c4ff5551187fc7631aa7a8439728fe0d5bb9bbe7abfb0931b11d')
+
+build() {
+    cd "${srcdir}/RtRust"
+    cargo build --release -p studio-launcher
+}
+
+package() {
+    cd "${srcdir}/RtRust"
+    install -Dm755 "target/release/studio-launcher" "${pkgdir}/usr/bin/rtrust"
+    install -Dm644 "${srcdir}/rtrust.desktop" "${pkgdir}/usr/share/applications/rtrust.desktop"
+}

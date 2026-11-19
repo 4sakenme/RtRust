@@ -507,46 +507,66 @@ pub fn run_gui() -> Result<()> {
                 }
                 UserEvent::CheckWebviewCookies => {
                     if let Some(ref wv) = login_webview {
-                        if let Ok(cookies) = wv.cookies_for_url("https://www.roblox.com") {
-                            for c in cookies {
-                                if c.name() == ".ROBLOSECURITY" {
-                                    let cookie_val = c.value().to_string();
-                                    info!("Captured .ROBLOSECURITY cookie from Roblox WebView!");
-                                    login_webview = None;
-                                    login_window = None;
+                        let candidate_urls = [
+                            "https://www.roblox.com",
+                            "https://roblox.com",
+                            "https://auth.roblox.com",
+                            "https://apis.roblox.com",
+                            "https://www.roblox.com/home",
+                        ];
 
-                                    let p_auth = proxy.clone();
-                                    std::thread::spawn(move || {
-                                        let rt = match tokio::runtime::Runtime::new() {
-                                            Ok(r) => r,
-                                            Err(e) => {
-                                                error!("Runtime error: {}", e);
-                                                return;
-                                            }
-                                        };
-                                        rt.block_on(async {
-                                            let api = RobloxApi::new();
-                                            match api.authenticate_with_cookie(&cookie_val).await {
-                                                Ok(user) => {
-                                                    if let Ok(places) = api.fetch_user_places(user.user_id, &cookie_val).await {
-                                                        if !places.is_empty() {
-                                                            let mut cfg = LauncherConfig::load();
-                                                            cfg.saved_places = places;
-                                                            let _ = cfg.save();
-                                                        }
-                                                    }
-                                                    let _ = p_auth.send_event(UserEvent::LoginSuccess(user));
-                                                }
-                                                Err(e) => {
-                                                    error!("Failed to authenticate captured cookie: {}", e);
-                                                    let _ = p_auth.send_event(UserEvent::StatusUpdate(format!("Login failed: {}", e)));
-                                                }
-                                            }
-                                        });
-                                    });
-                                    break;
+                        let mut found_cookie = None;
+                        for target_url in &candidate_urls {
+                            if let Ok(cookies) = wv.cookies_for_url(target_url) {
+                                for c in cookies {
+                                    if c.name() == ".ROBLOSECURITY" && !c.value().is_empty() {
+                                        found_cookie = Some(c.value().to_string());
+                                        break;
+                                    }
                                 }
                             }
+                            if found_cookie.is_some() {
+                                break;
+                            }
+                        }
+
+                        if let Some(cookie_val) = found_cookie {
+                            info!("Captured .ROBLOSECURITY cookie from Roblox WebView!");
+                            if let Some(ref lw) = login_window {
+                                lw.set_visible(false);
+                            }
+                            login_webview = None;
+                            login_window = None;
+
+                            let p_auth = proxy.clone();
+                            std::thread::spawn(move || {
+                                let rt = match tokio::runtime::Runtime::new() {
+                                    Ok(r) => r,
+                                    Err(e) => {
+                                        error!("Runtime error: {}", e);
+                                        return;
+                                    }
+                                };
+                                rt.block_on(async {
+                                    let api = RobloxApi::new();
+                                    match api.authenticate_with_cookie(&cookie_val).await {
+                                        Ok(user) => {
+                                            if let Ok(places) = api.fetch_user_places(user.user_id, &cookie_val).await {
+                                                if !places.is_empty() {
+                                                    let mut cfg = LauncherConfig::load();
+                                                    cfg.saved_places = places;
+                                                    let _ = cfg.save();
+                                                }
+                                            }
+                                            let _ = p_auth.send_event(UserEvent::LoginSuccess(user));
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to authenticate captured cookie: {}", e);
+                                            let _ = p_auth.send_event(UserEvent::StatusUpdate(format!("Login failed: {}", e)));
+                                        }
+                                    }
+                                });
+                            });
                         }
                     }
                 }

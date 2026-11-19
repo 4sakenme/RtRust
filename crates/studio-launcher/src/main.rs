@@ -132,7 +132,7 @@ async fn run_studio_cli(place_id: Option<u64>, target_fps: Option<u32>) -> Resul
         };
 
         let studio_dir = studio_exe.parent().context("Invalid studio exe path")?;
-        let potato = config.profile_mode == "potato" || config.block_webview2;
+        let potato = config.profile_mode == "potato" && config.block_webview2;
         Installer::safe_swap_webview2(studio_dir, potato)?;
 
         info!("Starting Roblox Studio (Native Windows)...");

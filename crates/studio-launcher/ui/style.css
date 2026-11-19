@@ -152,7 +152,8 @@ body {
    A. SPLIT LOGIN SCREEN (Riot Client Style)
    ============================================================ */
 .login-view {
-  display: flex;
+  display: flex !important;
+  flex-direction: row !important;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -630,6 +631,59 @@ body {
   border-color: rgba(0, 210, 255, 0.3);
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* Popular Experiences Showcase on Login Splash */
+.showcase-games-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.game-card-mini {
+  background: rgba(18, 22, 31, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.game-card-mini:hover {
+  transform: translateY(-3px);
+  border-color: #00D2FF;
+  box-shadow: 0 8px 24px rgba(0, 210, 255, 0.25);
+}
+
+.game-card-thumb {
+  width: 100%;
+  height: 76px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+
+.game-card-meta {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.game-card-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #F8FAFC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-card-players {
+  font-size: 10px;
+  font-weight: 700;
+  color: #10B981;
 }
 
 .feature-icon-circle {

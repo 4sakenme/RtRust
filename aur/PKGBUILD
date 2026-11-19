@@ -1,0 +1,24 @@
+# Maintainer: 4sakenme <kuro>
+pkgname=rtrust-bin
+pkgver=0.0.1
+pkgrel=1
+pkgdesc="Ultra-Lightweight Roblox Studio Launcher & Resource Governor for Linux"
+arch=('x86_64')
+url="https://github.com/4sakenme/RtRust"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'libsoup3' 'wine' 'vulkan-icd-loader')
+optdepends=(
+    'vulkan-tools: Vulkan diagnostic utilities'
+    'dxvk-bin: High performance DirectX 11 Vulkan translation'
+)
+provides=('rtrust')
+conflicts=('rtrust')
+source=("https://github.com/4sakenme/RtRust/releases/download/v${pkgver}/rtrust"
+        "rtrust.desktop")
+sha256sums=('f72ecc7725591bb10d6c84b19ddbba3ffae54a0c46421714cb5df908791b2d1a'
+            'f3640639e429c4ff5551187fc7631aa7a8439728fe0d5bb9bbe7abfb0931b11d')
+
+package() {
+    install -Dm755 "${srcdir}/rtrust" "${pkgdir}/usr/bin/rtrust"
+    install -Dm644 "${srcdir}/rtrust.desktop" "${pkgdir}/usr/share/applications/rtrust.desktop"
+}

@@ -33,6 +33,27 @@ RtRust is a modular, high-performance launcher, runtime governor, and graphics o
 
 ---
 
+## Performance Benchmarks
+
+<p align="center">
+  <img src="assets/benchmark.svg" alt="RtRust Performance Benchmarks" width="100%">
+</p>
+
+---
+
+## Distro Compatibility & Requirements
+
+| Linux Distribution | Compatibility | Installation Method | Notes |
+| :--- | :---: | :--- | :--- |
+| **Arch Linux / Manjaro / EndeavourOS** | 🟢 Native | Pre-built binary or AUR (`rtrust-bin`) | Supported out of the box |
+| **Fedora 40 / 41 / Rawhide** | 🟢 Native | Pre-built binary (`glibc >= 2.39`) | Supported out of the box |
+| **Ubuntu 24.04+ LTS / Pop!_OS 24.04** | 🟢 Native | Pre-built binary (`glibc >= 2.39`) | Supported out of the box |
+| **Debian 12 (Bookworm)** | 🟡 Source Build | `cargo build --release` | System glibc is 2.36; build from source |
+| **Ubuntu 22.04 LTS** | 🟡 Source Build | `cargo build --release` | System glibc is 2.35; build from source |
+| **Windows 10 / 11** | ⏳ In Development | Single .exe binary coming soon | Win32 native target planned |
+
+---
+
 ## Architecture Overview
 
 ```

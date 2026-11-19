@@ -735,23 +735,28 @@
   }
 
   // --- Dock FPS Selector & Wayland Quick Toggle ---
-  dockFpsSelector.querySelectorAll('.fps-pill-option').forEach(pill => {
-    pill.addEventListener('click', () => {
-      dockFpsSelector.querySelectorAll('.fps-pill-option').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      appState.fps = parseInt(pill.dataset.fps, 10);
+  if (dockFpsSelector) {
+    dockFpsSelector.querySelectorAll('.fps-pill-option').forEach(pill => {
+      pill.addEventListener('click', () => {
+        dockFpsSelector.querySelectorAll('.fps-pill-option').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        appState.fps = parseInt(pill.dataset.fps, 10);
+        triggerSettingsSync(true);
+      });
+    });
+  }
+
+  if (btnQuickWaylandToggle) {
+    btnQuickWaylandToggle.addEventListener('click', () => {
+      appState.force_xwayland = !appState.force_xwayland;
+      if (settingWayland) settingWayland.checked = appState.force_xwayland;
+      updateWaylandPillUI();
       triggerSettingsSync(true);
     });
-  });
-
-  btnQuickWaylandToggle.addEventListener('click', () => {
-    appState.force_xwayland = !appState.force_xwayland;
-    settingWayland.checked = appState.force_xwayland;
-    updateWaylandPillUI();
-    triggerSettingsSync(true);
-  });
+  }
 
   function updateWaylandPillUI() {
+    if (!btnQuickWaylandToggle || !waylandStatusLabel) return;
     if (appState.force_xwayland) {
       btnQuickWaylandToggle.classList.add('active');
       waylandStatusLabel.textContent = 'Anti-Spin: Active';
@@ -952,9 +957,11 @@
       if (settingCustomFlags) settingCustomFlags.value = state.config.custom_cli_flags || '';
 
       // Update FPS pills in dock
-      dockFpsSelector.querySelectorAll('.fps-pill-option').forEach(p => {
-        p.classList.toggle('active', parseInt(p.dataset.fps, 10) === appState.fps);
-      });
+      if (dockFpsSelector) {
+        dockFpsSelector.querySelectorAll('.fps-pill-option').forEach(p => {
+          p.classList.toggle('active', parseInt(p.dataset.fps, 10) === appState.fps);
+        });
+      }
 
       applyWallpaper();
 

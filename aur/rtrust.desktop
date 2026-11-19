@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=RtRust
+GenericName=Roblox Studio Launcher
+Comment=Ultra-Lightweight Roblox Studio Launcher & Resource Governor for Linux
+Exec=rtrust
+Icon=rtrust
+Terminal=false
+Type=Application
+Categories=Development;IDE;Game;
+Keywords=roblox;studio;wine;dxvk;vulkan;
+StartupNotify=true
+StartupWMClass=rtrust
