@@ -207,32 +207,6 @@
   btnMaximize.addEventListener('click', () => sendIpc({ type: 'maximize' }));
   btnClose.addEventListener('click', () => sendIpc({ type: 'close' }));
 
-  // --- Throttled Spotlight Cursor Glow (Optimized for 0% CPU overhead) ---
-  let hoveredSpotlightCard = null;
-  let spotlightScheduled = false;
-
-  document.addEventListener('mouseover', (e) => {
-    hoveredSpotlightCard = e.target.closest('.spotlight-card');
-  });
-
-  document.addEventListener('mouseout', (e) => {
-    if (hoveredSpotlightCard && !e.relatedTarget?.closest('.spotlight-card')) {
-      hoveredSpotlightCard = null;
-    }
-  });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!hoveredSpotlightCard || spotlightScheduled) return;
-    spotlightScheduled = true;
-    requestAnimationFrame(() => {
-      spotlightScheduled = false;
-      if (!hoveredSpotlightCard) return;
-      const rect = hoveredSpotlightCard.getBoundingClientRect();
-      hoveredSpotlightCard.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
-      hoveredSpotlightCard.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
-    });
-  });
-
   // --- Tab Navigation ---
   navPills.forEach(pill => {
     pill.addEventListener('click', () => {
@@ -787,8 +761,20 @@
     }
   }
 
-  // --- START STUDIO BUTTON ---
+  // --- START / UPDATE STUDIO BUTTON ---
   btnStartStudio.addEventListener('click', () => {
+    if (appState.isUpdateAvailable) {
+      statusIndicatorDot.className = 'status-indicator-dot busy';
+      statusDisplayText.textContent = 'Downloading Studio packages & compiling...';
+      const btnLabel = btnStartStudio.querySelector('.btn-label-text');
+      if (btnLabel) btnLabel.textContent = 'DOWNLOADING PACKAGES...';
+      const progressWrap = document.getElementById('dock-progress-bar-wrap');
+      if (progressWrap) progressWrap.classList.remove('hidden');
+
+      sendIpc({ type: 'perform_studio_update' });
+      return;
+    }
+
     statusIndicatorDot.className = 'status-indicator-dot busy';
     statusDisplayText.textContent = 'Launching Studio under Wine...';
 
@@ -799,6 +785,62 @@
       force_xwayland: settingWayland.checked
     });
   });
+
+  // Top nav update badge click: re-check updates
+  const badgeUpdateStatus = document.getElementById('badge-update-status');
+  if (badgeUpdateStatus) {
+    badgeUpdateStatus.addEventListener('click', () => {
+      window.showToast?.('Checking for Roblox Studio & GitHub updates...', true);
+      sendIpc({ type: 'check_update' });
+    });
+  }
+
+  window.setUpdateAvailable = function (info) {
+    if (!info) return;
+    const btnLabel = btnStartStudio.querySelector('.btn-label-text');
+    const updateBadge = document.getElementById('badge-update-status');
+    const updateDot = document.getElementById('update-dot');
+    const updateStatusText = document.getElementById('update-status-text');
+
+    if (info.has_update) {
+      appState.isUpdateAvailable = true;
+      appState.latestVersion = info.latest_version;
+
+      btnStartStudio.classList.add('btn-update-mode');
+      if (btnLabel) {
+        btnLabel.textContent = info.current_version ? 'UPDATE ROBLOX STUDIO' : 'DOWNLOAD & INSTALL STUDIO';
+      }
+      statusDisplayText.textContent = `New Studio version available: ${info.latest_version}`;
+      statusIndicatorDot.className = 'status-indicator-dot busy';
+
+      if (updateBadge && updateStatusText && updateDot) {
+        updateBadge.style.display = 'inline-flex';
+        updateDot.style.background = '#00D2FF';
+        updateDot.style.boxShadow = '0 0 8px #00D2FF';
+        updateStatusText.textContent = 'Studio Update Available';
+      }
+    } else {
+      appState.isUpdateAvailable = false;
+      btnStartStudio.classList.remove('btn-update-mode');
+      if (btnLabel) {
+        btnLabel.textContent = 'START ROBLOX STUDIO';
+      }
+      statusDisplayText.textContent = 'System Ready';
+      statusIndicatorDot.className = 'status-indicator-dot';
+
+      if (updateBadge && updateStatusText && updateDot) {
+        updateBadge.style.display = 'inline-flex';
+        updateDot.style.background = '#10B981';
+        updateDot.style.boxShadow = '0 0 8px #10B981';
+        if (info.launcher_update) {
+          updateStatusText.textContent = `Launcher ${info.launcher_update} on GitHub`;
+          window.showToast?.(`New RtRust Launcher ${info.launcher_update} available on GitHub!`, true);
+        } else {
+          updateStatusText.textContent = 'v0.0.1 • Up to Date';
+        }
+      }
+    }
+  };
 
   // --- State Updates from Rust Backend ---
   window.updateState = function (state) {
@@ -954,11 +996,17 @@
     const pkgLabel = document.getElementById('install-current-pkg');
     const barFill = document.getElementById('install-progress-bar-fill');
     const textInfo = document.getElementById('install-progress-text');
+    const dockProgressWrap = document.getElementById('dock-progress-bar-wrap');
+    const dockProgressBar = document.getElementById('dock-progress-bar');
+    const percent = Math.min(100, Math.round((current / total) * 100));
+
+    if (dockProgressWrap) dockProgressWrap.classList.remove('hidden');
+    if (dockProgressBar) dockProgressBar.style.width = `${percent}%`;
+    if (statusDisplayText) statusDisplayText.textContent = `Downloading ${pkg} (${percent}%)...`;
 
     if (modal && pkgLabel && barFill && textInfo) {
       modal.classList.remove('hidden');
       pkgLabel.textContent = `[${current}/${total}] ${pkg}`;
-      const percent = Math.min(100, Math.round((current / total) * 100));
       barFill.style.width = `${percent}%`;
       textInfo.textContent = `${current} / ${total} packages (${percent}%)`;
     }
@@ -967,6 +1015,8 @@
   window.finishInstallProgress = function () {
     const modal = document.getElementById('modal-install-progress');
     if (modal) modal.classList.add('hidden');
+    const dockProgressWrap = document.getElementById('dock-progress-bar-wrap');
+    if (dockProgressWrap) dockProgressWrap.classList.add('hidden');
   };
 
   // --- Toast Notification Handler ---

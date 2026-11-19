@@ -446,7 +446,7 @@ body {
 
 /* Quick Login Card & Refresh Button */
 .quick-login-card {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(18, 22, 30, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 16px 18px;
@@ -454,8 +454,6 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   margin-top: 4px;
 }
@@ -617,15 +615,13 @@ body {
 }
 
 .feature-card-glass {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(22, 26, 36, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 16px;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -730,11 +726,10 @@ body {
 .nav-pill-group {
   display: flex;
   align-items: center;
-  background: rgba(22, 26, 35, 0.85);
+  background: rgba(22, 26, 35, 0.98);
   border: 1px solid var(--border-light);
   border-radius: 20px;
   padding: 3px;
-  backdrop-filter: blur(12px);
 }
 
 .nav-pill {
@@ -791,13 +786,12 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(22, 26, 35, 0.85);
+  background: rgba(22, 26, 35, 0.98);
   border: 1px solid var(--border-light);
   padding: 4px 12px 4px 5px;
   border-radius: 20px;
   cursor: pointer;
   position: relative;
-  backdrop-filter: blur(12px);
   transition: all 0.2s;
 }
 
@@ -894,10 +888,13 @@ body {
 /* Main Hub Content Area */
 .hub-main-body {
   flex: 1;
-  padding: 16px 32px 105px 32px;
+  padding: 16px 32px 140px 32px;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   z-index: 10;
+  will-change: scroll-position;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Active Hero Title / Banner */
@@ -1126,14 +1123,13 @@ body {
 }
 
 .settings-box {
-  background: rgba(22, 26, 35, 0.75);
+  background: rgba(22, 26, 35, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 18px;
   padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  backdrop-filter: blur(14px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1390,14 +1386,13 @@ input:checked + .switch-slider:before {
   left: 0;
   right: 0;
   height: 90px;
-  background: linear-gradient(180deg, rgba(15, 18, 24, 0) 0%, rgba(12, 14, 18, 0.95) 40%, rgba(10, 12, 16, 0.98) 100%);
-  border-top: 1px solid var(--border-light);
+  background: #0E1117;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 32px;
   z-index: 50;
-  backdrop-filter: blur(16px);
   border-bottom-left-radius: 18px;
   border-bottom-right-radius: 18px;
   gap: 24px;
@@ -1436,6 +1431,45 @@ input:checked + .switch-slider:before {
 
 .btn-launch-studio-left:active {
   transform: scale(0.98);
+}
+
+/* SMART UPDATE BUTTON STYLES */
+.btn-launch-studio-left.btn-update-mode {
+  background: linear-gradient(135deg, #00D2FF 0%, #0066FF 100%) !important;
+  box-shadow: 0 0 24px rgba(0, 210, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+}
+
+.btn-launch-studio-left.btn-update-mode:hover {
+  box-shadow: 0 0 34px rgba(0, 210, 255, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+}
+
+.btn-launch-studio-left.btn-update-mode .shimmer-light-beam {
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.6) 50%, transparent 100%) !important;
+}
+
+.update-progress-bar-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.update-progress-bar-wrap.hidden {
+  display: none !important;
+}
+
+/* Update badge in navbar */
+.engine-status-badge#badge-update-status {
+  transition: all 0.2s ease;
+}
+
+.engine-status-badge#badge-update-status:hover {
+  border-color: #00D2FF;
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.25);
+}
+
+.dot.pulse-blue {
+  background: #00D2FF !important;
+  box-shadow: 0 0 8px #00D2FF !important;
+  animation: pulse 1s infinite alternate;
 }
 
 .dock-launch-status {
@@ -1596,7 +1630,7 @@ input:checked + .switch-slider:before {
   align-items: center;
   gap: 12px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(16px);
+  background: rgba(18, 22, 30, 0.98);
   pointer-events: auto;
   opacity: 0;
   transform: translateY(16px);
@@ -1758,9 +1792,7 @@ input:checked + .switch-slider:before {
 .modal-overlay-rbx {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(10, 12, 16, 0.78);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(10, 12, 16, 0.92);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1967,12 +1999,11 @@ input:checked + .switch-slider:before {
    5 OPTIMIZATION PROFILE SWITCHER BAR
    ============================================================ */
 .profile-selector-bar {
-  background: rgba(22, 26, 35, 0.78);
+  background: rgba(22, 26, 35, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 16px;
   padding: 14px 18px;
   margin-bottom: 18px;
-  backdrop-filter: blur(14px);
   display: flex;
   flex-direction: column;
   gap: 12px;

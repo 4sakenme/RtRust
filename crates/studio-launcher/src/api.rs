@@ -14,6 +14,14 @@ pub struct VersionInfo {
     pub bootstrapper_version: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudioUpdateStatus {
+    pub has_update: bool,
+    pub latest_version: String,
+    pub current_version: Option<String>,
+    pub launcher_update: Option<String>,
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PackageItem {
@@ -77,6 +85,68 @@ impl RobloxApi {
             .context("Failed to parse version JSON response")?;
 
         Ok(info)
+    }
+
+    /// Checks if a newer Studio version exists compared to the local versions directory.
+    pub async fn check_studio_update(
+        &self,
+        versions_dir: &std::path::Path,
+    ) -> Result<StudioUpdateStatus> {
+        let latest = self.fetch_latest_version().await?;
+        let latest_upload = latest.client_version_upload;
+
+        let version_path = versions_dir.join(&latest_upload);
+        let exe_path = version_path.join("RobloxStudioBeta.exe");
+        let fonts_path = version_path.join("content/fonts");
+
+        let mut current_version = None;
+        if let Ok(entries) = std::fs::read_dir(versions_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() && p.join("RobloxStudioBeta.exe").exists() {
+                    if let Some(name) = p.file_name() {
+                        current_version = Some(name.to_string_lossy().to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        let has_update = !(exe_path.exists() && fonts_path.exists());
+
+        Ok(StudioUpdateStatus {
+            has_update,
+            latest_version: latest_upload,
+            current_version,
+            launcher_update: None,
+        })
+    }
+
+    /// Checks GitHub releases to see if a newer launcher version is available.
+    pub async fn check_github_release(&self) -> Result<Option<String>> {
+        let url = "https://api.github.com/repos/4sakenme/RtRust/releases/latest";
+        let resp = self
+            .client
+            .get(url)
+            .header("User-Agent", "RtRust-Launcher")
+            .send()
+            .await;
+
+        if let Ok(res) = resp {
+            if res.status().is_success() {
+                #[derive(Deserialize)]
+                struct GhRelease {
+                    tag_name: String,
+                }
+                if let Ok(gh) = res.json::<GhRelease>().await {
+                    let current = format!("v{}", env!("CARGO_PKG_VERSION"));
+                    if gh.tag_name != current && !gh.tag_name.is_empty() {
+                        return Ok(Some(gh.tag_name));
+                    }
+                }
+            }
+        }
+        Ok(None)
     }
 
     /// Fetches the manifest listing all archive components for a given version hash.
@@ -400,6 +470,7 @@ impl RobloxApi {
     }
 
     /// Fetches trending Roblox experiences with thumbnail URLs.
+    #[allow(dead_code)]
     pub async fn fetch_trending_experiences(&self) -> Result<Vec<TrendingExperience>> {
         let places = vec![
             ("Blox Fruits", 2753915549u64, "Trending Anime Action RPG", "450K+ Playing"),

@@ -68,6 +68,8 @@ pub enum IncomingIpc {
         profile: String,
     },
     RestoreOriginalDll,
+    CheckUpdate,
+    PerformStudioUpdate,
 }
 
 #[derive(Debug)]
@@ -109,6 +111,7 @@ pub enum UserEvent {
     SaveConfig {
         config: serde_json::Value,
     },
+    #[allow(dead_code)]
     TrendingLoaded(Vec<TrendingExperience>),
     InstallProgress {
         current: u64,
@@ -127,6 +130,15 @@ pub enum UserEvent {
     WallpaperPicked(String),
     CompleteOnboarding(String),
     RestoreOriginalDll,
+    CheckUpdate,
+    PerformStudioUpdate,
+    StudioUpdateComplete,
+    UpdateStatus {
+        studio_has_update: bool,
+        studio_latest: String,
+        studio_current: Option<String>,
+        launcher_new_version: Option<String>,
+    },
 }
 
 #[derive(Serialize)]
@@ -262,6 +274,12 @@ pub fn run_gui() -> Result<()> {
                     IncomingIpc::RestoreOriginalDll => {
                         let _ = ipc_proxy.send_event(UserEvent::RestoreOriginalDll);
                     }
+                    IncomingIpc::CheckUpdate => {
+                        let _ = ipc_proxy.send_event(UserEvent::CheckUpdate);
+                    }
+                    IncomingIpc::PerformStudioUpdate => {
+                        let _ = ipc_proxy.send_event(UserEvent::PerformStudioUpdate);
+                    }
                 }
             }
         });
@@ -291,17 +309,39 @@ pub fn run_gui() -> Result<()> {
     let mut is_studio_running = false;
     let mut trending_experiences: Vec<TrendingExperience> = Vec::new();
 
-    // Fetch trending experiences in background on start
+    // Check for Roblox Studio and GitHub updates in background on start
     {
-        let p_clone = proxy.clone();
+        let p_update = proxy.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new();
             if let Ok(runtime) = rt {
                 runtime.block_on(async {
                     let api = RobloxApi::new();
-                    if let Ok(trending) = api.fetch_trending_experiences().await {
-                        let _ = p_clone.send_event(UserEvent::TrendingLoaded(trending));
+                    let prefix_mgr = PrefixManager::new().ok();
+                    let versions_dir = prefix_mgr.map(|p| p.versions_dir()).unwrap_or_else(|| {
+                        dirs::data_local_dir()
+                            .map(|d| d.join("rtrust/versions"))
+                            .unwrap_or_default()
+                    });
+
+                    let mut studio_has_update = false;
+                    let mut studio_latest = String::new();
+                    let mut studio_current = None;
+
+                    if let Ok(status) = api.check_studio_update(&versions_dir).await {
+                        studio_has_update = status.has_update;
+                        studio_latest = status.latest_version;
+                        studio_current = status.current_version;
                     }
+
+                    let launcher_new_version = api.check_github_release().await.unwrap_or(None);
+
+                    let _ = p_update.send_event(UserEvent::UpdateStatus {
+                        studio_has_update,
+                        studio_latest,
+                        studio_current,
+                        launcher_new_version,
+                    });
                 });
             }
         });
@@ -1014,6 +1054,137 @@ pub fn run_gui() -> Result<()> {
                     let _ = webview.evaluate_script("if (window.finishInstallProgress) { window.finishInstallProgress(); }");
                     window.set_visible(true);
                     window.set_focus();
+                    sync_state(
+                        &webview,
+                        &config,
+                        &hardware,
+                        &trending_experiences,
+                        &status_message,
+                        is_studio_running,
+                    );
+                }
+                UserEvent::UpdateStatus {
+                    studio_has_update,
+                    studio_latest,
+                    studio_current,
+                    launcher_new_version,
+                } => {
+                    let status_obj = serde_json::json!({
+                        "has_update": studio_has_update,
+                        "latest_version": studio_latest,
+                        "current_version": studio_current,
+                        "launcher_update": launcher_new_version,
+                    });
+                    let script = format!(
+                        "if (window.setUpdateAvailable) {{ window.setUpdateAvailable({}); }}",
+                        status_obj
+                    );
+                    let _ = webview.evaluate_script(&script);
+                }
+                UserEvent::CheckUpdate => {
+                    let p_update = proxy.clone();
+                    std::thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new();
+                        if let Ok(runtime) = rt {
+                            runtime.block_on(async {
+                                let api = RobloxApi::new();
+                                let prefix_mgr = PrefixManager::new().ok();
+                                let versions_dir = prefix_mgr.map(|p| p.versions_dir()).unwrap_or_else(|| {
+                                    dirs::data_local_dir()
+                                        .map(|d| d.join("rtrust/versions"))
+                                        .unwrap_or_default()
+                                });
+
+                                let mut studio_has_update = false;
+                                let mut studio_latest = String::new();
+                                let mut studio_current = None;
+
+                                if let Ok(status) = api.check_studio_update(&versions_dir).await {
+                                    studio_has_update = status.has_update;
+                                    studio_latest = status.latest_version;
+                                    studio_current = status.current_version;
+                                }
+
+                                let launcher_new_version = api.check_github_release().await.unwrap_or(None);
+
+                                let _ = p_update.send_event(UserEvent::UpdateStatus {
+                                    studio_has_update,
+                                    studio_latest,
+                                    studio_current,
+                                    launcher_new_version,
+                                });
+                            });
+                        }
+                    });
+                }
+                UserEvent::PerformStudioUpdate => {
+                    is_studio_running = true;
+                    status_message = "Updating Roblox Studio...".to_string();
+                    let _ = webview.evaluate_script("if (window.onStudioUpdateStarted) { window.onStudioUpdateStarted(); }");
+                    sync_state(
+                        &webview,
+                        &config,
+                        &hardware,
+                        &trending_experiences,
+                        &status_message,
+                        is_studio_running,
+                    );
+
+                    let p_clone = proxy.clone();
+                    let conf_clone = config.clone();
+                    let prof_clone = hardware.clone();
+
+                    std::thread::spawn(move || {
+                        let rt = match tokio::runtime::Runtime::new() {
+                            Ok(r) => r,
+                            Err(e) => {
+                                let _ = p_clone.send_event(UserEvent::StatusUpdate(format!("Update runtime error: {}", e)));
+                                let _ = p_clone.send_event(UserEvent::StudioExited(-1));
+                                return;
+                            }
+                        };
+
+                        let progress_proxy = p_clone.clone();
+                        let res = rt.block_on(async {
+                            let prefix_mgr = Arc::new(PrefixManager::new()?);
+                            prefix_mgr.setup_prefix(&conf_clone.mouse_warp_mode)?;
+                            let _ = crate::runtime::SlimRuntimeManager::setup_slim_prefix(&prefix_mgr.prefix_dir, &conf_clone.mouse_warp_mode);
+
+                            let installer = Installer::new(prefix_mgr.clone());
+                            let p_cb = progress_proxy.clone();
+                            let cb = Arc::new(move |cur, tot, pkg: &str| {
+                                let _ = p_cb.send_event(UserEvent::InstallProgress {
+                                    current: cur,
+                                    total: tot,
+                                    pkg: pkg.to_string(),
+                                });
+                            });
+
+                            installer.ensure_latest_studio_with_progress(&prof_clone, &conf_clone, Some(cb)).await
+                        });
+
+                        match res {
+                            Ok(exe) => {
+                                info!("Studio update and configuration successful: {:?}", exe);
+                                let _ = p_clone.send_event(UserEvent::StudioUpdateComplete);
+                            }
+                            Err(e) => {
+                                error!("Studio update failed: {}", e);
+                                let _ = p_clone.send_event(UserEvent::StatusUpdate(format!("Update failed: {}", e)));
+                                let _ = p_clone.send_event(UserEvent::StudioExited(-1));
+                            }
+                        }
+                    });
+                }
+                UserEvent::StudioUpdateComplete => {
+                    is_studio_running = false;
+                    status_message = "Roblox Studio is up to date (Ready)".to_string();
+                    let _ = webview.evaluate_script("if (window.finishInstallProgress) { window.finishInstallProgress(); }");
+                    let _ = webview.evaluate_script("if (window.setUpdateAvailable) { window.setUpdateAvailable({ has_update: false, latest_version: '', current_version: '', launcher_update: null }); }");
+                    let _ = proxy.send_event(UserEvent::ShowToast {
+                        message: "Roblox Studio successfully updated and compiled!".to_string(),
+                        is_success: true,
+                    });
                     sync_state(
                         &webview,
                         &config,
