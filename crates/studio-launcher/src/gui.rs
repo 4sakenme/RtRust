@@ -663,6 +663,7 @@ pub fn run_gui() -> Result<()> {
                     config.saved_places = LauncherConfig::load().saved_places;
                     let _ = config.save();
                     status_message = format!("Logged in as {}", display_name);
+                    let _ = webview.evaluate_script("if (window.showHub) window.showHub();");
                     sync_state(
                         &webview,
                         &config,

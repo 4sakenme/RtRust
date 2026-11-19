@@ -244,7 +244,10 @@
     sendIpc({ type: 'start_quick_login' });
   });
 
-  btnGuest.addEventListener('click', showHub);
+  btnGuest.addEventListener('click', () => {
+    showHub();
+  });
+
   btnLoginSettings.addEventListener('click', () => {
     showHub();
     const enginePill = document.querySelector('.nav-pill[data-tab="tab-engine"]');
@@ -253,13 +256,20 @@
 
   function showHub() {
     loginView.classList.add('hidden');
+    loginView.style.setProperty('display', 'none', 'important');
     hubView.classList.remove('hidden');
+    hubView.style.setProperty('display', 'flex', 'important');
   }
 
   function showLogin() {
     hubView.classList.add('hidden');
+    hubView.style.setProperty('display', 'none', 'important');
     loginView.classList.remove('hidden');
+    loginView.style.setProperty('display', 'flex', 'important');
   }
+
+  window.showHub = showHub;
+  window.showLogin = showLogin;
 
   // --- Quick Folder Management Buttons ---
   if (btnOpenPlugins) btnOpenPlugins.addEventListener('click', () => sendIpc({ type: 'open_plugins_folder' }));
