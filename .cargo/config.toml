@@ -1,0 +1,15 @@
+# Cargo configuration for cross-compilation and compiler optimizations
+
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+ar = "x86_64-w64-mingw32-ar"
+
+# Flags passed to rustc when building for Windows GNU target
+rustflags = [
+    "-C", "panic=abort",
+    "-C", "link-arg=-Wl,--no-insert-timestamp",
+]
+
+[build]
+# Default target for the launcher on Linux
+# target = "x86_64-unknown-linux-gnu"

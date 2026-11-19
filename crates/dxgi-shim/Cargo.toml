@@ -1,0 +1,12 @@
+[package]
+name = "dxgi-shim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Rust Graphics & Resource Shim DLL for DXGI / DXVK with Alt-Tab GPU Throttling and VRAM Capping"
+
+[lib]
+name = "dxgi"
+crate-type = ["cdylib"]

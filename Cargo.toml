@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/studio-launcher",
+    "crates/webview2-bridge",
+    "crates/dxgi-shim",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["RtRust Contributors"]
+license = "MIT"
+repository = "https://github.com/rtrust/rtrust"
+readme = "README.md"
+keywords = ["roblox", "wine", "linux", "wayland", "dxvk"]
+categories = ["command-line-utilities", "emulators", "games"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

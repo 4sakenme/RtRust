@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="m2_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#191C24" />
+      <stop offset="100%" stop-color="#0E1015" />
+    </linearGradient>
+    <linearGradient id="m2_rust" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B2B" />
+      <stop offset="100%" stop-color="#C83200" />
+    </linearGradient>
+    <linearGradient id="m2_blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D2FF" />
+      <stop offset="100%" stop-color="#0066FF" />
+    </linearGradient>
+  </defs>
+
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#m2_bg)" stroke="#2A2F3D" stroke-width="6" />
+
+  <!-- Bánh răng Rust cắt nửa ở góc dưới phải -->
+  <g transform="translate(295, 295)">
+    <circle cx="0" cy="0" r="110" fill="none" stroke="url(#m2_rust)" stroke-width="26" stroke-dasharray="32 18" />
+    <circle cx="0" cy="0" r="78" fill="#13161D" stroke="url(#m2_rust)" stroke-width="8" />
+  </g>
+
+  <!-- Khối vuông Roblox Studio nghiêng nằm đè lên góc trên trái -->
+  <g transform="translate(215, 215) rotate(-14)">
+    <rect x="-115" y="-115" width="230" height="230" rx="34" fill="#13161D" stroke="url(#m2_blue)" stroke-width="34" />
+    <!-- Lõi vuông nhỏ ở giữa -->
+    <rect x="-32" y="-32" width="64" height="64" rx="10" fill="#FFFFFF" />
+  </g>
+
+  <!-- Trục tọa độ 3D Gizmo (Đỏ X, Xanh lá Y, Xanh dương Z) đặc trưng của Studio -->
+  <g transform="translate(295, 295)" stroke-width="10" stroke-linecap="round">
+    <line x1="0" y1="0" x2="0" y2="-52" stroke="#22C55E" />
+    <line x1="0" y1="0" x2="45" y2="26" stroke="#EF4444" />
+    <line x1="0" y1="0" x2="-45" y2="26" stroke="#3B82F6" />
+    <circle cx="0" cy="0" r="9" fill="#FFFFFF" />
+  </g>
+</svg>

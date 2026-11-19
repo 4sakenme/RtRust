@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320">
+  <defs>
+    <linearGradient id="bnA_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#111214" />
+      <stop offset="55%" stop-color="#171A21" />
+      <stop offset="100%" stop-color="#0D192B" />
+    </linearGradient>
+    <linearGradient id="bnA_rust" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B2B" />
+      <stop offset="100%" stop-color="#C83200" />
+    </linearGradient>
+    <linearGradient id="bnA_blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D2FF" />
+      <stop offset="100%" stop-color="#0066FF" />
+    </linearGradient>
+    <filter id="bnA_glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#00A2FF" flood-opacity="0.22" />
+    </filter>
+  </defs>
+
+  <!-- Khung nền chính -->
+  <rect width="1200" height="320" rx="22" fill="url(#bnA_bg)" stroke="#272B36" stroke-width="2" />
+
+  <!-- Lưới Viewport 3D trang trí mờ bên phải -->
+  <g opacity="0.09" stroke="#00A2FF" stroke-width="1.5">
+    <line x1="760" y1="0" x2="760" y2="320" />
+    <line x1="840" y1="0" x2="840" y2="320" />
+    <line x1="920" y1="0" x2="920" y2="320" />
+    <line x1="1000" y1="0" x2="1000" y2="320" />
+    <line x1="1080" y1="0" x2="1080" y2="320" />
+    <line x1="720" y1="64" x2="1200" y2="64" />
+    <line x1="720" y1="128" x2="1200" y2="128" />
+    <line x1="720" y1="192" x2="1200" y2="192" />
+    <line x1="720" y1="256" x2="1200" y2="256" />
+  </g>
+
+  <!-- Biểu tượng Mẫu 2 bên trái -->
+  <g transform="translate(165, 160)" filter="url(#bnA_glow)">
+    <!-- Bánh răng Rust góc dưới phải -->
+    <g transform="translate(24, 24)">
+      <circle cx="0" cy="0" r="64" fill="none" stroke="url(#bnA_rust)" stroke-width="16" stroke-dasharray="19 11" />
+      <circle cx="0" cy="0" r="45" fill="#13161D" stroke="url(#bnA_rust)" stroke-width="5" />
+    </g>
+    <!-- Khối vuông Roblox Studio nghiêng góc trên trái -->
+    <g transform="translate(-22, -22) rotate(-14)">
+      <rect x="-66" y="-66" width="132" height="132" rx="20" fill="#13161D" stroke="url(#bnA_blue)" stroke-width="20" />
+      <rect x="-18" y="-18" width="36" height="36" rx="6" fill="#FFFFFF" />
+    </g>
+    <!-- Trục tọa độ 3D Gizmo -->
+    <g transform="translate(24, 24)" stroke-width="6" stroke-linecap="round">
+      <line x1="0" y1="0" x2="0" y2="-30" stroke="#22C55E" />
+      <line x1="0" y1="0" x2="26" y2="15" stroke="#EF4444" />
+      <line x1="0" y1="0" x2="-26" y2="15" stroke="#3B82F6" />
+      <circle cx="0" cy="0" r="5.5" fill="#FFFFFF" />
+    </g>
+  </g>
+
+  <!-- Tên dự án RTRUST -->
+  <text x="315" y="155" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="86" font-weight="900" letter-spacing="4" fill="#FFFFFF">
+    RT<tspan fill="#00A2FF">RUST</tspan>
+  </text>
+
+  <!-- Slogan -->
+  <text x="318" y="205" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="23" font-weight="500" fill="#A3A8B3">
+    Ultra-Light Roblox Studio Launcher &amp; WebView Bridge for Linux
+  </text>
+
+  <!-- Badges công nghệ -->
+  <g transform="translate(318, 234)">
+    <rect x="0" y="0" width="88" height="30" rx="7" fill="#1E2128" stroke="#FF6B2B" stroke-width="1.2" />
+    <text x="44" y="20" font-family="monospace" font-size="14" font-weight="bold" fill="#FF6B2B" text-anchor="middle">RUST</text>
+
+    <rect x="100" y="0" width="124" height="30" rx="7" fill="#1E2128" stroke="#00C6FF" stroke-width="1.2" />
+    <text x="162" y="20" font-family="monospace" font-size="14" font-weight="bold" fill="#00C6FF" text-anchor="middle">WRY / WEBKIT</text>
+
+    <rect x="236" y="0" width="118" height="30" rx="7" fill="#1E2128" stroke="#00B06F" stroke-width="1.2" />
+    <text x="295" y="20" font-family="monospace" font-size="14" font-weight="bold" fill="#00B06F" text-anchor="middle">WINE + DXVK</text>
+
+    <rect x="366" y="0" width="108" height="30" rx="7" fill="#1E2128" stroke="#A855F7" stroke-width="1.2" />
+    <text x="420" y="20" font-family="monospace" font-size="14" font-weight="bold" fill="#C084FC" text-anchor="middle">WAYLAND</text>
+  </g>
+</svg>

@@ -1,0 +1,37 @@
+# Rust build targets
+/target/
+**/*.rs.bk
+*.pdb
+
+# Compiled artifacts outside target
+*.dll
+*.so
+*.dylib
+*.exe
+
+# Except prebuilt embedded assets required for build
+!assets/dll/*.dll
+
+# Release distribution directory
+/dist/
+
+# Local development and test environments
+prefix/
+.wine/
+rtrust-prefix/
+*.log
+*.sock
+
+# User configuration and secrets
+local.conf
+ClientAppSettings.local.json
+.env
+
+# IDE and editors
+.idea/
+.vscode/
+.agents/
+*.swp
+*.swo
+*~
+.DS_Store

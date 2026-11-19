@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RTRUST - Roblox Studio Launcher</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Frameless Titlebar -->
+  <div class="titlebar" id="titlebar">
+    <div class="titlebar-brand">
+      <svg class="brand-logo-svg" viewBox="0 0 512 512" width="22" height="22">
+        <defs>
+          <linearGradient id="t_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#191C24" /><stop offset="100%" stop-color="#0E1015" />
+          </linearGradient>
+          <linearGradient id="t_rust" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#FF6B2B" /><stop offset="100%" stop-color="#C83200" />
+          </linearGradient>
+          <linearGradient id="t_blue" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#00D2FF" /><stop offset="100%" stop-color="#0066FF" />
+          </linearGradient>
+        </defs>
+        <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#t_bg)" stroke="#2A2F3D" stroke-width="6" />
+        <g transform="translate(295, 295)">
+          <circle cx="0" cy="0" r="110" fill="none" stroke="url(#t_rust)" stroke-width="26" stroke-dasharray="32 18" />
+          <circle cx="0" cy="0" r="78" fill="#13161D" stroke="url(#t_rust)" stroke-width="8" />
+        </g>
+        <g transform="translate(215, 215) rotate(-14)">
+          <rect x="-115" y="-115" width="230" height="230" rx="34" fill="#13161D" stroke="url(#t_blue)" stroke-width="34" />
+          <rect x="-32" y="-32" width="64" height="64" rx="10" fill="#FFFFFF" />
+        </g>
+        <g transform="translate(295, 295)" stroke-width="10" stroke-linecap="round">
+          <line x1="0" y1="0" x2="0" y2="-52" stroke="#22C55E" />
+          <line x1="0" y1="0" x2="45" y2="26" stroke="#EF4444" />
+          <line x1="0" y1="0" x2="-45" y2="26" stroke="#3B82F6" />
+          <circle cx="0" cy="0" r="9" fill="#FFFFFF" />
+        </g>
+      </svg>
+      <span class="brand-title">RTRUST</span>
+      <span class="brand-tag">STUDIO CLIENT</span>
+    </div>
+
+    <div class="titlebar-controls">
+      <button class="win-btn" id="btn-minimize" title="Minimize">
+        <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="win-btn" id="btn-maximize" title="Maximize">
+        <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+      </button>
+      <button class="win-btn btn-close" id="btn-close" title="Close">
+        <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       VIEW 1: RIOT-STYLE SPLIT LOGIN SCREEN
+       ============================================================ -->
+  <div class="view-container login-view" id="login-view">
+    <div class="login-left-panel">
+      <div class="login-top-area">
+        <div class="riot-logo-header">
+          <svg viewBox="0 0 512 512" width="34" height="34">
+            <defs>
+              <linearGradient id="l_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#191C24" /><stop offset="100%" stop-color="#0E1015" />
+              </linearGradient>
+              <linearGradient id="l_rust" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#FF6B2B" /><stop offset="100%" stop-color="#C83200" />
+              </linearGradient>
+              <linearGradient id="l_blue" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#00D2FF" /><stop offset="100%" stop-color="#0066FF" />
+              </linearGradient>
+            </defs>
+            <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#l_bg)" stroke="#2A2F3D" stroke-width="6" />
+            <g transform="translate(295, 295)">
+              <circle cx="0" cy="0" r="110" fill="none" stroke="url(#l_rust)" stroke-width="26" stroke-dasharray="32 18" />
+              <circle cx="0" cy="0" r="78" fill="#13161D" stroke="url(#l_rust)" stroke-width="8" />
+            </g>
+            <g transform="translate(215, 215) rotate(-14)">
+              <rect x="-115" y="-115" width="230" height="230" rx="34" fill="#13161D" stroke="url(#l_blue)" stroke-width="34" />
+              <rect x="-32" y="-32" width="64" height="64" rx="10" fill="#FFFFFF" />
+            </g>
+            <g transform="translate(295, 295)" stroke-width="10" stroke-linecap="round">
+              <line x1="0" y1="0" x2="0" y2="-52" stroke="#22C55E" />
+              <line x1="0" y1="0" x2="45" y2="26" stroke="#EF4444" />
+              <line x1="0" y1="0" x2="-45" y2="26" stroke="#3B82F6" />
+              <circle cx="0" cy="0" r="9" fill="#FFFFFF" />
+            </g>
+          </svg>
+          <div class="riot-wordmark">RT<span>RUST</span></div>
+          <span class="brand-tag">LINUX</span>
+        </div>
+
+        <div class="login-headline">
+          <h1>Sign In</h1>
+          <p>Connect your Roblox account or continue offline in Guest Mode.</p>
+        </div>
+
+        <!-- Official Method 1: WebKitGTK Direct Login -->
+        <div class="login-action-box">
+          <button class="btn-riot-primary" id="btn-login-webview">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/>
+            </svg>
+            <span>LOG IN WITH ROBLOX</span>
+          </button>
+          <div class="btn-subtext">Opens official Roblox OAuth window with instant session sync</div>
+        </div>
+
+        <!-- Divider with OR -->
+        <div class="login-divider">
+          <span>OR QUICK LOGIN VIA PHONE</span>
+        </div>
+
+        <!-- Official Method 2: Roblox Quick Login 6-char Code -->
+        <div class="quick-login-card">
+          <div class="quick-login-info">
+            <span class="quick-label">ENTER THIS CODE IN ROBLOX APP</span>
+            <div class="quick-code-display" id="quick-code-display">------</div>
+            <div class="quick-meta-row">
+              <span class="quick-timer" id="quick-timer">Expires in: 15:00</span>
+              <span class="quick-status" id="quick-status-text">Generating code...</span>
+            </div>
+          </div>
+          <button class="btn-icon-refresh" id="btn-refresh-quick-login" title="Regenerate Code">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="quick-instructions">
+          Go to <b>Roblox Settings &rarr; Quick Login</b> on your mobile device or browser to authorize instantly without entering passwords.
+        </div>
+      </div>
+
+      <div class="login-bottom-bar">
+        <button class="btn-riot-guest" id="btn-guest">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span>CONTINUE AS GUEST / OFFLINE</span>
+        </button>
+        <button class="btn-icon-gear" id="btn-login-settings" title="Engine Settings">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Side: Cinematic Hero Splash / Feature Showcase -->
+    <div class="login-right-splash">
+      <div class="splash-art-bg"></div>
+      <div class="splash-content-wrap">
+        <div class="splash-badge">VULKAN 1.3 &bull; DXVK 2.4 &bull; RUST SHIM</div>
+        <div class="splash-title">BUILD WORLDS AT NATIVE SPEED</div>
+        <p class="splash-desc">
+          Ultra-lightweight Roblox Studio runtime for Linux with zero-overhead Vulkan translation, active GPU throttling, and Wayland mouse fixes.
+        </p>
+
+        <!-- Feature Showcase Cards -->
+        <div class="showcase-features-grid">
+          <div class="feature-card-glass">
+            <div class="feature-icon-circle" style="color: #00D2FF; background: rgba(0, 210, 255, 0.12);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            </div>
+            <div class="feature-text">
+              <span class="feat-title">Native Vulkan / DXVK</span>
+              <span class="feat-sub">Zero DirectX 11 translation overhead with async pipeline caching</span>
+            </div>
+          </div>
+
+          <div class="feature-card-glass">
+            <div class="feature-icon-circle" style="color: #FF6B2B; background: rgba(255, 107, 43, 0.12);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div class="feature-text">
+              <span class="feat-title">Rust DXGI &amp; VRAM Guard</span>
+              <span class="feat-sub">Alt-Tab GPU sleep (10 FPS idle) + strict VRAM texture limits</span>
+            </div>
+          </div>
+
+          <div class="feature-card-glass">
+            <div class="feature-icon-circle" style="color: #10B981; background: rgba(16, 185, 129, 0.12);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+            </div>
+            <div class="feature-text">
+              <span class="feat-title">Wayland Anti-Spin Fix</span>
+              <span class="feat-sub">XFixes pointer confinement for smooth 360° camera panning</span>
+            </div>
+          </div>
+
+          <div class="feature-card-glass">
+            <div class="feature-icon-circle" style="color: #A855F7; background: rgba(168, 85, 247, 0.12);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            </div>
+            <div class="feature-text">
+              <span class="feat-title">Memory &amp; Process Governor</span>
+              <span class="feat-sub">Strips unused services and reclaims up to 1.5 GB memory</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       VIEW 2: MAIN LAUNCHER HUB (Valorant Full-Bleed Hero Layout)
+       ============================================================ -->
+  <div class="view-container hub-view hidden" id="hub-view">
+    <!-- Dynamic Full-bleed Hero Background & Video Wrap -->
+    <div class="hub-hero-bg" id="hub-hero-bg">
+      <video id="hub-hero-video" class="hub-hero-video hidden" autoplay loop muted playsinline></video>
+      <div class="hub-hero-overlay" id="hub-hero-overlay"></div>
+    </div>
+
+    <!-- Floating Top Bar -->
+    <div class="hub-top-nav">
+      <div class="nav-left-section">
+        <svg viewBox="0 0 512 512" width="24" height="24">
+          <defs>
+            <linearGradient id="h_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#191C24" /><stop offset="100%" stop-color="#0E1015" />
+            </linearGradient>
+            <linearGradient id="h_rust" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FF6B2B" /><stop offset="100%" stop-color="#C83200" />
+            </linearGradient>
+            <linearGradient id="h_blue" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#00D2FF" /><stop offset="100%" stop-color="#0066FF" />
+            </linearGradient>
+          </defs>
+          <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#h_bg)" stroke="#2A2F3D" stroke-width="6" />
+          <g transform="translate(295, 295)">
+            <circle cx="0" cy="0" r="110" fill="none" stroke="url(#h_rust)" stroke-width="26" stroke-dasharray="32 18" />
+            <circle cx="0" cy="0" r="78" fill="#13161D" stroke="url(#h_rust)" stroke-width="8" />
+          </g>
+          <g transform="translate(215, 215) rotate(-14)">
+            <rect x="-115" y="-115" width="230" height="230" rx="34" fill="#13161D" stroke="url(#h_blue)" stroke-width="34" />
+            <rect x="-32" y="-32" width="64" height="64" rx="10" fill="#FFFFFF" />
+          </g>
+          <g transform="translate(295, 295)" stroke-width="10" stroke-linecap="round">
+            <line x1="0" y1="0" x2="0" y2="-52" stroke="#22C55E" />
+            <line x1="0" y1="0" x2="45" y2="26" stroke="#EF4444" />
+            <line x1="0" y1="0" x2="-45" y2="26" stroke="#3B82F6" />
+            <circle cx="0" cy="0" r="9" fill="#FFFFFF" />
+          </g>
+        </svg>
+        <div class="nav-pill-group">
+          <div class="nav-pill active" data-tab="tab-engine">Settings &amp; Engine Optimizer</div>
+        </div>
+      </div>
+
+      <div class="nav-right-section">
+        <!-- Wallpaper / Theme Picker Button -->
+        <button type="button" class="nav-icon-pill-btn" id="btn-open-wallpaper" title="Custom Wallpaper Studio">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>Wallpaper</span>
+        </button>
+
+        <div class="engine-status-badge">
+          <span class="dot"></span>
+          <span>Vulkan / DXVK Ready</span>
+        </div>
+
+        <!-- Rust DXGI Shim Telemetry Badge -->
+        <div class="engine-status-badge" id="telemetry-badge" style="display: none; border-color: rgba(0, 245, 212, 0.4); background: rgba(15, 23, 42, 0.7);">
+          <span class="dot" style="background: #00f5d4; box-shadow: 0 0 8px #00f5d4;"></span>
+          <span id="telemetry-text">60 FPS &bull; VRAM 1024M</span>
+        </div>
+
+        <div class="user-avatar-badge" id="user-avatar-badge">
+          <div class="avatar-circle-img" id="user-avatar-box">
+            <span id="user-avatar-initial">R</span>
+          </div>
+          <div class="user-text-info">
+            <span class="user-display-title" id="user-display-name">Developer</span>
+            <span class="user-handle-sub" id="user-handle-name">@roblox_user</span>
+          </div>
+
+          <!-- Profile Dropdown Menu -->
+          <div class="profile-dropdown-menu hidden" id="profile-dropdown-menu">
+            <a class="dropdown-link" href="javascript:void(0)" id="link-creator-hub">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 9h6"/></svg>
+              Creator Dashboard
+            </a>
+            <a class="dropdown-link" href="javascript:void(0)" id="link-roblox-home">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              Roblox.com
+            </a>
+            <div class="dropdown-sep"></div>
+            <div class="dropdown-link danger" id="btn-signout">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign Out
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Hub Body Area -->
+    <div class="hub-main-body">
+      <!-- Tab Content Area -->
+      <div class="hub-content-container">
+        <!-- Main Tab: Engine, Wine & Graphics Tuning -->
+        <div class="tab-pane active" id="tab-engine">
+          
+          <!-- 5 Optimization Profile Switcher -->
+          <div class="profile-selector-bar">
+            <div class="profile-bar-header">
+              <div class="profile-header-left">
+                <span class="profile-label-main">OPTIMIZATION PROFILE</span>
+                <span class="profile-label-sub" id="profile-sub-desc">Auto-tunes graphics, VRAM, and memory footprint based on detected hardware</span>
+              </div>
+              <button type="button" class="btn-reset-recommended" id="btn-reset-profile" title="Reset to Recommended Profile">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                <span>Reset Recommended</span>
+              </button>
+            </div>
+            <div class="profile-pill-selector" id="profile-pill-selector">
+              <button type="button" class="profile-pill-btn active" data-profile="auto">
+                <span class="profile-icon">⚡</span>
+                <span class="profile-title">Auto (Smart)</span>
+              </button>
+              <button type="button" class="profile-pill-btn" data-profile="potato">
+                <span class="profile-icon">🥔</span>
+                <span class="profile-title">Potato (Low-RAM)</span>
+              </button>
+              <button type="button" class="profile-pill-btn" data-profile="balanced">
+                <span class="profile-icon">⚖️</span>
+                <span class="profile-title">Balanced</span>
+              </button>
+              <button type="button" class="profile-pill-btn" data-profile="high">
+                <span class="profile-icon">🚀</span>
+                <span class="profile-title">High Fidelity</span>
+              </button>
+              <button type="button" class="profile-pill-btn" data-profile="custom">
+                <span class="profile-icon">🛠️</span>
+                <span class="profile-title">Custom</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-dual-grid">
+            <!-- Left Column: Granular Controls & Sliders -->
+            <div class="settings-col-left">
+              <!-- Box 1: Renderer & VRAM Budget -->
+              <div class="settings-box spotlight-card">
+                <div class="settings-box-header">
+                  <span class="settings-box-title">RENDERER & MEMORY BUDGET</span>
+                  <span class="pill-badge-cyan">DXVK / VK</span>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Graphics Backend API</span>
+                    <span class="setting-desc-txt">Underlying 3D rendering pipeline for Studio viewport</span>
+                  </div>
+                  <div class="setting-ctrl-wrap">
+                    <select id="setting-graphics-backend" class="riot-select">
+                      <option value="auto">Auto (Hardware Default)</option>
+                      <option value="vulkan" selected>Vulkan (DXVK D3D11)</option>
+                      <option value="dx11">DirectX 11 (Native/WineD3D)</option>
+                      <option value="opengl">OpenGL (Fallback)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="setting-item-row slider-row">
+                  <div class="setting-text-col">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span class="setting-title-txt">VRAM Limit (DXVK Device Memory)</span>
+                      <span class="slider-badge" id="val-vram-limit">Unlimited</span>
+                    </div>
+                    <span class="setting-desc-txt">Prevents Studio from exhausting system memory on iGPU & low-VRAM PCs</span>
+                  </div>
+                  <div class="setting-ctrl-wrap">
+                    <input type="range" id="setting-vram-limit" min="0" max="8192" step="512" value="0" class="riot-range">
+                  </div>
+                </div>
+
+                <div class="setting-item-row slider-row">
+                  <div class="setting-text-col">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span class="setting-title-txt">Editor Graphics Quality Level</span>
+                      <span class="slider-badge" id="val-quality-level">Level 16</span>
+                    </div>
+                    <span class="setting-desc-txt">Internal viewport FRM rendering quality tier (1 = fastest, 21 = maximum)</span>
+                  </div>
+                  <div class="setting-ctrl-wrap">
+                    <input type="range" id="setting-quality-level" min="1" max="21" step="1" value="16" class="riot-range">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Box 2: Granular Switches -->
+              <div class="settings-box spotlight-card">
+                <div class="settings-box-header">
+                  <span class="settings-box-title">GRAPHICS & WAYLAND TUNING</span>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Wayland Cursor Confinement (Anti-Spin Fix)</span>
+                    <span class="setting-desc-txt">Stops infinite 360-degree camera spin loop in 3D viewport under Wayland</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-wayland" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Throttle Viewport when Inactive</span>
+                    <span class="setting-desc-txt">Significantly saves GPU/CPU cycles when Studio is minimized or unfocused</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-throttle" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Disable Post-Processing Bloom & Sunrays</span>
+                    <span class="setting-desc-txt">Maximizes editor rendering framerate for heavy lighting scenes</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-postfx" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Disable Viewport Dynamic Shadows</span>
+                    <span class="setting-desc-txt">Eliminates shadow map passes for extreme FPS boost on weak iGPUs</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-disable-shadows">
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Block Start Page WebView2</span>
+                    <span class="setting-desc-txt">Disables embedded Edge WebView2 processes to reclaim up to 600MB RAM</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-block-webview2" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Wine Virtual Desktop Container</span>
+                    <span class="setting-desc-txt">Encapsulates Qt5 windows inside a single wine explorer desktop</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-virtual-desktop">
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Auto-Hide Launcher on Start</span>
+                    <span class="setting-desc-txt">Minimizes launcher during Studio sessions and restores immediately upon exit</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-autohide" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Box 2.5: Rust Graphics Shim & cgroups v2 Resource Guard -->
+              <div class="settings-box spotlight-card">
+                <div class="settings-box-header">
+                  <span class="settings-box-title">RUST GRAPHICS SHIM & CGROUPS RESOURCE GUARD</span>
+                  <span class="pill-badge-red" style="background: rgba(0, 245, 212, 0.15); color: #00f5d4; border-color: rgba(0, 245, 212, 0.4);">SHIM ACTIVE</span>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Rust DXGI Proxy Shim (Active GPU Throttling)</span>
+                    <span class="setting-desc-txt">Injects custom Rust dxgi.dll proxy next to Studio to control presentation loops & VRAM boundaries</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-use-dxgi-shim" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Alt-Tab GPU Power Saver (10 FPS Inactive Sleep)</span>
+                    <span class="setting-desc-txt">Detects when Studio is unfocused (VS Code, browser) and sleeps 100ms per frame — drops GPU usage to near 0%</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-alt-tab-gpu-sleep" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Simulated VRAM Cap (Reported to Studio)</span>
+                    <span class="setting-desc-txt">Clamps DedicatedVideoMemory in DXGI adapter query to force Studio texture streaming into safe bounds</span>
+                  </div>
+                  <div class="setting-ctrl-wrap">
+                    <select id="setting-vram-cap" class="riot-select">
+                      <option value="512">512 MB (Ultra Low iGPU)</option>
+                      <option value="1024" selected>1024 MB (Recommended for iGPU)</option>
+                      <option value="2048">2048 MB (Balanced 2GB)</option>
+                      <option value="4096">4096 MB (High 4GB)</option>
+                      <option value="0">Unlimited (Native VRAM)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Linux cgroups v2 Memory Guard (systemd-run)</span>
+                    <span class="setting-desc-txt">Wraps Studio in a kernel cgroup to trigger memory.reclaim and prevent system freezes/OOM</span>
+                  </div>
+                  <div class="setting-ctrl-wrap">
+                    <select id="setting-cgroup-ram" class="riot-select">
+                      <option value="4">4 GB (Low-RAM PC)</option>
+                      <option value="6" selected>6 GB (Standard Sandbox)</option>
+                      <option value="8">8 GB (Heavy Multi-Place)</option>
+                      <option value="0">Disabled (No cgroups limit)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Disable Viewport MSAA (Anti-Aliasing)</span>
+                    <span class="setting-desc-txt">Disables 4x MSAA passes in 3D viewport — cuts GPU fillrate workload by 30-50% on iGPUs</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-disable-msaa" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Force Fast Voxel Lighting Mode</span>
+                    <span class="setting-desc-txt">Bypasses heavy Future Is Bright compute tile shaders — drops GPU load by 60%</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-force-voxel">
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-text-col">
+                    <span class="setting-title-txt">Disable Procedural Terrain Grass</span>
+                    <span class="setting-desc-txt">Stops rendering millions of animated grass blade vertices on terrain voxels</span>
+                  </div>
+                  <label class="riot-switch">
+                    <input type="checkbox" id="setting-disable-grass" checked>
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Box 3: Advanced Runner & Custom Environment -->
+              <div class="settings-box spotlight-card">
+                <div class="settings-box-header">
+                  <span class="settings-box-title">ADVANCED RUNNER & ENVIRONMENT</span>
+                  <span class="pill-badge-red">EXPERT</span>
+                </div>
+
+                <div class="form-group-compact">
+                  <label class="form-label-compact">Custom Wine / Proton Runner Path</label>
+                  <input type="text" id="setting-custom-runner" class="riot-input" placeholder="Default: Kombucha / Wine on PATH (or /usr/bin/proton-ge)">
+                </div>
+
+                <div class="form-group-compact">
+                  <label class="form-label-compact">Custom Environment Variables (KEY=VAL separated by space)</label>
+                  <input type="text" id="setting-custom-env" class="riot-input" placeholder="e.g. MANGOHUD=1 DXVK_HUD=fps GAMEMODERUN=1">
+                </div>
+
+                <div class="form-group-compact">
+                  <label class="form-label-compact">Custom Studio CLI Arguments</label>
+                  <input type="text" id="setting-custom-flags" class="riot-input" placeholder="e.g. -edit">
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Studio Directories & Plugins + Diagnostics -->
+            <div class="settings-col-right">
+              <div class="settings-box spotlight-card">
+                <div class="settings-box-header">
+                  <span class="settings-box-title">STUDIO DIRECTORIES & PLUGINS</span>
+                  <span class="pill-badge-cyan">QUICK ACCESS</span>
+                </div>
+
+                <div class="folder-action-grid">
+                  <!-- Action 0: Raw FFlags JSON Editor -->
+                  <button type="button" class="folder-action-btn highlight-fflags" id="btn-open-raw-fflags">
+                    <div class="btn-icon-wrap accent-cyan">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    </div>
+                    <div class="btn-text-wrap">
+                      <span class="btn-main-label">Edit Raw FFlags JSON</span>
+                      <span class="btn-sub-label">ClientAppSettings.json Direct Editor</span>
+                    </div>
+                    <span class="pill-badge-cyan">EDITOR</span>
+                  </button>
+
+                  <!-- Action 1: Open Plugins Folder -->
+                  <button type="button" class="folder-action-btn" id="btn-open-plugins">
+                    <div class="btn-icon-wrap">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <div class="btn-text-wrap">
+                      <span class="btn-main-label">Open Plugins Folder</span>
+                      <span class="btn-sub-label">%LOCALAPPDATA%\Roblox\Plugins</span>
+                    </div>
+                    <svg class="chevron-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  <!-- Action 2: Install / Import Plugin File -->
+                  <button type="button" class="folder-action-btn highlight" id="btn-import-plugins">
+                    <div class="btn-icon-wrap accent">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <div class="btn-text-wrap">
+                      <span class="btn-main-label">Install / Import Plugins</span>
+                      <span class="btn-sub-label">Select .rbxm, .rbxmx, or .lua files</span>
+                    </div>
+                    <span class="pill-badge-red">IMPORT</span>
+                  </button>
+
+                  <!-- Action 3: Open Roblox Install Dir & ClientSettings -->
+                  <button type="button" class="folder-action-btn" id="btn-open-studio-dir">
+                    <div class="btn-icon-wrap">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    </div>
+                    <div class="btn-text-wrap">
+                      <span class="btn-main-label">Studio Dir & ClientSettings</span>
+                      <span class="btn-sub-label">RobloxStudioBeta.exe & FFlags JSON</span>
+                    </div>
+                    <svg class="chevron-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  <!-- Action 4: Open Wine Prefix Root -->
+                  <button type="button" class="folder-action-btn" id="btn-open-prefix-dir">
+                    <div class="btn-icon-wrap">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                    </div>
+                    <div class="btn-text-wrap">
+                      <span class="btn-main-label">Open Wine Prefix Root</span>
+                      <span class="btn-sub-label">Prefix / App Config Directory</span>
+                    </div>
+                    <svg class="chevron-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  <!-- Action 5: Safe DLL Swap Restore -->
+                  <button type="button" class="folder-action-btn" id="btn-restore-dll">
+                    <div class="btn-icon-wrap">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    </div>
+                    <div class="btn-text-wrap">
+                      <span class="btn-main-label">Restore Original WebView2 DLL</span>
+                      <span class="btn-sub-label">Undo Stub & Restore WebView2Loader.dll.bak</span>
+                    </div>
+                    <span class="pill-badge-cyan">RESTORE</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Diagnostics Card -->
+              <div class="settings-box hardware-box spotlight-card">
+                <div class="settings-box-header">
+                  <span class="settings-box-title">SYSTEM & WINE STACK</span>
+                  <span class="pill-badge-green" id="wine-backend-badge">KOMBUCHA PATCHED</span>
+                </div>
+                <div class="hardware-info-grid">
+                  <div class="hw-item">
+                    <span class="hw-key">System Memory</span>
+                    <span class="hw-val" id="hw-ram-val">16 GB DDR4/DDR5</span>
+                  </div>
+                  <div class="hw-item">
+                    <span class="hw-key">Graphics Stack</span>
+                    <span class="hw-val" id="hw-gpu-val">Vulkan / DXVK D3D11</span>
+                  </div>
+                  <div class="hw-item">
+                    <span class="hw-key">Active Profile</span>
+                    <span class="hw-val" id="hw-profile-val" style="color: #00F5D4;">Auto (Smart)</span>
+                  </div>
+                  <div class="hw-item">
+                    <span class="hw-key">Wine Runtime</span>
+                    <span class="hw-val" id="hw-wine-val">Kombucha 11.16</span>
+                  </div>
+                  <div class="hw-item">
+                    <span class="hw-key">Mouse Confinement</span>
+                    <span class="hw-val" style="color: #00D2FF;">XFixes Pointer Confinement</span>
+                  </div>
+                  <div class="hw-item">
+                    <span class="hw-key">CPU Topology</span>
+                    <span class="hw-val" id="hw-cpu-val">Multi-core Vulkan Async</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         FLOATING BOTTOM ACTION BAR (LEFT: LAUNCH / START STUDIO)
+         ============================================================ -->
+    <div class="hub-bottom-dock">
+      <!-- LEFT: PROMINENT START BUTTON WITH SHIMMER SWEEP -->
+      <div class="dock-left-launch">
+        <button class="btn-launch-studio-left btn-shimmer-sweep" id="btn-start-studio">
+          <div class="shimmer-light-beam"></div>
+          <svg class="play-icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span class="btn-label-text">START ROBLOX STUDIO</span>
+        </button>
+        <div class="dock-launch-status">
+          <span class="status-indicator-dot" id="status-indicator-dot"></span>
+          <span id="status-display-text">System Ready</span>
+        </div>
+      </div>
+
+      <!-- CENTER: QUICK TOGGLE PILLS -->
+      <div class="dock-center-pills">
+        <div class="fps-pill-container" id="dock-fps-selector">
+          <div class="fps-pill-option active" data-fps="60">60 FPS</div>
+          <div class="fps-pill-option" data-fps="120">120 FPS</div>
+          <div class="fps-pill-option" data-fps="144">144 FPS</div>
+          <div class="fps-pill-option" data-fps="240">240 FPS</div>
+        </div>
+
+        <div class="wayland-toggle-pill active" id="btn-quick-wayland-toggle">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span id="wayland-status-label">Anti-Spin: Active</span>
+        </div>
+      </div>
+
+      <!-- RIGHT: STUDIO LAUNCH MODE -->
+      <div class="dock-right-place-summary">
+        <div class="summary-thumb-mini" id="summary-thumb-mini" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 162, 255, 0.15); color: #00A2FF;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 9h6"/></svg>
+        </div>
+        <div class="summary-details">
+          <span class="summary-label">STUDIO MODE</span>
+          <span class="summary-name" id="summary-place-name">Roblox Studio IDE</span>
+          <span class="summary-id" id="summary-place-id">DXVK Vulkan &bull; FFlags Active</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: Vinegar-style Installation Progress Popup -->
+  <div class="modal-overlay-rbx hidden" id="modal-install-progress">
+    <div class="modal-box-rbx" style="width: 480px;">
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 4px;">
+        <svg viewBox="0 0 512 512" width="36" height="36">
+          <defs>
+            <linearGradient id="p_bg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#191C24" /><stop offset="100%" stop-color="#0E1015" />
+            </linearGradient>
+            <linearGradient id="p_rust" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FF6B2B" /><stop offset="100%" stop-color="#C83200" />
+            </linearGradient>
+            <linearGradient id="p_blue" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#00D2FF" /><stop offset="100%" stop-color="#0066FF" />
+            </linearGradient>
+          </defs>
+          <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#p_bg)" stroke="#2A2F3D" stroke-width="6" />
+          <g transform="translate(295, 295)">
+            <circle cx="0" cy="0" r="110" fill="none" stroke="url(#p_rust)" stroke-width="26" stroke-dasharray="32 18" />
+            <circle cx="0" cy="0" r="78" fill="#13161D" stroke="url(#p_rust)" stroke-width="8" />
+          </g>
+          <g transform="translate(215, 215) rotate(-14)">
+            <rect x="-115" y="-115" width="230" height="230" rx="34" fill="#13161D" stroke="url(#l_blue)" stroke-width="34" />
+            <rect x="-32" y="-32" width="64" height="64" rx="10" fill="#FFFFFF" />
+          </g>
+          <g transform="translate(295, 295)" stroke-width="10" stroke-linecap="round">
+            <line x1="0" y1="0" x2="0" y2="-52" stroke="#22C55E" />
+            <line x1="0" y1="0" x2="45" y2="26" stroke="#EF4444" />
+            <line x1="0" y1="0" x2="-45" y2="26" stroke="#3B82F6" />
+            <circle cx="0" cy="0" r="9" fill="#FFFFFF" />
+          </g>
+        </svg>
+        <div style="display: flex; flex-direction: column;">
+          <div class="modal-header-title">Installing Roblox Studio</div>
+          <span style="font-size: 11px; color: var(--text-muted);">Downloading and verifying packages via setup.rbxcdn.com</span>
+        </div>
+      </div>
+
+      <div class="install-pkg-label" id="install-current-pkg">Starting package downloads...</div>
+
+      <div class="install-progress-bar-bg">
+        <div class="install-progress-bar-fill" id="install-progress-bar-fill"></div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+        <span id="install-progress-text">0 / 34 packages (0%)</span>
+        <span style="color: var(--accent-cyan); font-weight: 700;">Wine 11 &bull; DXVK</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Add Place / Open .rbxl -->
+  <div class="modal-overlay-rbx hidden" id="modal-add-place">
+    <div class="modal-box-rbx">
+      <div class="modal-header-title">Add Roblox Experience</div>
+      <div class="form-group">
+        <label class="form-label">Place Name</label>
+        <input type="text" id="modal-place-name" class="riot-input" placeholder="e.g. My New Game">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Place ID (Root Place)</label>
+        <input type="number" id="modal-place-id" class="riot-input" placeholder="e.g. 95206881">
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px;">
+        <button type="button" class="btn-riot-secondary" id="modal-btn-cancel" style="padding: 0 16px;">CANCEL</button>
+        <button type="button" class="btn-riot-primary" id="modal-btn-save" style="padding: 0 20px;">ADD PLACE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Custom Wallpaper Studio -->
+  <div class="modal-overlay-rbx hidden" id="modal-wallpaper">
+    <div class="modal-box-rbx" style="width: 540px;">
+      <div class="modal-header-row">
+        <div>
+          <div class="modal-header-title">Custom Wallpaper Studio</div>
+          <div class="modal-header-sub">Personalize the background ambiance and visual tone of RTRUST</div>
+        </div>
+        <button type="button" class="btn-close-modal" id="btn-close-wallpaper">&times;</button>
+      </div>
+
+      <!-- Wallpaper Mode Selector Tabs -->
+      <div class="wallpaper-mode-nav">
+        <button type="button" class="wp-mode-btn active" data-mode="auto">Auto Place Sync</button>
+        <button type="button" class="wp-mode-btn" data-mode="local">Upload Local Media</button>
+        <button type="button" class="wp-mode-btn" data-mode="preset">Theme Presets</button>
+      </div>
+
+      <!-- Tab Content 1: Auto Place Sync -->
+      <div class="wp-tab-pane" id="wp-pane-auto">
+        <div class="wp-info-card">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent-cyan)" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <div>
+            <div style="font-weight: 700; color: #FFF;">Adaptive Experience Sync</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Dynamically blends high-resolution thumbnails from whatever Place you currently select.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Upload Local Media -->
+      <div class="wp-tab-pane hidden" id="wp-pane-local">
+        <div class="wp-upload-card">
+          <button type="button" class="btn-choose-file" id="btn-pick-wallpaper-file">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Choose Image or Video (.png, .jpg, .webp, .mp4, .webm)</span>
+          </button>
+          <div class="wp-current-path-label" id="wp-current-path-label">No custom file selected</div>
+        </div>
+      </div>
+
+      <!-- Tab Content 3: Theme Presets -->
+      <div class="wp-tab-pane hidden" id="wp-pane-preset">
+        <div class="preset-theme-grid">
+          <div class="preset-card active" data-preset="studio-dark">
+            <div class="preset-preview preview-studio-dark"></div>
+            <span class="preset-name">Studio Dark</span>
+          </div>
+          <div class="preset-card" data-preset="neon-grid">
+            <div class="preset-preview preview-neon-grid"></div>
+            <span class="preset-name">Neon Grid</span>
+          </div>
+          <div class="preset-card" data-preset="synthwave">
+            <div class="preset-preview preview-synthwave"></div>
+            <span class="preset-name">Synthwave</span>
+          </div>
+          <div class="preset-card" data-preset="cyber-void">
+            <div class="preset-preview preview-cyber-void"></div>
+            <span class="preset-name">Cyber Void</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sliders: Blur and Dim -->
+      <div class="wp-adjustments-card">
+        <div class="setting-item-row slider-row" style="padding: 6px 0;">
+          <div class="setting-text-col">
+            <div style="display: flex; justify-content: space-between;">
+              <span class="setting-title-txt">Background Blur</span>
+              <span class="slider-badge" id="val-wp-blur">12px</span>
+            </div>
+          </div>
+          <div class="setting-ctrl-wrap">
+            <input type="range" id="wp-blur-slider" min="0" max="30" step="1" value="12" class="riot-range">
+          </div>
+        </div>
+
+        <div class="setting-item-row slider-row" style="padding: 6px 0;">
+          <div class="setting-text-col">
+            <div style="display: flex; justify-content: space-between;">
+              <span class="setting-title-txt">Dim Overlay Density</span>
+              <span class="slider-badge" id="val-wp-dim">45%</span>
+            </div>
+          </div>
+          <div class="setting-ctrl-wrap">
+            <input type="range" id="wp-dim-slider" min="0" max="90" step="5" value="45" class="riot-range">
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px;">
+        <button type="button" class="btn-riot-secondary" id="btn-cancel-wallpaper" style="padding: 0 18px;">CLOSE</button>
+        <button type="button" class="btn-riot-primary" id="btn-save-wallpaper" style="padding: 0 22px;">APPLY THEME</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Raw ClientAppSettings.json Editor -->
+  <div class="modal-overlay-rbx hidden" id="modal-raw-fflags">
+    <div class="modal-box-rbx" style="width: 620px;">
+      <div class="modal-header-row">
+        <div>
+          <div class="modal-header-title">Raw FFlags JSON Editor</div>
+          <div class="modal-header-sub">Custom Fast Flags are merged automatically with RTRUST optimizations</div>
+        </div>
+        <button type="button" class="btn-close-modal" id="btn-close-raw-fflags">&times;</button>
+      </div>
+
+      <!-- Quick Flag Insert Chips -->
+      <div class="fflag-quick-chips">
+        <span class="chip-item" data-key="FFlagDebugDisplayFPS" data-val="true">+ Display FPS</span>
+        <span class="chip-item" data-key="FFlagStudioOptimizeDocking" data-val="true">+ Optimize Docking</span>
+        <span class="chip-item" data-key="DFFlagDisableVoiceChat" data-val="true">+ Disable Voice</span>
+        <span class="chip-item" data-key="FIntMeshContentProviderThreadCount" data-val="8">+ 8-Thread Meshes</span>
+      </div>
+
+      <!-- Editor Code Textarea -->
+      <div class="code-editor-container">
+        <textarea id="raw-fflags-textarea" class="code-textarea" spellcheck="false" placeholder="{\n  &quot;FFlagExampleFlag&quot;: &quot;True&quot;\n}"></textarea>
+      </div>
+
+      <div class="raw-status-banner" id="raw-fflags-status">
+        <span class="status-valid">✔ Valid JSON syntax</span>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: space-between; margin-top: 12px;">
+        <button type="button" class="btn-riot-secondary" id="btn-clear-custom-fflags" style="padding: 0 14px; font-size: 11px;">CLEAR CUSTOM FLAGS</button>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn-riot-secondary" id="btn-cancel-raw-fflags" style="padding: 0 16px;">CANCEL</button>
+          <button type="button" class="btn-riot-primary" id="btn-save-raw-fflags" style="padding: 0 22px;">SAVE & MERGE FFLAGS</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: First-Run Onboarding Wizard -->
+  <div class="modal-overlay-rbx hidden" id="modal-onboarding">
+    <div class="modal-box-rbx onboarding-box" style="width: 580px;">
+      <div class="onboarding-hero-banner">
+        <svg viewBox="0 0 512 512" width="48" height="48">
+          <defs>
+            <linearGradient id="ob_bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#191C24" /><stop offset="100%" stop-color="#0E1015" /></linearGradient>
+            <linearGradient id="ob_rust" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FF6B2B" /><stop offset="100%" stop-color="#C83200" /></linearGradient>
+            <linearGradient id="ob_blue" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00D2FF" /><stop offset="100%" stop-color="#0066FF" /></linearGradient>
+          </defs>
+          <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#ob_bg)" stroke="#2A2F3D" stroke-width="6" />
+          <g transform="translate(295, 295)"><circle cx="0" cy="0" r="110" fill="none" stroke="url(#ob_rust)" stroke-width="26" stroke-dasharray="32 18" /><circle cx="0" cy="0" r="78" fill="#13161D" stroke="url(#ob_rust)" stroke-width="8" /></g>
+          <g transform="translate(215, 215) rotate(-14)"><rect x="-115" y="-115" width="230" height="230" rx="34" fill="#13161D" stroke="url(#ob_blue)" stroke-width="34" /><rect x="-32" y="-32" width="64" height="64" rx="10" fill="#FFFFFF" /></g>
+        </svg>
+        <div style="margin-top: 10px;">
+          <h2 style="font-size: 20px; font-weight: 900; letter-spacing: 0.5px; color: #FFF;">WELCOME TO RTRUST</h2>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Ultra-fast Roblox Studio Runner for Linux & Windows</p>
+        </div>
+      </div>
+
+      <!-- Hardware Check Cards -->
+      <div class="onboarding-specs-grid">
+        <div class="ob-spec-item">
+          <span class="ob-key">System Memory</span>
+          <span class="ob-val" id="ob-ram">Detecting...</span>
+        </div>
+        <div class="ob-spec-item">
+          <span class="ob-key">GPU Architecture</span>
+          <span class="ob-val" id="ob-gpu">Detecting...</span>
+        </div>
+        <div class="ob-spec-item">
+          <span class="ob-key">Wine Runtime</span>
+          <span class="ob-val" id="ob-wine" style="color: #00F5D4;">Installed</span>
+        </div>
+        <div class="ob-spec-item">
+          <span class="ob-key">DXVK Vulkan</span>
+          <span class="ob-val" style="color: #00F5D4;">Direct Hardware Accel</span>
+        </div>
+      </div>
+
+      <!-- Recommended Profile Suggestion Card -->
+      <div class="onboarding-rec-card">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--accent-cyan); letter-spacing: 0.5px;">RECOMMENDED PROFILE</span>
+          <span class="pill-badge-green" id="ob-rec-pill">SMART AUTO</span>
+        </div>
+        <div style="font-size: 14px; font-weight: 700; color: #FFF; margin-top: 4px;" id="ob-rec-title">Balanced Profile</div>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" id="ob-rec-desc">
+          Optimal balance between high-fidelity Future lighting and efficient memory management.
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+        <button type="button" class="btn-riot-secondary" id="btn-skip-onboarding" style="padding: 0 16px;">SKIP SETUP</button>
+        <button type="button" class="btn-riot-primary" id="btn-apply-onboarding" style="padding: 0 24px;">APPLY & START CREATING</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Animated Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

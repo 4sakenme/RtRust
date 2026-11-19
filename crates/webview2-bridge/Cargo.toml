@@ -1,0 +1,12 @@
+[package]
+name = "webview2-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Lightweight drop-in stub replacement for WebView2Loader.dll under Wine & Low-RAM Mode"
+
+[lib]
+name = "WebView2Loader"
+crate-type = ["cdylib"]
