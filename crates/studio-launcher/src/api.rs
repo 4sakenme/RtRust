@@ -438,35 +438,369 @@ impl RobloxApi {
         anyhow::bail!("Failed to retrieve rbx-authentication-ticket (HTTP {})", resp.status())
     }
 
-    /// Fetches user's created places / games.
+    /// Fetches user's created places / games across Personal, Groups, and Shared.
     pub async fn fetch_user_places(&self, user_id: u64, roblosecurity: &str) -> Result<Vec<SavedPlace>> {
-        let url = format!("https://games.roblox.com/v2/users/{}/games?sortOrder=Desc&limit=15", user_id);
+        self.fetch_all_user_experiences(user_id, roblosecurity).await
+    }
+
+    /// Fetches full list of user experiences across Personal, Groups, and Shared (Team Create).
+    pub async fn fetch_all_user_experiences(
+        &self,
+        user_id: u64,
+        roblosecurity: &str,
+    ) -> Result<Vec<SavedPlace>> {
+        let cookie_header = format!(".ROBLOSECURITY={}", roblosecurity.trim());
+        let mut places: Vec<SavedPlace> = Vec::new();
+        let mut universe_ids: Vec<u64> = Vec::new();
+
+        // 1. Personal Universes: develop.roblox.com/v1/user/universes
+        let personal_url = "https://develop.roblox.com/v1/user/universes?limit=50&sortOrder=Desc";
+        if let Ok(resp) = self
+            .client
+            .get(personal_url)
+            .header("Cookie", &cookie_header)
+            .send()
+            .await
+        {
+            #[derive(Deserialize)]
+            struct UnivList {
+                #[serde(default)]
+                data: Vec<UnivItem>,
+            }
+            #[derive(Deserialize)]
+            struct UnivItem {
+                id: u64,
+                name: String,
+                description: Option<String>,
+                #[serde(rename = "rootPlaceId")]
+                root_place_id: Option<u64>,
+            }
+
+            if let Ok(list) = resp.json::<UnivList>().await {
+                for u in list.data {
+                    if let Some(root_id) = u.root_place_id {
+                        universe_ids.push(u.id);
+                        places.push(SavedPlace {
+                            name: u.name,
+                            place_id: root_id,
+                            description: u.description.unwrap_or_else(|| "Personal Experience".to_string()),
+                            universe_id: Some(u.id),
+                            thumbnail_url: None,
+                            team_create_enabled: None,
+                            category: "personal".to_string(),
+                            local_path: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 2. Groups Universes: groups.roblox.com/v2/users/{user_id}/groups/roles
+        let groups_url = format!("https://groups.roblox.com/v2/users/{}/groups/roles", user_id);
+        if let Ok(resp) = self
+            .client
+            .get(&groups_url)
+            .header("Cookie", &cookie_header)
+            .send()
+            .await
+        {
+            #[derive(Deserialize)]
+            struct GrpList {
+                #[serde(default)]
+                data: Vec<GrpRoleItem>,
+            }
+            #[derive(Deserialize)]
+            struct GrpRoleItem {
+                group: GrpInfo,
+            }
+            #[derive(Deserialize)]
+            struct GrpInfo {
+                id: u64,
+                name: String,
+            }
+
+            if let Ok(groups_data) = resp.json::<GrpList>().await {
+                for grp_item in groups_data.data.into_iter().take(8) {
+                    let grp = grp_item.group;
+                    let grp_univ_url = format!(
+                        "https://develop.roblox.com/v1/groups/{}/universes?limit=50&sortOrder=Desc",
+                        grp.id
+                    );
+                    if let Ok(g_resp) = self
+                        .client
+                        .get(&grp_univ_url)
+                        .header("Cookie", &cookie_header)
+                        .send()
+                        .await
+                    {
+                        #[derive(Deserialize)]
+                        struct GrpUnivList {
+                            #[serde(default)]
+                            data: Vec<GrpUnivItem>,
+                        }
+                        #[derive(Deserialize)]
+                        struct GrpUnivItem {
+                            id: u64,
+                            name: String,
+                            #[serde(rename = "rootPlaceId")]
+                            root_place_id: Option<u64>,
+                        }
+
+                        if let Ok(list) = g_resp.json::<GrpUnivList>().await {
+                            for u in list.data {
+                                if let Some(root_id) = u.root_place_id {
+                                    universe_ids.push(u.id);
+                                    places.push(SavedPlace {
+                                        name: u.name,
+                                        place_id: root_id,
+                                        description: format!("Group: {}", grp.name),
+                                        universe_id: Some(u.id),
+                                        thumbnail_url: None,
+                                        team_create_enabled: None,
+                                        category: "group".to_string(),
+                                        local_path: None,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Shared With Me / Team Create: apis.roblox.com/universes/v1/search
+        let shared_url = format!(
+            "https://apis.roblox.com/universes/v1/search?creatorType=Team&creatorTargetId={}&isArchived=false&sortParam=LastUpdated&sortOrder=Desc&pageSize=50&surface=StudioStartPage",
+            user_id
+        );
+        if let Ok(resp) = self
+            .client
+            .get(&shared_url)
+            .header("Cookie", &cookie_header)
+            .send()
+            .await
+        {
+            #[derive(Deserialize)]
+            struct SharedData {
+                #[serde(default)]
+                data: Vec<SharedItem>,
+            }
+            #[derive(Deserialize)]
+            struct SharedItem {
+                id: u64,
+                name: String,
+                #[serde(rename = "rootPlaceId")]
+                root_place_id: Option<u64>,
+                #[serde(rename = "creatorName")]
+                creator_name: Option<String>,
+                #[serde(rename = "isTeamCreateEnabled")]
+                is_team_create_enabled: Option<bool>,
+            }
+            if let Ok(shared_list) = resp.json::<SharedData>().await {
+                for s in shared_list.data {
+                    if let Some(root_id) = s.root_place_id {
+                        universe_ids.push(s.id);
+                        places.push(SavedPlace {
+                            name: s.name,
+                            place_id: root_id,
+                            description: format!("Shared by: {}", s.creator_name.unwrap_or_else(|| "Collaborator".to_string())),
+                            universe_id: Some(s.id),
+                            thumbnail_url: None,
+                            team_create_enabled: s.is_team_create_enabled.or(Some(true)),
+                            category: "shared".to_string(),
+                            local_path: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 4. Batch Query Team Create Status
+        if !universe_ids.is_empty() {
+            let mut ids_param = String::new();
+            for id in universe_ids.iter().take(50) {
+                if !ids_param.is_empty() {
+                    ids_param.push('&');
+                }
+                ids_param.push_str(&format!("ids={}", id));
+            }
+            let tc_url = format!("https://develop.roblox.com/v1/universes/multiget/teamcreate?{}", ids_param);
+            if let Ok(tc_resp) = self
+                .client
+                .get(&tc_url)
+                .header("Cookie", &cookie_header)
+                .send()
+                .await
+            {
+                #[derive(Deserialize)]
+                struct TeamCreateMulti {
+                    #[serde(default)]
+                    data: Vec<TeamCreateMultiItem>,
+                }
+                #[derive(Deserialize)]
+                struct TeamCreateMultiItem {
+                    id: u64,
+                    #[serde(rename = "isEnabled")]
+                    is_enabled: bool,
+                }
+
+                if let Ok(tc_data) = tc_resp.json::<TeamCreateMulti>().await {
+                    let tc_map: std::collections::HashMap<u64, bool> = tc_data
+                        .data
+                        .into_iter()
+                        .map(|item| (item.id, item.is_enabled))
+                        .collect();
+                    for p in &mut places {
+                        if let Some(uid) = p.universe_id {
+                            if let Some(&enabled) = tc_map.get(&uid) {
+                                p.team_create_enabled = Some(enabled);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Batch Query 512x512 High-Res Icons and cache to ~/.cache/rtrust/thumbnails/
+        if !universe_ids.is_empty() {
+            let uids_csv = universe_ids
+                .iter()
+                .take(50)
+                .map(|u| u.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let icons_url = format!(
+                "https://thumbnails.roblox.com/v1/games/icons?universeIds={}&returnPolicy=PlaceHolder&size=512x512&format=Png&isCircular=false",
+                uids_csv
+            );
+            if let Ok(icon_resp) = self.client.get(&icons_url).send().await {
+                #[derive(Deserialize)]
+                struct IconResponse {
+                    #[serde(default)]
+                    data: Vec<IconItem>,
+                }
+                #[derive(Deserialize)]
+                struct IconItem {
+                    #[serde(rename = "targetId")]
+                    target_id: u64,
+                    #[serde(rename = "imageUrl")]
+                    image_url: Option<String>,
+                }
+
+                if let Ok(icon_data) = icon_resp.json::<IconResponse>().await {
+                    let cache_dir = dirs::cache_dir()
+                        .map(|c| c.join("rtrust/thumbnails"))
+                        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/rtrust_thumbnails"));
+                    let _ = std::fs::create_dir_all(&cache_dir);
+
+                    let icon_map: std::collections::HashMap<u64, String> = icon_data
+                        .data
+                        .into_iter()
+                        .filter_map(|item| item.image_url.map(|url| (item.target_id, url)))
+                        .collect();
+
+                    for p in &mut places {
+                        if let Some(uid) = p.universe_id {
+                            if let Some(url) = icon_map.get(&uid) {
+                                p.thumbnail_url = Some(url.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Default template fallback if empty
+        if places.is_empty() {
+            places = crate::config::default_saved_places();
+        }
+
+        Ok(places)
+    }
+
+    /// Fetches all sub-places belonging to a given universe.
+    pub async fn fetch_universe_subplaces(
+        &self,
+        universe_id: u64,
+        roblosecurity: &str,
+    ) -> Result<Vec<SavedPlace>> {
+        let cookie_header = format!(".ROBLOSECURITY={}", roblosecurity.trim());
+        let url = format!(
+            "https://develop.roblox.com/v1/universes/{}/places?limit=50",
+            universe_id
+        );
+        let resp = self
+            .client
+            .get(&url)
+            .header("Cookie", &cookie_header)
+            .send()
+            .await?;
+
+        #[derive(Deserialize)]
+        struct PlacesResponse {
+            #[serde(default)]
+            data: Vec<SubPlaceItem>,
+        }
+        #[derive(Deserialize)]
+        struct SubPlaceItem {
+            id: u64,
+            name: String,
+            description: Option<String>,
+        }
+
+        let mut subplaces = Vec::new();
+        if let Ok(list) = resp.json::<PlacesResponse>().await {
+            for item in list.data {
+                subplaces.push(SavedPlace {
+                    name: item.name,
+                    place_id: item.id,
+                    description: item.description.unwrap_or_else(|| "Universe Sub-Place".to_string()),
+                    universe_id: Some(universe_id),
+                    thumbnail_url: None,
+                    team_create_enabled: None,
+                    category: "personal".to_string(),
+                    local_path: None,
+                });
+            }
+        }
+
+        Ok(subplaces)
+    }
+
+    /// Downloads a place file snapshot (.rbxl) to ~/.local/share/rtrust/backups/{placeId}_{timestamp}.rbxl
+    pub async fn download_place_snapshot(
+        &self,
+        place_id: u64,
+        roblosecurity: &str,
+    ) -> Result<std::path::PathBuf> {
+        let url = format!("https://assetdelivery.roblox.com/v1/asset/?id={}", place_id);
         let resp = self
             .client
             .get(&url)
             .header("Cookie", format!(".ROBLOSECURITY={}", roblosecurity.trim()))
+            .header("User-Agent", "Roblox/WinInet")
             .send()
             .await?;
 
         if !resp.status().is_success() {
-            anyhow::bail!("Failed to fetch user games list");
+            anyhow::bail!("AssetDelivery failed with HTTP {}", resp.status());
         }
 
-        let list: GamesListResponse = resp.json().await?;
-        let places = list
-            .data
-            .into_iter()
-            .filter_map(|g| {
-                let place_id = g.root_place?.id;
-                Some(SavedPlace {
-                    name: g.name,
-                    place_id,
-                    description: g.description.unwrap_or_else(|| "Roblox Experience".to_string()),
-                })
-            })
-            .collect();
+        let bytes = resp.bytes().await?;
+        let backup_dir = dirs::data_local_dir()
+            .map(|d| d.join("rtrust/backups"))
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp/rtrust_backups"));
+        std::fs::create_dir_all(&backup_dir)?;
 
-        Ok(places)
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let backup_path = backup_dir.join(format!("{}_{}.rbxl", place_id, timestamp));
+        std::fs::write(&backup_path, bytes)?;
+
+        tracing::info!("Saved place snapshot to: {:?}", backup_path);
+        Ok(backup_path)
     }
 
     /// Fetches trending Roblox experiences with thumbnail URLs.

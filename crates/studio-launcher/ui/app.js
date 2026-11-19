@@ -41,6 +41,8 @@
     selectedPlaceName: "Default Baseplate",
     selectedPlaceDesc: "Standard Roblox Studio template with DXVK Vulkan pipeline caching enabled.",
     selectedThumb: DEFAULT_THUMBS[0],
+    activeFilter: 'all',
+    searchQuery: '',
     fps: 60,
     force_xwayland: true,
     hardware: null,
@@ -106,6 +108,22 @@
   const myPlacesCount = document.getElementById('my-places-count');
   const placesGrid = document.getElementById('places-grid-container');
   const trendingGrid = document.getElementById('trending-grid-container');
+
+  // Experiences Browser Elements
+  const placesSearchInput = document.getElementById('places-search-input');
+  const btnOpenLocalPlace = document.getElementById('btn-open-local-place');
+  const btnRefreshExperiences = document.getElementById('btn-refresh-experiences');
+  const btnDownloadSnapshot = document.getElementById('btn-download-snapshot');
+  const detailThumbImg = document.getElementById('detail-thumb-img');
+  const detailTcBadge = document.getElementById('detail-tc-badge');
+  const detailCategoryTag = document.getElementById('detail-category-tag');
+  const detailTitle = document.getElementById('detail-title');
+  const detailPlaceId = document.getElementById('detail-place-id');
+  const detailUniverseId = document.getElementById('detail-universe-id');
+  const detailDesc = document.getElementById('detail-desc');
+  const detailSubplacesWrap = document.getElementById('detail-subplaces-wrap');
+  const detailSubplacesSelect = document.getElementById('detail-subplaces-select');
+  const placeFilterBtns = document.querySelectorAll('.place-filter-btn');
 
   // Bottom action dock elements
   const btnStartStudio = document.getElementById('btn-start-studio');
@@ -396,7 +414,7 @@
   });
 
   // --- Places Rendering & Selection ---
-  function selectPlace(placeId, name, desc, thumb) {
+  function selectPlace(placeId, name, desc, thumb, universeId, category, isTc, localPath) {
     appState.selectedPlaceId = placeId;
     appState.selectedPlaceName = name;
     appState.selectedPlaceDesc = desc;
@@ -405,40 +423,138 @@
     if (heroGameTitle) heroGameTitle.textContent = name.toUpperCase();
     if (heroGameDesc) heroGameDesc.textContent = desc || "Experience ready to launch.";
     if (summaryPlaceName) summaryPlaceName.textContent = name;
-    if (summaryPlaceId) summaryPlaceId.textContent = `ID: ${placeId}`;
-    if (summaryThumbMini && thumb) summaryThumbMini.style.backgroundImage = `url("${thumb}")`;
+    if (summaryPlaceId) {
+      if (localPath) {
+        summaryPlaceId.textContent = `Local File • .rbxl`;
+      } else {
+        summaryPlaceId.textContent = `Cloud Edit • ID: ${placeId}`;
+      }
+    }
+    if (summaryThumbMini && thumb) {
+      summaryThumbMini.style.backgroundImage = `url("${thumb}")`;
+      summaryThumbMini.innerHTML = '';
+    }
+
+    // Detail Panel
+    if (detailTitle) detailTitle.textContent = name;
+    if (detailPlaceId) detailPlaceId.textContent = placeId;
+    if (detailUniverseId) detailUniverseId.textContent = universeId || '--';
+    if (detailDesc) detailDesc.textContent = desc || (localPath ? `Local snapshot path: ${localPath}` : "Experience ready to launch.");
+    if (detailCategoryTag) detailCategoryTag.textContent = (category || (localPath ? 'LOCAL' : 'PERSONAL')).toUpperCase();
+    if (detailThumbImg && thumb) detailThumbImg.style.backgroundImage = `url("${thumb}")`;
+
+    if (detailTcBadge) {
+      detailTcBadge.className = 'detail-tc-badge';
+      if (localPath) {
+        detailTcBadge.classList.add('tc-local');
+        detailTcBadge.textContent = 'LOCAL FILE';
+      } else if (isTc) {
+        detailTcBadge.classList.add('tc-on');
+        detailTcBadge.textContent = 'TEAM CREATE: ON';
+      } else {
+        detailTcBadge.classList.add('tc-off');
+        detailTcBadge.textContent = 'SOLO / TC OFF';
+      }
+    }
+
+    // Subplaces reset & request if universe exists
+    if (detailSubplacesWrap && detailSubplacesSelect) {
+      if (universeId && !localPath) {
+        sendIpc({ type: 'fetch_subplaces', universe_id: universeId });
+      } else {
+        detailSubplacesWrap.classList.add('hidden');
+      }
+    }
+
+    // Update active highlight on cards
+    if (placesGrid) {
+      placesGrid.querySelectorAll('.experience-card').forEach(c => {
+        if (c.dataset.placeId === String(placeId)) {
+          c.classList.add('active');
+        } else {
+          c.classList.remove('active');
+        }
+      });
+    }
 
     applyWallpaper();
-    renderPlaces();
   }
 
   function renderPlaces() {
     if (!placesGrid) return;
     placesGrid.innerHTML = '';
-    if (myPlacesCount) myPlacesCount.textContent = `${appState.places.length} PLACES`;
 
-    appState.places.forEach(p => {
+    const query = (appState.searchQuery || '').toLowerCase();
+    const filter = appState.activeFilter || 'all';
+
+    const filtered = appState.places.filter(p => {
+      // Filter by category
+      if (filter === 'personal' && p.category && p.category !== 'personal') return false;
+      if (filter === 'groups' && p.category && p.category !== 'group' && p.category !== 'groups') return false;
+      if (filter === 'local' && !p.local_path && p.category !== 'local') return false;
+
+      // Filter by search query
+      if (query) {
+        const matchName = (p.name || '').toLowerCase().includes(query);
+        const matchId = String(p.place_id).includes(query);
+        const matchUid = String(p.universe_id || '').includes(query);
+        if (!matchName && !matchId && !matchUid) return false;
+      }
+      return true;
+    });
+
+    if (myPlacesCount) myPlacesCount.textContent = `${filtered.length} PLACES`;
+
+    if (filtered.length === 0) {
+      placesGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #64748b;">
+          <p style="font-size: 14px; font-weight: 700; color: #94a3b8;">No experiences match your filter.</p>
+          <p style="font-size: 12px; margin-top: 6px;">Try selecting another filter or click "Sync Cloud".</p>
+        </div>
+      `;
+      return;
+    }
+
+    filtered.forEach(p => {
       const isSelected = p.place_id === appState.selectedPlaceId;
       const thumb = p.thumbnail_url || DEFAULT_THUMBS[0];
+      const isLocal = !!p.local_path || p.category === 'local';
+      const isTc = p.team_create_enabled === true;
+
+      let tcClass = 'tc-off';
+      let tcText = 'SOLO / TC OFF';
+      if (isLocal) {
+        tcClass = 'tc-local';
+        tcText = 'LOCAL FILE';
+      } else if (isTc) {
+        tcClass = 'tc-on';
+        tcText = 'TEAM CREATE: ON';
+      }
+
+      const catText = (p.category || (isLocal ? 'LOCAL' : 'PERSONAL')).toUpperCase();
 
       const card = document.createElement('div');
-      card.className = `experience-card spotlight-card ${isSelected ? 'active' : ''}`;
+      card.className = `experience-card ${isSelected ? 'active' : ''}`;
+      card.dataset.placeId = String(p.place_id);
       card.innerHTML = `
         <div class="card-thumb-wrap">
           <div class="card-thumb-img" style="background-image: url('${thumb}');"></div>
-          <div class="card-status-badge ${isSelected ? 'active' : ''}">${isSelected ? 'SELECTED' : 'SAVED'}</div>
+          <div class="card-tc-badge ${tcClass}">${tcText}</div>
+          <div class="card-cat-badge">${catText}</div>
         </div>
         <div class="card-content">
           <div class="card-title">${escapeHtml(p.name)}</div>
           <div class="card-meta-row">
             <span class="card-id-label">ID: ${p.place_id}</span>
-            <span style="font-size: 10px; color: var(--accent-cyan); font-weight:700;">DXVK Ready</span>
+            <span style="font-size: 10px; color: ${isLocal ? '#00D2FF' : '#10B981'}; font-weight: 700;">
+              ${isLocal ? 'Local .rbxl' : 'Cloud Ready'}
+            </span>
           </div>
         </div>
       `;
 
       card.addEventListener('click', () => {
-        selectPlace(p.place_id, p.name, p.description, thumb);
+        selectPlace(p.place_id, p.name, p.description, thumb, p.universe_id, p.category, isTc, p.local_path);
       });
 
       placesGrid.appendChild(card);
@@ -801,6 +917,80 @@
     });
   });
 
+  // --- Experiences Tab Actions & Event Listeners ---
+  if (placesSearchInput) {
+    placesSearchInput.addEventListener('input', (e) => {
+      appState.searchQuery = e.target.value.toLowerCase().trim();
+      renderPlaces();
+    });
+  }
+
+  if (placeFilterBtns) {
+    placeFilterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        placeFilterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        appState.activeFilter = btn.dataset.filter || 'all';
+        renderPlaces();
+      });
+    });
+  }
+
+  if (btnOpenLocalPlace) {
+    btnOpenLocalPlace.addEventListener('click', () => {
+      sendIpc({ type: 'pick_local_place_file' });
+    });
+  }
+
+  if (btnRefreshExperiences) {
+    btnRefreshExperiences.addEventListener('click', () => {
+      window.showToast?.('Syncing experiences from Roblox Cloud...', true);
+      sendIpc({ type: 'refresh_experiences' });
+    });
+  }
+
+  if (btnDownloadSnapshot) {
+    btnDownloadSnapshot.addEventListener('click', () => {
+      if (appState.selectedPlaceId) {
+        window.showToast?.('Downloading place snapshot (.rbxl)...', true);
+        sendIpc({ type: 'download_place_snapshot', place_id: appState.selectedPlaceId });
+      }
+    });
+  }
+
+  if (detailSubplacesSelect) {
+    detailSubplacesSelect.addEventListener('change', (e) => {
+      const targetId = parseInt(e.target.value, 10);
+      if (targetId) {
+        appState.selectedPlaceId = targetId;
+        if (summaryPlaceId) summaryPlaceId.textContent = `Cloud Edit • ID: ${targetId}`;
+        if (detailPlaceId) detailPlaceId.textContent = targetId;
+      }
+    });
+  }
+
+  window.onSubplacesLoaded = function(universeId, subplacesJson) {
+    if (!detailSubplacesWrap || !detailSubplacesSelect) return;
+    try {
+      const subplaces = typeof subplacesJson === 'string' ? JSON.parse(subplacesJson) : subplacesJson;
+      if (Array.isArray(subplaces) && subplaces.length > 1) {
+        detailSubplacesSelect.innerHTML = '';
+        subplaces.forEach(sp => {
+          const opt = document.createElement('option');
+          opt.value = sp.place_id;
+          opt.textContent = `${sp.name} (ID: ${sp.place_id})`;
+          if (sp.place_id === appState.selectedPlaceId) opt.selected = true;
+          detailSubplacesSelect.appendChild(opt);
+        });
+        detailSubplacesWrap.classList.remove('hidden');
+      } else {
+        detailSubplacesWrap.classList.add('hidden');
+      }
+    } catch (e) {
+      console.error('Error parsing subplaces:', e);
+    }
+  };
+
   // Top nav update badge click: re-check updates
   const badgeUpdateStatus = document.getElementById('badge-update-status');
   if (badgeUpdateStatus) {
@@ -880,9 +1070,18 @@
 
     if (state.places && state.places.length > 0) {
       appState.places = state.places;
-      if (!appState.selectedPlaceId) {
-        const first = appState.places[0];
-        selectPlace(first.place_id, first.name, first.description, first.thumbnail_url);
+      const current = appState.places.find(p => p.place_id === appState.selectedPlaceId) || appState.places[0];
+      if (current) {
+        selectPlace(
+          current.place_id,
+          current.name,
+          current.description,
+          current.thumbnail_url,
+          current.universe_id,
+          current.category,
+          current.team_create_enabled,
+          current.local_path
+        );
       }
       renderPlaces();
     }
@@ -1007,7 +1206,7 @@
     }
   };
 
-  // --- Vinegar-Style Installation Progress Modal Handlers ---
+  // --- Native Installation Progress Modal Handlers ---
   window.updateInstallProgress = function (current, total, pkg) {
     const modal = document.getElementById('modal-install-progress');
     const pkgLabel = document.getElementById('install-current-pkg');

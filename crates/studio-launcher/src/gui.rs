@@ -70,6 +70,14 @@ pub enum IncomingIpc {
     RestoreOriginalDll,
     CheckUpdate,
     PerformStudioUpdate,
+    DownloadPlaceSnapshot {
+        place_id: u64,
+    },
+    RefreshExperiences,
+    PickLocalPlaceFile,
+    FetchSubplaces {
+        universe_id: u64,
+    },
 }
 
 #[derive(Debug)]
@@ -138,6 +146,18 @@ pub enum UserEvent {
         studio_latest: String,
         studio_current: Option<String>,
         launcher_new_version: Option<String>,
+    },
+    DownloadPlaceSnapshot {
+        place_id: u64,
+    },
+    RefreshExperiences,
+    PickLocalPlaceFile,
+    FetchSubplaces {
+        universe_id: u64,
+    },
+    SubplacesLoaded {
+        universe_id: u64,
+        subplaces_json: String,
     },
 }
 
@@ -279,6 +299,18 @@ pub fn run_gui() -> Result<()> {
                     }
                     IncomingIpc::PerformStudioUpdate => {
                         let _ = ipc_proxy.send_event(UserEvent::PerformStudioUpdate);
+                    }
+                    IncomingIpc::DownloadPlaceSnapshot { place_id } => {
+                        let _ = ipc_proxy.send_event(UserEvent::DownloadPlaceSnapshot { place_id });
+                    }
+                    IncomingIpc::RefreshExperiences => {
+                        let _ = ipc_proxy.send_event(UserEvent::RefreshExperiences);
+                    }
+                    IncomingIpc::PickLocalPlaceFile => {
+                        let _ = ipc_proxy.send_event(UserEvent::PickLocalPlaceFile);
+                    }
+                    IncomingIpc::FetchSubplaces { universe_id } => {
+                        let _ = ipc_proxy.send_event(UserEvent::FetchSubplaces { universe_id });
                     }
                 }
             }
@@ -860,6 +892,11 @@ pub fn run_gui() -> Result<()> {
                             name,
                             place_id,
                             description: "Custom Place".to_string(),
+                            universe_id: None,
+                            thumbnail_url: None,
+                            team_create_enabled: None,
+                            category: "custom".to_string(),
+                            local_path: None,
                         },
                     );
                     let _ = config.save();
@@ -1215,6 +1252,148 @@ pub fn run_gui() -> Result<()> {
                         is_studio_running,
                     );
                 }
+                UserEvent::DownloadPlaceSnapshot { place_id } => {
+                    let p_down = proxy.clone();
+                    let cookie_opt = config.user_profile.as_ref().map(|u| u.roblosecurity.clone());
+                    std::thread::spawn(move || {
+                        if let Some(cookie) = cookie_opt {
+                            let rt = tokio::runtime::Runtime::new();
+                            if let Ok(runtime) = rt {
+                                runtime.block_on(async {
+                                    let api = RobloxApi::new();
+                                    match api.download_place_snapshot(place_id, &cookie).await {
+                                        Ok(path) => {
+                                            let path_str = path.to_string_lossy().to_string();
+                                            let mut cfg = LauncherConfig::load();
+                                            if let Some(p) = cfg.saved_places.iter_mut().find(|p| p.place_id == place_id) {
+                                                p.local_path = Some(path_str.clone());
+                                                let _ = cfg.save();
+                                            }
+                                            let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                            let _ = p_down.send_event(UserEvent::ShowToast {
+                                                message: format!("Saved snapshot: {}", filename),
+                                                is_success: true,
+                                            });
+                                            let _ = p_down.send_event(UserEvent::SendStateToJs);
+                                        }
+                                        Err(e) => {
+                                            let _ = p_down.send_event(UserEvent::ShowToast {
+                                                message: format!("Download failed: {}", e),
+                                                is_success: false,
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        } else {
+                            let _ = p_down.send_event(UserEvent::ShowToast {
+                                message: "Please log in to download place snapshots".to_string(),
+                                is_success: false,
+                            });
+                        }
+                    });
+                }
+                UserEvent::RefreshExperiences => {
+                    let p_exp = proxy.clone();
+                    if let Some(ref prof) = config.user_profile {
+                        let uid = prof.user_id;
+                        let cookie = prof.roblosecurity.clone();
+                        std::thread::spawn(move || {
+                            let rt = tokio::runtime::Runtime::new();
+                            if let Ok(runtime) = rt {
+                                runtime.block_on(async {
+                                    let api = RobloxApi::new();
+                                    if let Ok(places) = api.fetch_all_user_experiences(uid, &cookie).await {
+                                        if !places.is_empty() {
+                                            let mut cfg = LauncherConfig::load();
+                                            cfg.saved_places = places;
+                                            let _ = cfg.save();
+                                            let _ = p_exp.send_event(UserEvent::SendStateToJs);
+                                            let _ = p_exp.send_event(UserEvent::ShowToast {
+                                                message: "Experiences synced from Roblox Cloud!".to_string(),
+                                                is_success: true,
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }
+                UserEvent::PickLocalPlaceFile => {
+                    let p_clone = proxy.clone();
+                    std::thread::spawn(move || {
+                        if let Some(file) = rfd::FileDialog::new()
+                            .set_title("Open Roblox Place File (.rbxl / .rbxlx)")
+                            .add_filter("Roblox Place", &["rbxl", "rbxlx"])
+                            .pick_file()
+                        {
+                            let path_str = file.to_string_lossy().to_string();
+                            let name = file
+                                .file_stem()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
+                            
+                            // Deterministic hash ID based on path
+                            let mut h: u64 = 5381;
+                            for b in path_str.bytes() {
+                                h = ((h << 5).wrapping_add(h)).wrapping_add(b as u64);
+                            }
+                            let place_id = (h & 0x7FFFFFFF) + 1_000_000_000;
+
+                            let new_place = SavedPlace {
+                                name: format!("Local: {}", name),
+                                place_id,
+                                description: format!("Local File: {}", path_str),
+                                universe_id: None,
+                                thumbnail_url: None,
+                                team_create_enabled: None,
+                                category: "local".to_string(),
+                                local_path: Some(path_str),
+                            };
+
+                            let mut cfg = LauncherConfig::load();
+                            cfg.saved_places.retain(|p| p.local_path.as_ref() != new_place.local_path.as_ref());
+                            cfg.saved_places.insert(0, new_place);
+                            cfg.place_id = Some(place_id);
+                            let _ = cfg.save();
+
+                            let _ = p_clone.send_event(UserEvent::ShowToast {
+                                message: format!("Loaded local place: {}", name),
+                                is_success: true,
+                            });
+                            let _ = p_clone.send_event(UserEvent::SendStateToJs);
+                        }
+                    });
+                }
+                UserEvent::FetchSubplaces { universe_id } => {
+                    let cookie_opt = config.user_profile.as_ref().map(|u| u.roblosecurity.clone());
+                    let p_sub = proxy.clone();
+                    std::thread::spawn(move || {
+                        if let Some(cookie) = cookie_opt {
+                            let rt = tokio::runtime::Runtime::new();
+                            if let Ok(runtime) = rt {
+                                runtime.block_on(async {
+                                    let api = RobloxApi::new();
+                                    if let Ok(subplaces) = api.fetch_universe_subplaces(universe_id, &cookie).await {
+                                        if let Ok(json) = serde_json::to_string(&subplaces) {
+                                            let _ = p_sub.send_event(UserEvent::SubplacesLoaded {
+                                                universe_id,
+                                                subplaces_json: json,
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+                UserEvent::SubplacesLoaded { universe_id, subplaces_json } => {
+                    let safe_json = subplaces_json.replace('\\', "\\\\").replace('\'', "\\'");
+                    let script = format!("if (window.onSubplacesLoaded) window.onSubplacesLoaded({}, '{}');", universe_id, safe_json);
+                    let _ = webview.evaluate_script(&script);
+                }
             },
             _ => (),
         }
@@ -1332,7 +1511,28 @@ async fn run_studio_session_windows(
         }
     }
 
-    if let Some(id) = config.place_id {
+    // Place Launch Modes: Mode 1 (Cloud Edit Protocol) vs Mode 2 (Local file)
+    let selected_place = config
+        .place_id
+        .and_then(|pid| config.saved_places.iter().find(|p| p.place_id == pid));
+
+    if let Some(place) = selected_place {
+        if let Some(ref local_path) = place.local_path {
+            info!("Launching Roblox Studio with local file: {}", local_path);
+            cmd.arg(local_path);
+        } else {
+            let universe_id = place.universe_id.unwrap_or(place.place_id);
+            let launch_protocol = format!(
+                "roblox-studio:1+launchmode:edit+task:EditPlace+placeId:{}+universeId:{}+robloxLocale:en_us+gameLocale:en_us",
+                place.place_id, universe_id
+            );
+            cmd.arg(launch_protocol);
+            cmd.args(["-placeId", &place.place_id.to_string()]);
+            if let Some(uid) = place.universe_id {
+                cmd.args(["-universeId", &uid.to_string()]);
+            }
+        }
+    } else if let Some(id) = config.place_id {
         cmd.args(["-placeId", &id.to_string()]);
     }
 
@@ -1462,7 +1662,31 @@ async fn run_studio_session_linux(
         }
     }
 
-    if let Some(id) = config.place_id {
+    // Place Launch Modes: Mode 1 (Cloud Edit Protocol) vs Mode 2 (Local Snapshot/File)
+    let selected_place = config
+        .place_id
+        .and_then(|pid| config.saved_places.iter().find(|p| p.place_id == pid));
+
+    if let Some(place) = selected_place {
+        if let Some(ref local_path) = place.local_path {
+            info!("Launching Roblox Studio with local place snapshot: {}", local_path);
+            let win_path = format!("Z:{}", local_path.replace('/', "\\"));
+            args.push(win_path);
+        } else {
+            let universe_id = place.universe_id.unwrap_or(place.place_id);
+            let launch_protocol = format!(
+                "roblox-studio:1+launchmode:edit+task:EditPlace+placeId:{}+universeId:{}+robloxLocale:en_us+gameLocale:en_us",
+                place.place_id, universe_id
+            );
+            args.push(launch_protocol);
+            args.push("-placeId".to_string());
+            args.push(place.place_id.to_string());
+            if let Some(uid) = place.universe_id {
+                args.push("-universeId".to_string());
+                args.push(uid.to_string());
+            }
+        }
+    } else if let Some(id) = config.place_id {
         args.push("-placeId".to_string());
         args.push(id.to_string());
     }
@@ -1488,7 +1712,7 @@ async fn run_studio_session_linux(
     cmd.env("MESA_VK_WSI_PRESENT_MODE", "mailbox");
     cmd.env("QT_QPA_PLATFORM_PLUGIN_PATH", "Qt5/platforms");
 
-    // Vinegar mouse & pointer confinement tweaks
+    // Wine mouse & pointer confinement tweaks
     cmd.env("WINE_MOUSE_WARP_OVERRIDE", "force");
     cmd.env("WINE_X11_WARP_POINTER", "1");
     cmd.env("WINE_VK_WAYLAND", "0");
@@ -1502,7 +1726,7 @@ async fn run_studio_session_linux(
         }
     }
 
-    // Prepend wine's bin dir to PATH if custom kombucha wine is used
+    // Prepend wine's bin dir to PATH if a custom wine binary is used
     if let Some(parent) = wine_bin.parent() {
         if let Ok(current_path) = std::env::var("PATH") {
             cmd.env("PATH", format!("{}:{}", parent.display(), current_path));

@@ -285,7 +285,8 @@
           </g>
         </svg>
         <div class="nav-pill-group">
-          <div class="nav-pill active" data-tab="tab-engine">Settings &amp; Engine Optimizer</div>
+          <div class="nav-pill active" data-tab="tab-places">My Experiences</div>
+          <div class="nav-pill" data-tab="tab-engine">Settings &amp; Engine Optimizer</div>
         </div>
       </div>
 
@@ -329,8 +330,84 @@
     <div class="hub-main-body">
       <!-- Tab Content Area -->
       <div class="hub-content-container">
+        <!-- Tab: Experiences & Places (Roblox Cloud & Local) -->
+        <div class="tab-pane active" id="tab-places">
+          <!-- Toolbar Header -->
+          <div class="places-toolbar">
+            <div class="places-filters-wrap">
+              <button type="button" class="place-filter-btn active" data-filter="all">All</button>
+              <button type="button" class="place-filter-btn" data-filter="personal">Personal</button>
+              <button type="button" class="place-filter-btn" data-filter="groups">Groups</button>
+              <button type="button" class="place-filter-btn" data-filter="local">Local Files</button>
+            </div>
+
+            <div class="places-search-wrap">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="places-search-input" placeholder="Search experiences or Place ID..." autocomplete="off" />
+            </div>
+
+            <div class="places-actions-wrap">
+              <button type="button" class="btn-action-pill" id="btn-open-local-place" title="Open .rbxl / .rbxlx from disk">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span>Open File...</span>
+              </button>
+              <button type="button" class="btn-action-pill" id="btn-refresh-experiences" title="Sync Experiences from Roblox Cloud">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                <span>Sync Cloud</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Split Layout: Grid on left, Detail Inspector on right -->
+          <div class="places-split-layout">
+            <div class="places-grid-scroll-wrap">
+              <div class="places-grid-container" id="places-grid-container">
+                <!-- Cards injected dynamically by app.js -->
+              </div>
+            </div>
+
+            <div class="places-detail-panel" id="places-detail-panel">
+              <div class="detail-panel-inner">
+                <div class="detail-thumb-wrap">
+                  <div class="detail-thumb-img" id="detail-thumb-img"></div>
+                  <div class="detail-tc-badge tc-off" id="detail-tc-badge">SOLO / TC OFF</div>
+                </div>
+                <div class="detail-body">
+                  <div class="detail-category-tag" id="detail-category-tag">PERSONAL</div>
+                  <h2 class="detail-title" id="detail-title">Select an Experience</h2>
+                  <div class="detail-meta-box">
+                    <div class="detail-meta-item">
+                      <span class="meta-label">PLACE ID</span>
+                      <span class="meta-val" id="detail-place-id">--</span>
+                    </div>
+                    <div class="detail-meta-item">
+                      <span class="meta-label">UNIVERSE ID</span>
+                      <span class="meta-val" id="detail-universe-id">--</span>
+                    </div>
+                  </div>
+                  <p class="detail-desc" id="detail-desc">Select an experience to inspect or launch.</p>
+                  
+                  <!-- Sub-places selector when universe has multiple places -->
+                  <div class="detail-subplaces-wrap hidden" id="detail-subplaces-wrap">
+                    <label class="subplaces-label" for="detail-subplaces-select">CHOOSE SUB-PLACE:</label>
+                    <select id="detail-subplaces-select" class="riot-select subplaces-select"></select>
+                  </div>
+
+                  <!-- Quick Action: Download Local Snapshot -->
+                  <div class="detail-actions">
+                    <button type="button" class="btn-snapshot-download" id="btn-download-snapshot">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      <span>Download &amp; Edit Local Backup (.rbxl)</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Main Tab: Engine, Wine & Graphics Tuning -->
-        <div class="tab-pane active" id="tab-engine">
+        <div class="tab-pane" id="tab-engine">
           
           <!-- 5 Optimization Profile Switcher -->
           <div class="profile-selector-bar">
@@ -778,7 +855,7 @@
     </div>
   </div>
 
-  <!-- Modal 1: Vinegar-style Installation Progress Popup -->
+  <!-- Modal 1: Native Installation Progress Popup -->
   <div class="modal-overlay-rbx hidden" id="modal-install-progress">
     <div class="modal-box-rbx" style="width: 480px;">
       <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 4px;">

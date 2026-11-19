@@ -39,6 +39,14 @@ pub struct DXGI_ADAPTER_DESC {
 }
 
 #[repr(C)]
+pub struct RECT {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+#[repr(C)]
 pub struct DXGI_ADAPTER_DESC1 {
     pub Description: [u16; 128],
     pub VendorId: u32,
@@ -55,6 +63,7 @@ pub struct DXGI_ADAPTER_DESC1 {
 // Win32 External Declarations
 extern "system" {
     fn LoadLibraryA(lpLibFileName: *const u8) -> *mut c_void;
+    fn GetModuleHandleA(lpModuleName: *const u8) -> *mut c_void;
     fn GetProcAddress(hModule: *mut c_void, lpProcName: *const u8) -> *mut c_void;
     fn GetForegroundWindow() -> *mut c_void;
     fn GetWindowThreadProcessId(hWnd: *mut c_void, lpdwProcessId: *mut u32) -> u32;
@@ -67,6 +76,11 @@ extern "system" {
         lpflOldProtect: *mut u32,
     ) -> i32;
     fn GetTickCount64() -> u64;
+    fn GetAsyncKeyState(vKey: i32) -> i16;
+    fn GetWindowRect(hWnd: *mut c_void, lpRect: *mut RECT) -> i32;
+    fn ClipCursor(lpRect: *const RECT) -> i32;
+    fn ShowCursor(bShow: i32) -> i32;
+    fn SetCursorPos(X: i32, Y: i32) -> i32;
 }
 
 // Function pointer signatures for DXGI exports
@@ -139,6 +153,7 @@ static CURRENT_FPS: AtomicU32 = AtomicU32::new(0);
 fn init_real_dxgi() {
     INIT_ONCE.call_once(|| unsafe {
         load_shim_configuration();
+        install_mouse_iat_hooks();
 
         // 1. Try to load dxgi_vk.dll (DXVK's renamed dxgi.dll)
         let mut hmod = LoadLibraryA(b"dxgi_vk.dll\0".as_ptr());
@@ -252,11 +267,157 @@ unsafe fn hook_vtable_entry(vtable_ptr: *mut usize, method_index: usize, hook_fn
     }
 }
 
+type FnSetCursorPos = unsafe extern "system" fn(i32, i32) -> i32;
+static mut REAL_SET_CURSOR_POS: Option<FnSetCursorPos> = None;
+static ACTIVE_RMB_CONFINED: AtomicBool = AtomicBool::new(false);
+
+#[repr(C)]
+struct IMAGE_DOS_HEADER {
+    e_magic: u16,
+    _pad: [u8; 58],
+    e_lfanew: i32,
+}
+
+#[repr(C)]
+struct IMAGE_DATA_DIRECTORY {
+    virtual_address: u32,
+    size: u32,
+}
+
+#[repr(C)]
+struct IMAGE_IMPORT_DESCRIPTOR {
+    original_first_thunk: u32,
+    time_date_stamp: u32,
+    forwarder_chain: u32,
+    name: u32,
+    first_thunk: u32,
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Hooked_SetCursorPos(x: i32, y: i32) -> i32 {
+    // Hide cursor temporarily so Xwayland permits XWarpPointer without dropping the delta
+    ShowCursor(0);
+    let res = if let Some(orig) = REAL_SET_CURSOR_POS {
+        orig(x, y)
+    } else {
+        SetCursorPos(x, y)
+    };
+    ShowCursor(1);
+    res
+}
+
+unsafe fn handle_mouse_confinement() {
+    let fg_hwnd = GetForegroundWindow();
+    if fg_hwnd.is_null() {
+        if ACTIVE_RMB_CONFINED.swap(false, Ordering::Relaxed) {
+            ClipCursor(std::ptr::null());
+        }
+        return;
+    }
+
+    let mut fg_pid = 0;
+    GetWindowThreadProcessId(fg_hwnd, &mut fg_pid);
+    if fg_pid != GetCurrentProcessId() {
+        if ACTIVE_RMB_CONFINED.swap(false, Ordering::Relaxed) {
+            ClipCursor(std::ptr::null());
+        }
+        return;
+    }
+
+    // VK_RBUTTON = 0x02. Check if high bit is set (key is down)
+    let rmb_down = (GetAsyncKeyState(0x02) as u16 & 0x8000) != 0;
+
+    if rmb_down {
+        if !ACTIVE_RMB_CONFINED.swap(true, Ordering::Relaxed) {
+            let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+            if GetWindowRect(fg_hwnd, &mut rect) != 0 {
+                ClipCursor(&rect);
+            }
+        }
+    } else {
+        if ACTIVE_RMB_CONFINED.swap(false, Ordering::Relaxed) {
+            ClipCursor(std::ptr::null());
+        }
+    }
+}
+
+unsafe fn install_mouse_iat_hooks() {
+    let base = GetModuleHandleA(std::ptr::null()) as usize;
+    if base == 0 {
+        return;
+    }
+
+    let dos_header = &*(base as *const IMAGE_DOS_HEADER);
+    if dos_header.e_magic != 0x5A4D { // 'MZ'
+        return;
+    }
+
+    let nt_headers_ptr = (base + dos_header.e_lfanew as usize) as *const u32;
+    if *nt_headers_ptr != 0x00004550 { // 'PE\0\0'
+        return;
+    }
+
+    let data_dir_ptr = (base + dos_header.e_lfanew as usize + 136) as *const IMAGE_DATA_DIRECTORY;
+    let import_dir = &*data_dir_ptr.add(1);
+    if import_dir.virtual_address == 0 || import_dir.size == 0 {
+        return;
+    }
+
+    let user32_mod = LoadLibraryA(b"user32.dll\0".as_ptr());
+    if user32_mod.is_null() {
+        return;
+    }
+    let orig_set_cursor = GetProcAddress(user32_mod, b"SetCursorPos\0".as_ptr());
+    if orig_set_cursor.is_null() {
+        return;
+    }
+    REAL_SET_CURSOR_POS = Some(std::mem::transmute(orig_set_cursor));
+
+    let mut desc = (base + import_dir.virtual_address as usize) as *const IMAGE_IMPORT_DESCRIPTOR;
+    while (*desc).name != 0 {
+        let name_ptr = (base + (*desc).name as usize) as *const i8;
+        let mut is_user32 = false;
+        let mut i = 0;
+        let target = b"user32.dll";
+        loop {
+            let c = *name_ptr.add(i) as u8;
+            if c == 0 {
+                if i == target.len() {
+                    is_user32 = true;
+                }
+                break;
+            }
+            if i >= target.len() || c.to_ascii_lowercase() != target[i] {
+                break;
+            }
+            i += 1;
+        }
+
+        if is_user32 {
+            let mut thunk = (base + (*desc).first_thunk as usize) as *mut usize;
+            while *thunk != 0 {
+                if *thunk == orig_set_cursor as usize {
+                    let mut old_prot = 0;
+                    if VirtualProtect(thunk as *mut c_void, std::mem::size_of::<usize>(), PAGE_EXECUTE_READWRITE, &mut old_prot) != 0 {
+                        *thunk = Hooked_SetCursorPos as *const () as usize;
+                        VirtualProtect(thunk as *mut c_void, std::mem::size_of::<usize>(), old_prot, &mut old_prot);
+                    }
+                    break;
+                }
+                thunk = thunk.add(1);
+            }
+        }
+        desc = desc.add(1);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // VMT HOOKS: SwapChain Present
 // ---------------------------------------------------------------------------
 
 unsafe extern "system" fn Hooked_Present(this: *mut c_void, SyncInterval: u32, Flags: u32) -> HRESULT {
+    // Wayland camera rotation mouse confinement & warp handling
+    handle_mouse_confinement();
     // 1. Inactive window GPU throttling
     if ALT_TAB_THROTTLE.load(Ordering::Relaxed) {
         let fg_hwnd = GetForegroundWindow();
@@ -292,6 +453,7 @@ unsafe extern "system" fn Hooked_Present1(
     Flags: u32,
     pPresentParameters: *const c_void,
 ) -> HRESULT {
+    handle_mouse_confinement();
     if ALT_TAB_THROTTLE.load(Ordering::Relaxed) {
         let fg_hwnd = GetForegroundWindow();
         let mut fg_pid = 0;

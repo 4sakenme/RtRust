@@ -8,6 +8,20 @@ pub struct SavedPlace {
     pub name: String,
     pub place_id: u64,
     pub description: String,
+    #[serde(default)]
+    pub universe_id: Option<u64>,
+    #[serde(default)]
+    pub thumbnail_url: Option<String>,
+    #[serde(default)]
+    pub team_create_enabled: Option<bool>,
+    #[serde(default = "default_personal")]
+    pub category: String, // "personal" | "group" | "shared" | "local"
+    #[serde(default)]
+    pub local_path: Option<String>,
+}
+
+fn default_personal() -> String {
+    "personal".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,17 +117,27 @@ fn default_wallpaper_blur() -> u32 {
 fn default_wallpaper_dim() -> u32 {
     45
 }
-fn default_saved_places() -> Vec<SavedPlace> {
+pub fn default_saved_places() -> Vec<SavedPlace> {
     vec![
         SavedPlace {
             name: "Default Baseplate".to_string(),
             place_id: 95206881,
             description: "Standard Roblox Studio Template".to_string(),
+            universe_id: Some(28220420),
+            thumbnail_url: Some("https://tr.rbxcdn.com/180DAY-2f86416cf82c109ff80b017014bec852/512/512/Image/Png/noFilter".to_string()),
+            team_create_enabled: Some(false),
+            category: "personal".to_string(),
+            local_path: None,
         },
         SavedPlace {
             name: "Testing Sandbox".to_string(),
             place_id: 1818,
             description: "Quick Prototype & Script Testing".to_string(),
+            universe_id: None,
+            thumbnail_url: None,
+            team_create_enabled: Some(false),
+            category: "personal".to_string(),
+            local_path: None,
         },
     ]
 }

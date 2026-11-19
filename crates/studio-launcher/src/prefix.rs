@@ -36,34 +36,37 @@ impl PrefixManager {
         })
     }
 
-    /// Detects Vinegar's Kombucha Wine (which includes the XFixes cursor warp patch)
-    /// or falls back to system Wine.
+    /// Resolves the Wine executable: respects $WINE env var, local RtRust runtime (~/.local/share/rtrust/runtime/wine),
+    /// or detects system Wine from PATH (/usr/bin/wine). Completely independent of external launchers.
     pub fn get_wine_binary() -> PathBuf {
-        if let Some(home) = dirs::home_dir() {
-            // 1. Direct Vinegar kombucha symlink/path
-            let direct = home.join(".var/app/org.vinegarhq.Vinegar/data/vinegar/kombucha/bin/wine");
-            if direct.exists() {
-                info!("Using Vinegar Kombucha Wine (with XFixes cursor warp fix): {:?}", direct);
-                return direct;
-            }
-
-            // 2. Scan for kombucha-* folders in Vinegar data dir
-            let vinegar_data = home.join(".var/app/org.vinegarhq.Vinegar/data/vinegar");
-            if let Ok(entries) = fs::read_dir(&vinegar_data) {
-                for entry in entries.flatten() {
-                    let wine_candidate = entry.path().join("bin/wine");
-                    if wine_candidate.exists() {
-                        info!("Using Vinegar Kombucha Wine build: {:?}", wine_candidate);
-                        return wine_candidate;
-                    }
+        if let Ok(wine_env) = std::env::var("WINE") {
+            if !wine_env.trim().is_empty() {
+                let p = PathBuf::from(wine_env.trim());
+                if p.exists() {
+                    info!("Using Wine binary from $WINE: {:?}", p);
+                    return p;
                 }
             }
+        }
 
-            // 3. Check ~/.local/share/rtrust/kombucha/bin/wine
-            let local_kombucha = home.join(".local/share/rtrust/kombucha/bin/wine");
-            if local_kombucha.exists() {
-                info!("Using local Kombucha Wine: {:?}", local_kombucha);
-                return local_kombucha;
+        if let Some(home) = dirs::home_dir() {
+            let local_wine = home.join(".local/share/rtrust/runtime/wine/bin/wine");
+            if local_wine.exists() {
+                info!("Using local RtRust Wine runtime: {:?}", local_wine);
+                return local_wine;
+            }
+        }
+
+        if let Ok(output) = Command::new("which").arg("wine").output() {
+            if output.status.success() {
+                let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path_str.is_empty() {
+                    let p = PathBuf::from(path_str);
+                    if p.exists() {
+                        info!("Using system Wine binary from PATH: {:?}", p);
+                        return p;
+                    }
+                }
             }
         }
 
@@ -215,10 +218,9 @@ impl PrefixManager {
     }
 
     /// Sets DirectInput & X11 Driver options to eliminate Wayland mouse camera jumping.
-    #[allow(dead_code)]
-    fn apply_mouse_settings(&self, mouse_warp: &str) -> Result<()> {
+    pub fn apply_mouse_settings(&self, mouse_warp: &str) -> Result<()> {
         let wine_bin = Self::get_wine_binary();
-        debug!("Configuring Wine mouse registry (MouseWarpOverride={})", mouse_warp);
+        info!("Configuring Wine mouse registry (MouseWarpOverride={}, X11 Driver grab settings)", mouse_warp);
         let _ = Command::new(&wine_bin)
             .env("WINEPREFIX", &self.prefix_dir)
             .env("WINEDEBUG", "-all")
@@ -236,40 +238,35 @@ impl PrefixManager {
             ])
             .status();
 
-        // X11 driver cursor grab confinement
-        let _ = Command::new(&wine_bin)
-            .env("WINEPREFIX", &self.prefix_dir)
-            .env("WINEDEBUG", "-all")
-            .args([
-                "reg",
-                "add",
-                "HKCU\\Software\\Wine\\X11 Driver",
-                "/v",
-                "GrabPointer",
-                "/t",
-                "REG_SZ",
-                "/d",
-                "Y",
-                "/f",
-            ])
-            .status();
+        // X11 driver cursor grab and Wayland window focus settings
+        let x11_tweaks = [
+            ("GrabPointer", "Y"),
+            ("UseCapture", "Y"),
+            ("GrabFullscreen", "Y"),
+            ("UseTakeFocus", "N"),
+            ("Decorated", "Y"),
+            ("Managed", "Y"),
+            ("ShowSysMenu", "N"),
+        ];
 
-        let _ = Command::new(&wine_bin)
-            .env("WINEPREFIX", &self.prefix_dir)
-            .env("WINEDEBUG", "-all")
-            .args([
-                "reg",
-                "add",
-                "HKCU\\Software\\Wine\\X11 Driver",
-                "/v",
-                "UseCapture",
-                "/t",
-                "REG_SZ",
-                "/d",
-                "Y",
-                "/f",
-            ])
-            .status();
+        for (key, val) in x11_tweaks {
+            let _ = Command::new(&wine_bin)
+                .env("WINEPREFIX", &self.prefix_dir)
+                .env("WINEDEBUG", "-all")
+                .args([
+                    "reg",
+                    "add",
+                    "HKCU\\Software\\Wine\\X11 Driver",
+                    "/v",
+                    key,
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    val,
+                    "/f",
+                ])
+                .status();
+        }
 
         Ok(())
     }

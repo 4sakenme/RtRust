@@ -1980,6 +1980,8 @@ input:checked + .switch-slider:before {
 .btn-shimmer-sweep {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
   background: linear-gradient(135deg, #ff4655 0%, #e03444 100%);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.28);
@@ -2001,19 +2003,23 @@ input:checked + .switch-slider:before {
 
 .btn-shimmer-sweep .shimmer-light-beam {
   position: absolute;
-  top: -60%;
-  left: -80%;
-  width: 50%;
-  height: 220%;
-  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.4) 45%, rgba(255, 255, 255, 0.75) 50%, rgba(255, 255, 255, 0.4) 55%, transparent 100%);
+  top: -100%;
+  left: -100%;
+  width: 45%;
+  height: 300%;
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.35) 45%, rgba(255, 255, 255, 0.7) 50%, rgba(255, 255, 255, 0.35) 55%, transparent 100%);
   transform: rotate(25deg);
   pointer-events: none;
-  animation: shimmerSweep 3.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  opacity: 0;
+  animation: shimmerSweep 3.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @keyframes shimmerSweep {
-  0% { transform: translateX(-160%) rotate(25deg); }
-  45%, 100% { transform: translateX(380%) rotate(25deg); }
+  0% { transform: translateX(-150%) rotate(25deg); opacity: 0; }
+  5% { opacity: 1; }
+  35% { opacity: 1; }
+  42% { transform: translateX(550%) rotate(25deg); opacity: 0; }
+  100% { transform: translateX(550%) rotate(25deg); opacity: 0; }
 }
 
 .btn-shimmer-sweep:hover {
@@ -2027,7 +2033,414 @@ input:checked + .switch-slider:before {
 
 /* Ensure bottom dock has proper spacing and clearance */
 .hub-content-container {
-  padding-bottom: 110px;
+  padding-bottom: 120px;
+}
+
+.hub-bottom-dock {
+  background: rgba(11, 14, 20, 0.96) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+}
+
+/* Login Action Box & Button Subtext */
+.login-action-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.btn-subtext {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+/* ============================================================
+   MY EXPERIENCES & PLACES BROWSER (RUSTUDIO STANDARD)
+   ============================================================ */
+.places-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.places-filters-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.place-filter-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.place-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+}
+
+.place-filter-btn.active {
+  background: rgba(0, 210, 255, 0.12);
+  border-color: #00D2FF;
+  color: #00D2FF;
+  box-shadow: 0 0 12px rgba(0, 210, 255, 0.2);
+}
+
+.places-search-wrap {
+  display: flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0 12px;
+  gap: 8px;
+  flex: 1;
+  max-width: 380px;
+  height: 36px;
+  color: #64748b;
+  transition: border-color 0.2s;
+}
+
+.places-search-wrap:focus-within {
+  border-color: #00D2FF;
+  box-shadow: 0 0 10px rgba(0, 210, 255, 0.2);
+  color: #00D2FF;
+}
+
+.places-search-wrap input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 12px;
+  width: 100%;
+}
+
+.places-search-wrap input::placeholder {
+  color: #64748b;
+}
+
+.places-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-action-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-action-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.places-split-layout {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 210px);
+  min-height: 480px;
+}
+
+.places-grid-scroll-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.places-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.experience-card {
+  background: rgba(20, 24, 33, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.experience-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 210, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.experience-card.active {
+  border-color: #ff4655;
+  box-shadow: 0 0 20px rgba(255, 70, 85, 0.35);
+}
+
+.experience-card .card-thumb-wrap {
+  position: relative;
+  height: 120px;
+  background: #0b0e14;
+  overflow: hidden;
+}
+
+.experience-card .card-thumb-img {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.3s ease;
+}
+
+.experience-card:hover .card-thumb-img {
+  transform: scale(1.04);
+}
+
+.experience-card .card-tc-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.card-cat-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.experience-card .card-content {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.experience-card .card-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.experience-card .card-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.experience-card .card-id-label {
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+/* Detail Inspector Panel */
+.places-detail-panel {
+  width: 340px;
+  flex-shrink: 0;
+  background: rgba(17, 20, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow-y: auto;
+  backdrop-filter: blur(16px);
+}
+
+.detail-panel-inner {
+  padding: 16px;
+}
+
+.detail-thumb-wrap {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.detail-thumb-img {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+
+.detail-tc-badge {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+/* TC Badges Colors */
+.tc-badge.tc-on, .detail-tc-badge.tc-on, .card-tc-badge.tc-on {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.tc-badge.tc-off, .detail-tc-badge.tc-off, .card-tc-badge.tc-off {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.tc-badge.tc-local, .detail-tc-badge.tc-local, .card-tc-badge.tc-local {
+  background: rgba(0, 210, 255, 0.18);
+  color: #00d2ff;
+  border: 1px solid rgba(0, 210, 255, 0.4);
+}
+
+.detail-category-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #00d2ff;
+  text-transform: uppercase;
+  margin-top: 14px;
+}
+
+.detail-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin: 4px 0 10px 0;
+  line-height: 1.3;
+}
+
+.detail-meta-box {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.detail-meta-item {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.detail-meta-item .meta-label {
+  font-size: 9px;
+  color: #64748b;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  display: block;
+}
+
+.detail-meta-item .meta-val {
+  font-size: 12px;
+  color: #f1f5f9;
+  font-weight: 700;
+  font-family: monospace;
+  display: block;
+  margin-top: 2px;
+}
+
+.detail-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.detail-subplaces-wrap {
+  margin-bottom: 16px;
+}
+
+.detail-subplaces-wrap.hidden {
+  display: none !important;
+}
+
+.subplaces-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.subplaces-select {
+  width: 100%;
+}
+
+.btn-snapshot-download {
+  width: 100%;
+  height: 42px;
+  background: rgba(0, 210, 255, 0.08);
+  border: 1px solid rgba(0, 210, 255, 0.35);
+  border-radius: 8px;
+  color: #00d2ff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-snapshot-download:hover {
+  background: rgba(0, 210, 255, 0.16);
+  border-color: #00d2ff;
+  box-shadow: 0 0 16px rgba(0, 210, 255, 0.25);
 }
 
 /* Top Nav Wallpaper Pill Button */
@@ -2523,7 +2936,7 @@ select option, .riot-select option {
   padding: 14px 16px;
 }
 
-/* Vinegar-style Installation Progress Popup */
+/* Native Installation Progress Popup */
 .install-pkg-label {
   font-family: monospace;
   font-size: 12px;

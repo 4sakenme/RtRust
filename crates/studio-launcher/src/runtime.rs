@@ -23,38 +23,10 @@ pub struct GpuTelemetry {
 pub struct SlimRuntimeManager;
 
 impl SlimRuntimeManager {
-    /// Detects portable slim Wine, Vinegar Kombucha, or falls back to system Wine.
+    /// Detects portable slim Wine, or falls back to system Wine from PATH.
     #[allow(dead_code)]
     pub fn get_wine_binary() -> PathBuf {
-        if let Some(home) = dirs::home_dir() {
-            // 1. Portable Slim Wine runtime (~/.local/share/rtrust/runtime/wine/bin/wine)
-            let slim_wine = home.join(".local/share/rtrust/runtime/wine/bin/wine");
-            if slim_wine.exists() {
-                info!("Using RTRUST Slim Wine Runtime: {:?}", slim_wine);
-                return slim_wine;
-            }
-
-            // 2. Direct Vinegar Kombucha Wine
-            let direct = home.join(".var/app/org.vinegarhq.Vinegar/data/vinegar/kombucha/bin/wine");
-            if direct.exists() {
-                info!("Using Vinegar Kombucha Wine: {:?}", direct);
-                return direct;
-            }
-
-            // 3. Scan for kombucha-* folders in Vinegar data dir
-            let vinegar_data = home.join(".var/app/org.vinegarhq.Vinegar/data/vinegar");
-            if let Ok(entries) = fs::read_dir(&vinegar_data) {
-                for entry in entries.flatten() {
-                    let wine_candidate = entry.path().join("bin/wine");
-                    if wine_candidate.exists() {
-                        info!("Using Vinegar Kombucha Wine build: {:?}", wine_candidate);
-                        return wine_candidate;
-                    }
-                }
-            }
-        }
-
-        PathBuf::from("wine")
+        crate::prefix::PrefixManager::get_wine_binary()
     }
 
     /// Prepares an isolated slim Wine prefix with unnecessary background services disabled.
