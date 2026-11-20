@@ -37,32 +37,32 @@
   <g transform="translate(50, 115)" filter="url(#shadow)">
     <rect width="470" height="175" rx="12" fill="url(#cardBg)" stroke="#272F3E" stroke-width="1.5" />
     <text x="24" y="34" font-family="system-ui, sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">RAM FOOTPRINT (BASEPLATE)</text>
-    <text x="446" y="34" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#00E599" text-anchor="end">-65% LESS RAM</text>
+    <text x="446" y="34" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#00E599" text-anchor="end">-35% TO -45% RAM</text>
     
     <!-- Standard Bar -->
     <text x="24" y="72" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Standard Wine + Studio</text>
     <rect x="24" y="82" width="422" height="18" rx="6" fill="#242B38" />
     <rect x="24" y="82" width="380" height="18" rx="6" fill="url(#barRed)" />
-    <text x="410" y="96" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="end">3,240 MB</text>
+    <text x="394" y="96" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="end">3,240 MB</text>
 
     <!-- RtRust Bar -->
     <text x="24" y="124" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">RtRust (Slim FFlags + cgroup)</text>
     <rect x="24" y="134" width="422" height="18" rx="6" fill="#242B38" />
-    <rect x="24" y="134" width="135" height="18" rx="6" fill="url(#barGreen)" />
-    <text x="170" y="148" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#00E599">1,120 MB</text>
+    <rect x="24" y="134" width="225" height="18" rx="6" fill="url(#barGreen)" />
+    <text x="260" y="148" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#00E599">~1,850 - 2,050 MB</text>
   </g>
 
   <!-- Metric Card 2: Idle GPU (Alt-Tab Sleep) -->
   <g transform="translate(580, 115)" filter="url(#shadow)">
     <rect width="470" height="175" rx="12" fill="url(#cardBg)" stroke="#272F3E" stroke-width="1.5" />
-    <text x="24" y="34" font-family="system-ui, sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">IDLE GPU LOAD (BACKGROUND/ALT-TAB)</text>
+    <text x="24" y="34" font-family="system-ui, sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">IDLE GPU LOAD (ALT-TAB)</text>
     <text x="446" y="34" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#00E599" text-anchor="end">-95% POWER DRAIN</text>
     
     <!-- Standard Bar -->
     <text x="24" y="72" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Uncapped Viewport Render</text>
     <rect x="24" y="82" width="422" height="18" rx="6" fill="#242B38" />
     <rect x="24" y="82" width="350" height="18" rx="6" fill="url(#barRed)" />
-    <text x="380" y="96" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#FFFFFF">72% GPU (Full Fan)</text>
+    <text x="364" y="96" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="end">72% GPU (Full Fan)</text>
 
     <!-- RtRust Bar -->
     <text x="24" y="124" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">RtRust (Rust DXGI Shim Sleep)</text>
@@ -74,14 +74,14 @@
   <!-- Metric Card 3: Cold Start & Shader Pipeline -->
   <g transform="translate(50, 315)" filter="url(#shadow)">
     <rect width="470" height="175" rx="12" fill="url(#cardBg)" stroke="#272F3E" stroke-width="1.5" />
-    <text x="24" y="34" font-family="system-ui, sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">COLD LAUNCH & VIEWPORT READY</text>
+    <text x="24" y="34" font-family="system-ui, sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">COLD LAUNCH &amp; VIEWPORT READY</text>
     <text x="446" y="34" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#00E599" text-anchor="end">4.6x FASTER</text>
     
     <!-- Standard Bar -->
     <text x="24" y="72" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Cold Wine Prefix + Sync Shaders</text>
     <rect x="24" y="82" width="422" height="18" rx="6" fill="#242B38" />
     <rect x="24" y="82" width="370" height="18" rx="6" fill="url(#barRed)" />
-    <text x="400" y="96" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="end">14.8s</text>
+    <text x="384" y="96" font-family="system-ui, sans-serif" font-size="12" font-weight="800" fill="#FFFFFF" text-anchor="end">14.8s</text>
 
     <!-- RtRust Bar -->
     <text x="24" y="124" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">RtRust (Async DXVK State Cache)</text>
@@ -93,19 +93,19 @@
   <!-- Metric Card 4: Wayland Cursor & Stability -->
   <g transform="translate(580, 315)" filter="url(#shadow)">
     <rect width="470" height="175" rx="12" fill="url(#cardBg)" stroke="#272F3E" stroke-width="1.5" />
-    <text x="24" y="34" font-family="system-ui, sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">WAYLAND VIEWPORT CAMERA ROTATION</text>
+    <text x="24" y="34" font-family="system-ui, sans-serif" font-size="16" font-weight="800" fill="#F8FAFC">WAYLAND MOUSE &amp; CURSOR FIX</text>
     <text x="446" y="34" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#00E599" text-anchor="end">100% FIXED</text>
 
     <!-- Standard Bar -->
     <text x="24" y="72" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">Standard Wine Under Wayland</text>
     <rect x="24" y="82" width="422" height="18" rx="6" fill="#242B38" />
     <rect x="24" y="82" width="422" height="18" rx="6" fill="url(#barRed)" />
-    <text x="235" y="96" font-family="system-ui, sans-serif" font-size="11" font-weight="800" fill="#FFFFFF" text-anchor="middle">❌ Unbounded 360° Infinite Spin Glitch</text>
+    <text x="235" y="96" font-family="system-ui, sans-serif" font-size="11" font-weight="800" fill="#FFFFFF" text-anchor="middle">✕ Unbounded Cursor Drift &amp; Click Offset</text>
 
     <!-- RtRust Bar -->
     <text x="24" y="124" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#94A3B8">RtRust (XWayland Pointer Confinement)</text>
     <rect x="24" y="134" width="422" height="18" rx="6" fill="#242B38" />
     <rect x="24" y="134" width="422" height="18" rx="6" fill="url(#barGreen)" />
-    <text x="235" y="148" font-family="system-ui, sans-serif" font-size="11" font-weight="800" fill="#0E1117" text-anchor="middle">✔ Smooth 1:1 Pixel-Perfect Delta Control</text>
+    <text x="235" y="148" font-family="system-ui, sans-serif" font-size="11" font-weight="800" fill="#0E1117" text-anchor="middle">✔ Smooth 1:1 Pixel-Perfect Mouse Control</text>
   </g>
 </svg>

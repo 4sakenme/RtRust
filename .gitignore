@@ -36,3 +36,4 @@ ClientAppSettings.local.json
 *~
 .DS_Store
 runners/
+RtRustMobile/
