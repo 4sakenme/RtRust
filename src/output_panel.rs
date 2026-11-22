@@ -482,12 +482,18 @@ pub fn log_view(ui: &mut egui::Ui, st: &mut OutputState, log: &[LogLine]) -> usi
     let id = egui::Id::new("output_text");
     let mut drawn = 0;
     egui::ScrollArea::vertical()
+        .scroll_source(egui::scroll_area::ScrollSource {
+            scroll_bar: true,
+            drag: egui::scroll_area::DragScroll::Always,
+            mouse_wheel: true,
+        })
         .auto_shrink([false, false])
         .stick_to_bottom(true)
         .show_viewport(ui, |ui, viewport| {
             let total = *tops.last().unwrap_or(&0.0);
             let (content, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), total), Sense::hover());
             let view = ui.clip_rect();
+            let painter = ui.painter_at(view);
             // Under the lines (they only sense hover), above nothing: the
             // scroll bar is added after and stays on top.
             let resp = ui.interact(view, id, Sense::click_and_drag());
@@ -511,12 +517,12 @@ pub fn log_view(ui: &mut egui::Ui, st: &mut OutputState, log: &[LogLine]) -> usi
                     Context::None => None,
                 };
                 if let Some(c) = bar_color {
-                    ui.painter().rect_filled(bar, 0.0, c);
+                    painter.rect_filled(bar, 0.0, c);
                 }
-                let slot = ui.painter().add(egui::Shape::Noop);
+                let slot = painter.add(egui::Shape::Noop);
                 // (as the earlier row layout spaced them: bar, gap, space, gap)
                 let pos = egui::pos2(content.min.x + 2.0 * space + 2.0 * ui.spacing().item_spacing.x, top);
-                ui.painter().galley(pos, galley.clone(), PRINT);
+                painter.galley(pos, galley.clone(), PRINT);
                 rows.push((i, tops[k + 1] - tops[k], top, pos, galley, slot, space));
                 drawn += 1;
             }

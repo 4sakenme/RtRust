@@ -1288,17 +1288,19 @@ pub mod android_ime {
         }
         let ctx = ndk_context::android_context();
         let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) };
-        let _ = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+        if let Err(e) = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
             let activity = unsafe { jni::objects::JObject::from_raw(env, ctx.context().cast()) };
             env.call_method(
                 &activity,
                 jni::jni_str!("setSoftInput"),
-                jni::jni_sig!((show: jboolean) -> void),
+                jni::jni_sig!("(Z)V"),
                 &[jni::objects::JValue::Bool(wanted)],
             )?;
             std::mem::forget(activity);
             Ok(())
-        });
+        }) {
+            log::error!("android_ime sync_soft_keyboard({wanted}) failed: {e:?}");
+        }
     }
 
     pub fn drain_ime_events(raw: &mut egui::RawInput) {

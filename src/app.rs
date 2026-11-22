@@ -2349,10 +2349,14 @@ impl RustudioApp {
                     .open(&mut open)
                     .fixed_pos(egui::pos2(dock_rect.left() + 8.0, dock_rect.top() + 8.0))
                     .fixed_size(egui::vec2(drawer_w, max_h))
+                    .max_width(drawer_w)
+                    .max_height(max_h)
                     .movable(false)
                     .resizable(false)
                     .collapsible(false)
                     .show(&ctx, |ui| {
+                        ui.set_max_width(drawer_w - 16.0);
+                        ui.set_max_height(max_h - 32.0);
                         self.ed.explorer_ui(ui);
                     });
                 self.ed.ui.mobile_explorer_open = open;
@@ -2364,10 +2368,14 @@ impl RustudioApp {
                     .open(&mut open)
                     .fixed_pos(egui::pos2((dock_rect.right() - drawer_w - 8.0).max(8.0), dock_rect.top() + 8.0))
                     .fixed_size(egui::vec2(drawer_w, max_h))
+                    .max_width(drawer_w)
+                    .max_height(max_h)
                     .movable(false)
                     .resizable(false)
                     .collapsible(false)
                     .show(&ctx, |ui| {
+                        ui.set_max_width(drawer_w - 16.0);
+                        ui.set_max_height(max_h - 32.0);
                         self.ed.properties_ui(ui);
                     });
                 self.ed.ui.mobile_properties_open = open;
