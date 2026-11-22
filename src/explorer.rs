@@ -286,6 +286,11 @@ impl Editor {
         ui.spacing_mut().item_spacing.y = 0.0;
         let dragging = egui::DragAndDrop::has_payload_of_type::<DragRefs>(ui.ctx());
         let mut scroll = egui::ScrollArea::vertical()
+            .scroll_source(egui::scroll_area::ScrollSource {
+                scroll_bar: true,
+                drag: egui::scroll_area::DragScroll::Always,
+                mouse_wheel: true,
+            })
             .auto_shrink([false, false])
             .id_salt("explorer_scroll");
         if let Some(target) = self.explorer.scroll_to.take() {
@@ -438,7 +443,8 @@ impl Editor {
         let selected = self.game.doc.selection.contains(&r);
         let expanded = self.explorer.expanded.contains(&r) || self.explorer.forced_open.contains(&r);
 
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::click_and_drag());
+        let sense = if cfg!(target_os = "android") { Sense::click() } else { Sense::click_and_drag() };
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), sense);
         let painter = ui.painter_at(rect);
         // Drag over this row: above / into / below by the pointer's height.
         let drop = resp.dnd_hover_payload::<DragRefs>().and_then(|_| {

@@ -92,6 +92,8 @@ rfd = "0.15"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"
+jni = "0.22"
+ndk-context = "0.1"
 winit = { version = "0.30", features = ["android-native-activity"] }
 
 [target.'cfg(windows)'.dependencies]

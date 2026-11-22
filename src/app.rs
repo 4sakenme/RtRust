@@ -341,6 +341,14 @@ impl RustudioApp {
         rustudio_engine::ti::install(egui_ctx);
         crate::font_manager::init_on_startup(egui_ctx);
         theme::apply(egui_ctx);
+        #[cfg(target_os = "android")]
+        for theme in [egui::Theme::Dark, egui::Theme::Light] {
+            egui_ctx.style_mut_of(theme, |s| {
+                s.spacing.scroll.bar_width = 16.0;
+                s.spacing.scroll.handle_min_length = 56.0;
+                s.spacing.scroll.floating = false;
+            });
+        }
         rustudio_engine::mouse_lock::note_window(wayland);
         let mut ed = Editor {
             game: Game::new(render_state),
@@ -1976,6 +1984,11 @@ impl eframe::App for RustudioApp {
                 )
             });
         }
+        #[cfg(target_os = "android")]
+        {
+            crate::android_ime::sync_soft_keyboard(_ctx.egui_wants_keyboard_input());
+            crate::android_ime::drain_ime_events(raw);
+        }
         crate::touch_input_bridge::process_raw_input(_ctx, raw);
         if let Some(t) = self.ed.harness.selftest.as_mut() {
             t.inject(raw);
@@ -2328,6 +2341,7 @@ impl RustudioApp {
         // Floating Left/Right Drawers for Explorer & Properties in Mobile Drawer Mode
         if rustudio_core::mobile::is_drawer_mode() {
             let max_h = (dock_rect.height() - 16.0).max(200.0);
+            let min_h = (max_h * 0.65).max(200.0);
             if self.ed.ui.mobile_explorer_open {
                 let mut open = self.ed.ui.mobile_explorer_open;
                 egui::Window::new("🌳 Explorer")
@@ -2335,6 +2349,8 @@ impl RustudioApp {
                     .open(&mut open)
                     .default_pos(egui::pos2(dock_rect.left() + 8.0, dock_rect.top() + 8.0))
                     .default_size(egui::vec2(235.0, max_h))
+                    .min_height(min_h)
+                    .max_height(max_h)
                     .resizable(true)
                     .collapsible(true)
                     .show(&ctx, |ui| {
@@ -2349,6 +2365,8 @@ impl RustudioApp {
                     .open(&mut open)
                     .default_pos(egui::pos2((dock_rect.right() - 255.0).max(8.0), dock_rect.top() + 8.0))
                     .default_size(egui::vec2(245.0, max_h))
+                    .min_height(min_h)
+                    .max_height(max_h)
                     .resizable(true)
                     .collapsible(true)
                     .show(&ctx, |ui| {

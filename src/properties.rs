@@ -298,6 +298,11 @@ impl Editor {
         let filter = self.props.filter.trim().to_lowercase();
         let mut edits: Vec<Edit> = Vec::new();
         egui::ScrollArea::vertical()
+            .scroll_source(egui::scroll_area::ScrollSource {
+                scroll_bar: true,
+                drag: egui::scroll_area::DragScroll::Always,
+                mouse_wheel: true,
+            })
             .auto_shrink([false, false])
             .id_salt("props_scroll")
             .show(ui, |ui| {

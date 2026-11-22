@@ -1261,6 +1261,105 @@ pub fn run() -> eframe::Result<()> {
     r
 }
 
+/// Android IME bridge (`MainActivity.java` `ImeView` <-> `egui::RawInput`).
+#[cfg(target_os = "android")]
+pub mod android_ime {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    static QUEUE: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
+    static LAST_SHOWN: AtomicBool = AtomicBool::new(false);
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_rtrust_mobile_MainActivity_nativeOnImeKey(
+        _env: *mut std::ffi::c_void,
+        _class: *mut std::ffi::c_void,
+        kind: i32,
+        codepoint: i32,
+    ) {
+        if let Ok(mut q) = QUEUE.lock() {
+            q.push((kind, codepoint));
+        }
+    }
+
+    pub fn sync_soft_keyboard(wanted: bool) {
+        if LAST_SHOWN.swap(wanted, Ordering::Relaxed) == wanted {
+            return;
+        }
+        let ctx = ndk_context::android_context();
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) };
+        let _ = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+            let activity = unsafe { jni::objects::JObject::from_raw(env, ctx.context().cast()) };
+            env.call_method(
+                &activity,
+                jni::jni_str!("setSoftInput"),
+                jni::jni_sig!((show: jboolean) -> void),
+                &[jni::objects::JValue::Bool(wanted)],
+            )?;
+            std::mem::forget(activity);
+            Ok(())
+        });
+    }
+
+    pub fn drain_ime_events(raw: &mut egui::RawInput) {
+        let Ok(mut q) = QUEUE.lock() else { return };
+        if q.is_empty() {
+            return;
+        }
+        let mut text_buf = String::new();
+        let flush_text = |buf: &mut String, events: &mut Vec<egui::Event>| {
+            if !buf.is_empty() {
+                events.push(egui::Event::Text(std::mem::take(buf)));
+            }
+        };
+        for (kind, cp) in q.drain(..) {
+            match kind {
+                0 => {
+                    if let Some(ch) = char::from_u32(cp as u32) {
+                        text_buf.push(ch);
+                    }
+                }
+                1 => {
+                    flush_text(&mut text_buf, &mut raw.events);
+                    raw.events.push(egui::Event::Key {
+                        key: egui::Key::Backspace,
+                        physical_key: Some(egui::Key::Backspace),
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    });
+                    raw.events.push(egui::Event::Key {
+                        key: egui::Key::Backspace,
+                        physical_key: Some(egui::Key::Backspace),
+                        pressed: false,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    });
+                }
+                2 => {
+                    flush_text(&mut text_buf, &mut raw.events);
+                    raw.events.push(egui::Event::Key {
+                        key: egui::Key::Enter,
+                        physical_key: Some(egui::Key::Enter),
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    });
+                    raw.events.push(egui::Event::Key {
+                        key: egui::Key::Enter,
+                        physical_key: Some(egui::Key::Enter),
+                        pressed: false,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    });
+                }
+                _ => {}
+            }
+        }
+        flush_text(&mut text_buf, &mut raw.events);
+    }
+}
+
 /// Android / Waydroid entry point (`librtrust_mobile.so`).
 #[cfg(target_os = "android")]
 #[no_mangle]
