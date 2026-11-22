@@ -709,6 +709,10 @@ impl Editor {
                         changed = true;
                         buf.edited = Instant::now();
                     }
+                    #[cfg(target_os = "android")]
+                    if resp.clicked() {
+                        crate::android_ime::force_show_keyboard();
+                    }
                     // VS Code-style Error Lens: show error inline next to the offending line.
                     if let Some((err_line, err_msg)) = &buf.error {
                         let line_idx = err_line.saturating_sub(1);

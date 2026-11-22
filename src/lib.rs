@@ -1301,11 +1301,20 @@ pub mod android_ime {
         }
     }
 
+    pub fn force_show_keyboard() {
+        LAST_SHOWN.store(true, Ordering::Relaxed);
+        call_set_soft_input(true);
+    }
+
     pub fn sync_soft_keyboard(wanted: bool, tapped: bool) {
         let prev = LAST_SHOWN.swap(wanted, Ordering::Relaxed);
         if prev == wanted && !(wanted && tapped) {
             return;
         }
+        call_set_soft_input(wanted);
+    }
+
+    fn call_set_soft_input(wanted: bool) {
         let ctx = ndk_context::android_context();
         let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) };
         if let Err(e) = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
@@ -1319,7 +1328,7 @@ pub mod android_ime {
             std::mem::forget(activity);
             Ok(())
         }) {
-            log::error!("android_ime sync_soft_keyboard({wanted}) failed: {e:?}");
+            log::error!("android_ime setSoftInput({wanted}) failed: {e:?}");
         }
     }
 

@@ -1989,8 +1989,8 @@ impl eframe::App for RustudioApp {
             let tapped = raw.events.iter().any(|e| {
                 matches!(
                     e,
-                    egui::Event::PointerButton { pressed: true, .. }
-                        | egui::Event::Touch { phase: egui::TouchPhase::Start, .. }
+                    egui::Event::PointerButton { .. }
+                        | egui::Event::Touch { phase: egui::TouchPhase::Start | egui::TouchPhase::End, .. }
                 )
             });
             crate::android_ime::sync_soft_keyboard(_ctx.egui_wants_keyboard_input(), tapped);

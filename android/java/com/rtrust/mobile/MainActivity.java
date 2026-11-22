@@ -155,7 +155,13 @@ public class MainActivity extends NativeActivity {
                     lastText = "";
                     updatingText = false;
                     imeInput.requestFocus();
-                    imm.showSoftInput(imeInput, InputMethodManager.SHOW_IMPLICIT);
+                    imeInput.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            imm.restartInput(imeInput);
+                            imm.showSoftInput(imeInput, 0);
+                        }
+                    });
                 } else {
                     imm.hideSoftInputFromWindow(imeInput.getWindowToken(), 0);
                     imeInput.clearFocus();
