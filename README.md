@@ -5,230 +5,98 @@
 <h1 align="center">RtRustMobile</h1>
 
 <p align="center">
-  <strong>Native Android, Waydroid &amp; Ultra-Low-End Roblox Studio Editor/Runtime in Rust</strong><br>
-  Powered by the open-source <a href="https://github.com/rippelz/rustudio">rustudio (v0.3.4)</a> engine.
+  <strong>Native Android, Waydroid &amp; Ultra-Low-End Roblox Studio Editor &amp; Runtime in Rust</strong>
 </p>
 
-> [!NOTE]
-> **Pre-release Demo Available:** Download the Android APK (`RtRustMobile-0.3.4-debug.apk`) and view full benchmarks & feature notes in [MOBILE_DEMO.md](MOBILE_DEMO.md) or on the [v0.3.4-mobile-demo.1 Release](https://github.com/4sakenme/RtRust/releases/tag/v0.3.4-mobile-demo.1).
-
-## Engine Architecture &amp; Origin
-
-- **Core Engine ([rippelz/rustudio](https://github.com/rippelz/rustudio) `v0.3.4`)**:
-  - A native Rust Roblox Studio implementation (no Wine required) that handles `.rbxl`/`.rbxlx` places and `.rbxm`/`.rbxmx` models, real Luau VM execution (`--!native` codegen), Rapier3D physics, R6/R15 character simulation, `wgpu` 3D rendering, incremental voxel lighting (~97% less CPU), multi-threaded World GUI layout, Team Create live sync, Rojo/Argon File Sync, MicroProfiler, and a built-in MCP server.
-- **RtRustMobile Layer (`4sakenme/RtRust` — `mobile` branch)**:
-  - Adapts the engine for **Android / Waydroid** and **low-end hardware**:
-    - **Hardware Tuner &amp; Thread Governor**: auto-applies `RUSTUDIO_LOWEND=1`, `RUSTUDIO_PLAY_WORKER=0`, `RAYON_NUM_THREADS=2`, and Eco 30 FPS / High 60 FPS modes (reaching **152.9 FPS** in Ultra-Low headless Play benchmark vs **31.2 FPS** in unoptimized High mode).
-    - **Mobile &amp; Touch UI**: Immersive Fullscreen (`MainActivity`), Responsive Mobile Drawers, touch-friendly Explorer (always-visible `+`, no accidental double-tap rename), 3D Workspace touch camera + `👁 Cam` toggle (marquee disabled on mobile), and Play Mode Thumbstick / `JUMP` / 360° free-drag camera + Rust Play Fallback when offline.
-    - **Android Runtime &amp; Networking**: writable app-private storage (`internal_data_path()`), `RootCerts::WebPki`, and `AndroidDnsResolver` (direct UDP DNS fallback).
+<p align="center">
+  <a href="https://github.com/4sakenme/RtRust/releases/tag/v0.3.4-mobile-demo.1"><img src="https://img.shields.io/badge/Pre--release-v0.3.4--mobile--demo.1-2563EB?style=flat-square" alt="Pre-release"></a>
+  <a href="https://github.com/rippelz/rustudio"><img src="https://img.shields.io/badge/Engine-rustudio%20v0.3.4-orange?style=flat-square" alt="Engine"></a>
+  <img src="https://img.shields.io/badge/Platform-Android%20%7C%20Waydroid%20%7C%20Linux-3DDC84?style=flat-square" alt="Platforms">
+  <img src="https://img.shields.io/badge/License-MIT%20%2F%20Apache--2.0-lightgrey?style=flat-square" alt="License">
+</p>
 
 ---
 
-*Upstream `rustudio` documentation below:*
+## What is RtRustMobile?
 
-![Playing a test place in rustudio](docs/images/play.png)
+**RtRustMobile** is the mobile (Android / Waydroid) and ultra-low-end edition of **[RtRust](https://github.com/4sakenme/RtRust)**, powered by the open-source **[rustudio (`v0.3.4`)](https://github.com/rippelz/rustudio)** native Rust engine.
 
-![The rustudio home screen](docs/images/home.png)
+- **Upstream Engine (`rippelz/rustudio v0.3.4`):** Provides the core Roblox Studio runtime written completely in Rust (no Wine) — `.rbxl`/`.rbxlx` & `.rbxm`/`.rbxmx` editing, real Luau VM (`--!native` codegen), Rapier3D & Studio physics, R6/R15 character simulation, `wgpu` rendering, incremental voxel lighting (~97% less CPU), multi-threaded World GUI layout, Team Create live sync, Rojo/Argon File Sync, MicroProfiler, and built-in MCP server.
+- **RtRustMobile Layer (`mobile` branch):** Adapts the engine for touchscreens, Android NDK (`arm64-v8a` & `x86_64`), Waydroid, and low-spec laptops with aggressive thread/shader tuning, immersive fullscreen, touch camera & play controls, and Android-safe storage/networking.
 
-> This project is still early, so please please help!! Contributions are super welcome. Come hang out, ask for help or report bugs on the [Discord](https://discord.gg/pdVZpADpWr).
+---
 
-## Features
+## Performance Benchmarks (Play Mode — `v0.3.4`)
 
-- **Editor:** Explorer, Properties, Output, script tabs, move/scale/rotate
-  tools with drag duplication and selection rotation, pop-out panels, terrain
-  brushes and threaded generation, undo/redo, and Studio's menus and shortcuts.
-- **Files:** `.rbxl` / `.rbxlx` places and `.rbxm` / `.rbxmx` models, plus
-  project folders (`*.project.json` with plain files as the source of truth,
-  Rojo/Argon sync rules, `sourcemap.json`, and File > Save as Project
-  Folder… to turn any place into one).
-- **Roblox destinations:** Save to Roblox As and Publish As use the signed-in
-  account. Browse personal, shared and group experiences in a searchable grid,
-  then select an existing place or create a destination.
-- **Plugins:** Roblox Studio plugins run in the editor: local plugins from a
-  Plugins folder and plugins installed from the Creator Store, with
-  toolbars, dock widgets, menus, drag and drop, and Plugins > Manage Plugins
-  to install, update, turn off or remove them. Rojo and Argon connect.
-- **Toolbox:** search the Creator Store, your Inventory, Recent and
-  Creations, and insert models, meshes, images, audio and plugins (signed in).
-- **Play / Run:** separate server and client, remotes, physics that follows
-  Studio's solver (`RUSTUDIO_SOLVER=rapier` for the earlier rapier3d one),
-  R15/R6 characters with climbing and held jump, saved play settings, shift
-  lock, sounds, tweens, 2D and 3D GUIs.
-- **Teleports in Play:** like Studio's play-testing teleports, a server's
-  `TeleportService:TeleportAsync` to another place of the same experience
-  starts Play on that place (the open place as it is in the editor, others
-  at their latest saved version), with `TeleportData` in
-  `Player:GetJoinData()` and `GetLocalPlayerTeleportData()`. Reserved
-  servers work; deprecated teleport calls, client teleports, VIP servers and
-  other experiences fail with Studio's messages.
-- **Luau:** the real Luau VM, with most of the engine API that real games
-  call (see [docs/ENGINE-GAPS.md](docs/ENGINE-GAPS.md) for what's missing).
-- **Rendering:** wgpu, with lighting, shadows, sky, atmosphere and materials
-  tuned against Studio, incremental local lights and truss geometry. Meshes,
-  FBX import and terrain are supported.
-- **Roblox account:** open your places, load assets and avatars, use
-  DataStores, and join Team Create sessions.
+Measured with `--demo --play --headless --no-ui --bench --seconds 3` across 4 hardware tiers:
 
-## Install
+| Profile Tier | Environment Config | Frames (3s) | Avg FPS | 1% Low FPS | Avg Frame | Work / CPU | Draw Calls |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **1. Ultra-Low** | `LOWEND=1`, `PLAY_WORKER=0`, `2T` | **459** | **152.9 FPS** | **96.2 FPS** | **6.54 ms** | **1.40 / 2.26 ms** | **20** |
+| **2. Low-End** | `LOWEND=1`, `PLAY_WORKER=1`, `4T` | **433** | **144.0 FPS** | **83.7 FPS** | **6.95 ms** | **1.83 / 2.89 ms** | **20** |
+| **3. Balanced** | `LOWEND=0`, `PLAY_WORKER=1`, `4T` | **101** | **33.4 FPS** | **25.8 FPS** | **29.94 ms** | **2.12 / 3.17 ms** | **35** |
+| **4. High / Perf** | `LOWEND=0`, `PLAY_WORKER=1`, `All` | **94** | **31.2 FPS** | **20.5 FPS** | **32.02 ms** | **2.45 / 3.65 ms** | **35** |
 
-**Download:** prebuilt Linux (x86_64), Windows (x64) and macOS (Apple Silicon
-and Intel) builds are on the
-[releases page](https://github.com/rippelz/rustudio/releases). On Linux, unpack and run
-`./install.sh` inside the extracted folder; on Windows run `install.cmd` (or `rustudio.exe` for portable use).
-On a Mac, move `rustudio.app` to
-Applications and the first time right-click it > Open (it isn't notarized).
-### Installing a prebuilt Windows download
+> Enabling the low-end profile (`RUSTUDIO_LOWEND=1`, `PLAY_WORKER=0`, `RAYON_NUM_THREADS=2`) delivers **~4.9× higher FPS** (**152.9 FPS** vs **31.2 FPS**) and cuts draw calls from `35` down to `20`.
 
-Extract the Windows ZIP and double-click `install.cmd`. The install dialog lets
-you choose a folder and whether to create a Start menu shortcut. It defaults to
-`%LOCALAPPDATA%\Programs\rustudio` for your account. No administrator rights or Rust toolchain are needed.
-The executable contains the icon, so Explorer and shortcuts can display it too.
+---
 
-Close rustudio before upgrading, then run `install.cmd` from the new download.
-To remove the installation, run `uninstall.cmd` in the installed folder.
-Uninstall preserves projects, settings, sign-in and downloaded Studio content.
-The ZIP also supports portable use: run `rustudio.exe` directly without installing.
+## Key Features
 
-### Installing a prebuilt Linux download
+### Performance & Hardware Tuning
+- **Hardware Tuner (`crates/rustudio-core/src/hardware_tuner.rs`):** Auto-detects CPU/RAM and applies `RUSTUDIO_LOWEND=1`, `RUSTUDIO_PLAY_WORKER=0`, and `RAYON_NUM_THREADS=2` on weak devices (`<= 2` cores or `< 3.8 GB` RAM).
+- **Eco / High Modes (`crates/rustudio-core/src/mobile.rs`):** Switchable **Eco (30 FPS, 0.7× render scale)** and **High (60 FPS, 1.0× scale)** presets.
+- **v0.3.4 Engine Gains:** Incremental voxel lighting (~97% less CPU), ~40% faster gameplay step, multi-threaded World GUI layout, and off-thread image decoding.
 
-Extract the Linux release archive, open a terminal in the extracted folder,
-and run `./install.sh`. No Rust, Cargo, or source checkout is needed.
-The installer puts the executable and API data in `~/.local/lib/rustudio`,
-a command in `~/.local/bin`, and the launcher and icons in `~/.local/share`.
-Launch **rustudio** from your applications menu; this works even if
-`~/.local/bin` is absent from your session's PATH. The extracted folder can
-then be removed.
+### Coding, AI & Sync
+- **Luau Script Editor (`src/script_editor.rs`):** Syntax highlighting, API/member autocomplete, and `--!native` codegen.
+- **Output & Profilers (`src/output_panel.rs`, `Ctrl+F6`):** Real-time Server/Client/Core logs, MicroProfiler, and Script Profiler flame view.
+- **MCP Server & AI Assistant (`src/mcp/`, `src/mcp_assistant.rs`):** Built-in MCP server (`127.0.0.1:44755`) + AI Assistant with `read_output`, Luau execution, and screenshot capture.
+- **File Sync & Team Create (`src/file_sync/`):** Rojo / Argon project sync and live collaborative editing with terrain streaming.
 
-To upgrade, extract the new archive and run its `./install.sh` again.
-To uninstall, run `./install.sh --uninstall` from an extracted archive or
-source checkout. Projects, settings, sign-in data, and downloaded content
-are preserved. `--prefix /absolute/path` selects another installation root;
-use the same prefix when upgrading or uninstalling. Custom prefixes may
-need to be added to the desktop's data search path for menu discovery.
+### Mobile & Touch UX (Android / Waydroid)
+- **Immersive Fullscreen (`android/java/com/rtrust/mobile/MainActivity.java`):** Hides status bar and Android navigation bar automatically.
+- **Responsive Dual Layout (`src/studio_ribbon.rs`):** Adaptive Mobile Drawers (`3D | Code | Explorer | Output`) + floating shortcut bar.
+- **Touch Explorer (`src/explorer.rs`):** Always-visible `+` (Insert Object) button with 24px touch target; accidental double-tap rename disabled (rename via Properties).
+- **3D Workspace Camera (`src/edit_camera.rs`):** Virtual Fly Joystick, `▲/▼` altitude buttons, `🎯 Focus`, `Fly / Orbit` toggle, `👁 Cam` free-look mode, and marquee box-select disabled on mobile.
+- **Play Mode Controls (`src/viewport.rs`, `crates/rustudio-player/src/play.rs`):** Virtual thumbstick, `JUMP` button, 360° full-screen touch-drag camera rotation, and **Rust Play Fallback** (built-in movement & 12.5-stud orbit camera when offline).
+- **Android Storage & DNS (`crates/rustudio-core/src/paths.rs`, `crates/rustudio-account/src/android_net.rs`):** App-private writable data/cookie storage (`internal_data_path()`), `RootCerts::WebPki`, and direct UDP DNS fallback (`AndroidDnsResolver`).
 
-From a source checkout, `./install.sh` still builds with Cargo;
-`./install.sh --no-build` installs `target/release/rustudio`.
-Release maintainers can package a built executable with
-`tools/linux/package.sh target/release/rustudio rustudio-linux.tar.gz`.
+---
 
-A downloaded copy checks for a newer release when it starts and can update
-itself (each download is checked against the release's `SHA256SUMS`); set
-`RUSTUDIO_NO_UPDATE_CHECK=1` to turn that off.
+## Download & Install
 
-**Build from source:** you need a stable Rust toolchain (1.95 or newer) and a GPU with Vulkan (or OpenGL), or on
-a Mac, macOS 11 or later (Metal).
+1. Download **`RtRustMobile-0.3.4-debug.apk`** from the **[v0.3.4-mobile-demo.1 Pre-release](https://github.com/4sakenme/RtRust/releases/tag/v0.3.4-mobile-demo.1)**.
+2. Install on Android or Waydroid:
+   ```bash
+   # Android (via ADB)
+   adb install -r RtRustMobile-0.3.4-debug.apk
 
-```sh
-git clone https://github.com/rippelz/rustudio
-cd rustudio
+   # Waydroid
+   waydroid app install RtRustMobile-0.3.4-debug.apk
+   ```
+
+---
+
+## Build from Source
+
+```bash
+# Desktop (Linux)
 cargo build --release
-./target/release/rustudio --demo           # sample scene
-./target/release/rustudio my_place.rbxl    # open a place
+
+# Android APK (requires Android NDK 26+, cargo-ndk, Gradle 8.10+)
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+export ANDROID_NDK_HOME="$HOME/Android/Sdk/ndk/26.3.11579264"
+
+cargo ndk -P 26 -t arm64-v8a -t x86_64 -o android/jniLibs build --profile mobile-release --lib
+cd android && gradle assembleDebug
 ```
 
-On Windows (MSVC toolchain), run `.\target\release\rustudio.exe` instead,
-and see the Windows notes under [Platforms](#platforms).
+---
 
-On Linux you can install it for your user instead, so it shows up in your
-app launcher and runs as `rustudio` from anywhere:
+## Credits & License
 
-```sh
-./install.sh                # build, then install into ~/.local
-./install.sh --uninstall    # remove it again
-```
-
-The install keeps working if you move or delete the cloned folder.
-`./install.sh --help` lists the other options (`--prefix`, `--no-build`).
-
-On first launch rustudio downloads Roblox Studio's built-in content
-(default characters, camera and control scripts, fonts, textures, sounds;
-about 60 MB) from Roblox's own CDN into `~/.local/share/rustudio/studio`
-(`%LOCALAPPDATA%\rustudio\studio` on Windows).
-To get it ahead of time, or update it, run
-`rustudio --install-studio-content`.
-
-If you already have Studio installed (e.g. via
-[Vinegar](https://vinegarhq.org)), you can point rustudio at that instead:
-
-```sh
-export RUSTUDIO_STUDIO_DIR=~/.var/app/org.vinegarhq.Vinegar/data/vinegar/versions/version-XXXX
-```
-
-On macOS, download `rustudio-…-macos-universal.zip` from
-[Releases](https://github.com/rippelz/rustudio/releases) (Apple Silicon and
-Intel in one), unzip it and move `rustudio.app` to Applications. It isn't
-notarized by Apple, so the first time right-click it and choose **Open** (or
-allow it in System Settings > Privacy & Security). To build the app
-yourself instead: `tools/macos/bundle.sh` (`--universal` for both
-architectures).
-
-## Platforms
-
-| Platform | Status |
-|---|---|
-| Linux x86_64 (Wayland or X11) | Supported |
-| Linux ARM64 | Should build; untested |
-| macOS 11+ (Apple Silicon and Intel) | Builds and runs (tested on Apple Silicon); see below |
-| Windows x86_64 (MSVC) | Builds and runs (tested on Windows 11); see below |
-
-CI checks and tests the workspace on Linux, Windows and macOS. CI also builds the
-macOS app.
-
-Windows is new, so a few things don't work there yet:
-
-- Paths in this README are the Linux ones. On Windows, data and caches go
-  in `%LOCALAPPDATA%\rustudio` (e.g. the Studio content download in
-  `%LOCALAPPDATA%\rustudio\studio`) and settings in `%APPDATA%\rustudio`.
-- Signing in is untested (the session cookie now goes through the
-  Windows Credential Manager).
-- Video playback is off (libvpx/libopus are loaded only on Linux), and a
-  native crash doesn't write a crash report (panics still do).
-
-On macOS:
-
-- Data and settings go in `~/Library/Application Support/rustudio`, caches
-  and crash reports in `~/Library/Caches/rustudio`.
-- With Roblox Studio installed (`RobloxStudio.app`), rustudio uses its
-  content and downloads nothing.
-- Shortcuts are Studio for Mac's (⌘ for Ctrl, ⌥ for Alt; the delete key
-  deletes), ⌘Q asks about unsaved changes, and places and models open from
-  Finder. The session cookie goes in the login Keychain, and deleted project
-  files in the Trash.
-- Video playback needs `brew install libvpx opus`. Gamepads aren't read yet.
-
-## Signing in
-
-Everything above works signed out. To open your own places or load private
-assets, sign in with your Roblox session: use the account button at the top
-right and **Sign in with your browser** (rustudio shows a code that you
-confirm on roblox.com, in whatever browser you're signed in to), paste the
-`.ROBLOSECURITY` cookie there, or put it in `~/.config/rustudio/roblox-cookie`
-(macOS: `~/Library/Application Support/rustudio/roblox-cookie`; `chmod 600`).
-rustudio stores it in your login keyring (the Keychain on macOS). Details are in
-[docs/AUTH.md](docs/AUTH.md).
-
-## Docs
-
-The editor lives in the root crate, with the shared engine and player code under `crates/`. Build the standalone player from source with `cargo build -p rustudio-player`.
-
-- [docs/DEVELOPING.md](docs/DEVELOPING.md): workspace layout, command-line options, and tests.
-- [docs/MECHANICS.md](docs/MECHANICS.md): every tuning number and where it
-  comes from
-- [docs/ENGINE-GAPS.md](docs/ENGINE-GAPS.md): engine API that's still missing
-- [docs/TEAMCREATE.md](docs/TEAMCREATE.md): Team Create
-
-## Not affiliated with Roblox
-
-rustudio is an independent project. It is not made, endorsed or supported
-by Roblox Corporation. "Roblox" and "Roblox Studio" are trademarks of Roblox
-Corporation.
-
-This repository doesn't redistribute Roblox Studio or its content. Studio's built-in
-content (fonts, textures, avatar parts, `ReflectionMetadata.xml`) is
-downloaded from Roblox's own CDN onto your machine on first launch and is
-never redistributed here.
-
-## License
-
-MIT OR Apache-2.0, at your option. Vendored crates in `vendor/` keep their
-own licences.
+- **Upstream Engine:** Built on **[rippelz/rustudio](https://github.com/rippelz/rustudio)** (`v0.3.4`).
+- **Disclaimer:** Independent open-source project; not affiliated with or endorsed by Roblox Corporation.
+- **License:** `MIT OR Apache-2.0` (vendored crates in `vendor/` keep their respective licenses).
