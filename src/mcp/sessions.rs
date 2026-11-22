@@ -12,7 +12,7 @@ pub fn dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("RUSTUDIO_MCP_SESSIONS") {
         return Some(PathBuf::from(d));
     }
-    Some(dirs::cache_dir()?.join("rustudio").join("mcp").join("sessions"))
+    Some(rustudio_core::paths::cache().join("rustudio").join("mcp").join("sessions"))
 }
 
 fn alive(pid: u64) -> bool {

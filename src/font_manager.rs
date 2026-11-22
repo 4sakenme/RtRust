@@ -379,7 +379,8 @@ fn download_font(
     dest: &Path,
     mut on_progress: impl FnMut(f32),
 ) -> Result<(), String> {
-    let resp = ureq::get(url)
+    let resp = rustudio_account::android_net::default_agent()
+        .get(url)
         .call()
         .map_err(|e| format!("Network error: {e}"))?;
     let total_len: u64 = resp

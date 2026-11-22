@@ -212,7 +212,10 @@ fn load_icon(id: &str) -> Result<egui::ColorImage, String> {
             .map(|(_, b)| b)
             .ok_or("thumbnail not ready")?
     } else if (id.starts_with("http://") || id.starts_with("https://")) && rustudio_core::assets::asset_ref(id).is_none() {
-        let mut resp = ureq::get(id).call().map_err(|e| e.to_string())?;
+        let mut resp = rustudio_account::android_net::default_agent()
+            .get(id)
+            .call()
+            .map_err(|e| e.to_string())?;
         resp.body_mut().with_config().limit(8 << 20).read_to_vec().map_err(|e| e.to_string())?
     } else {
         rustudio_core::assets::content_blocking(id)?.as_ref().clone()

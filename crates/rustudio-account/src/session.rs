@@ -392,7 +392,11 @@ pub fn cache_path() -> PathBuf {
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            dirs::cache_dir()
+            std::env::var_os("XDG_CACHE_HOME")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").filter(|v| !v.is_empty()).map(|h| PathBuf::from(h).join(".cache")))
+                .or_else(dirs::cache_dir)
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join("rustudio")
         });

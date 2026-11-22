@@ -21,6 +21,14 @@ pub fn webpki_tls() -> ureq::tls::TlsConfig {
         .build()
 }
 
+pub fn default_agent() -> ureq::Agent {
+    build_agent(
+        ureq::Agent::config_builder()
+            .tls_config(webpki_tls())
+            .build(),
+    )
+}
+
 pub fn build_agent(config: ureq::config::Config) -> ureq::Agent {
     #[cfg(target_os = "android")]
     {

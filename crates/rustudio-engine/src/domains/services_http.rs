@@ -116,12 +116,14 @@ fn run(req: Request) -> Result<Response, String> {
     // HTTP/1.1 ("Not Found"). This client is HTTP/1.1 only, so https
     // answers are given HTTP/2's empty message.
     let req_https = req.url.starts_with("https://");
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(30)))
-        .http_status_as_error(false)
-        .user_agent("RobloxStudio/WinInet RobloxApp/0.746.0.7461269 (GlobalDist; RobloxDirectDownload)")
-        .build()
-        .into();
+    let agent: ureq::Agent = rustudio_account::android_net::build_agent(
+        ureq::Agent::config_builder()
+            .tls_config(rustudio_account::android_net::webpki_tls())
+            .timeout_global(Some(Duration::from_secs(30)))
+            .http_status_as_error(false)
+            .user_agent("RobloxStudio/WinInet RobloxApp/0.746.0.7461269 (GlobalDist; RobloxDirectDownload)")
+            .build(),
+    );
     let mut b = ureq::http::Request::builder().method(req.method.as_str()).uri(&req.url);
     for (k, v) in &req.headers {
         b = b.header(k.as_str(), v.as_str());

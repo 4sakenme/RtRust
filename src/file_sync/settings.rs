@@ -193,7 +193,7 @@ pub fn path() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("RUSTUDIO_FILE_SYNC_SETTINGS") {
         return Some(PathBuf::from(p));
     }
-    Some(dirs::config_dir()?.join("rustudio").join("file-sync.json"))
+    Some(rustudio_core::paths::config().join("rustudio").join("file-sync.json"))
 }
 
 impl FileSyncSettings {
