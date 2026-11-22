@@ -303,7 +303,7 @@ pub fn call(lua: &Lua, name: &str, this: Ref, args: &MultiValue) -> mlua::Result
         Ok(k as usize - 1)
     };
     match name {
-        "GetMaxControlPoints" => one(Value::Integer(MAX_POINTS as i64)),
+        "GetMaxControlPoints" => one(Value::Integer(MAX_POINTS as mlua::Integer)),
         "GetControlPoints" => {
             let t = lua.create_table()?;
             for p in &pts {

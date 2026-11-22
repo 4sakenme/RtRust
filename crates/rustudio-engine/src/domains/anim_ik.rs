@@ -447,7 +447,7 @@ pub fn getter(lua: &Lua, d: &Document, ik: Ref, st: Option<&IkState>, name: &str
     let (base, ns) = nodes(d, scope, &links);
     let count = ns.len().saturating_sub(1);
     match name {
-        "GetChainCount" => Ok(Value::Integer(count as i64)),
+        "GetChainCount" => Ok(Value::Integer(count as mlua::Integer)),
         "GetChainLength" => Ok(Value::Number(
             ns.windows(2).map(|w| (w[1].pos - w[0].pos).length() as f64).sum(),
         )),

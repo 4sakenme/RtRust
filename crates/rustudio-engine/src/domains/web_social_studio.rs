@@ -270,7 +270,7 @@ pub fn call(
                 num(&arg(args, 2)).ok_or_else(|| rt_err("Argument 2 missing or nil"))?;
                 vec![Value::Boolean(false)]
             }
-            "GetAwardablePoints" => vec![Value::Integer(i32::MAX as i64)],
+            "GetAwardablePoints" => vec![Value::Integer(i32::MAX as mlua::Integer)],
             "GetGamePointBalance" | "GetPointBalance" => {
                 num(&arg(args, 1)).ok_or_else(|| rt_err("Argument 1 missing or nil"))?;
                 vec![Value::Integer(0)]
@@ -282,7 +282,7 @@ pub fn call(
                 vec![
                     Value::Number(user),
                     Value::Integer(0),
-                    Value::Integer(amount as i64),
+                    Value::Integer(amount as mlua::Integer),
                 ]
             }
             "UserEligibleForRealWorldCommerceAsync" => {

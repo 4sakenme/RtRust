@@ -848,7 +848,7 @@ fn http_poll(lua: &Lua, id: u64) -> mlua::Result<MultiValue> {
     match r {
         Ok(resp) => {
             out.push_back(Value::Boolean(true));
-            out.push_back(Value::Integer(resp.status as i64));
+            out.push_back(Value::Integer(resp.status as mlua::Integer));
             out.push_back(s(lua, resp.status_message)?);
             let h = lua.create_table()?;
             for (k, v) in resp.headers {
@@ -1030,13 +1030,13 @@ fn pump_streams(lua: &Lua) -> mlua::Result<()> {
                 match ev {
                     stream::Event::Opened(code, headers) => {
                         o.state = 1;
-                        fires.push((*r, "Opened", vec![Value::Integer(code as i64), s(lua, headers)?]));
+                        fires.push((*r, "Opened", vec![Value::Integer(code as mlua::Integer), s(lua, headers)?]));
                     }
                     stream::Event::Message(m) => fires.push((*r, "MessageReceived", vec![s(lua, m)?])),
                     stream::Event::Error(code, m) => {
                         o.state = 2;
                         ended = true;
-                        fires.push((*r, "Error", vec![Value::Integer(code), s(lua, m)?]));
+                        fires.push((*r, "Error", vec![Value::Integer(code as mlua::Integer), s(lua, m)?]));
                     }
                     stream::Event::Closed => {
                         o.state = 3;
@@ -1215,7 +1215,7 @@ pub fn prop_get(lua: &Lua, r: Ref, class: &str, key: &str) -> mlua::Result<Optio
         }
         "SchedulerDutyCycle" | "SchedulerRate" if class == "TaskScheduler" => Value::Number(0.0),
         "ThreadPoolSize" if class == "TaskScheduler" => Value::Integer(
-            std::thread::available_parallelism().map(|n| n.get() as i64).unwrap_or(1),
+            std::thread::available_parallelism().map(|n| n.get() as mlua::Integer).unwrap_or(1),
         ),
         _ if class == "Stats" => match stats_prop(lua, key)? {
             Some(v) => v,
@@ -1236,7 +1236,7 @@ fn stats_prop(lua: &Lua, key: &str) -> mlua::Result<Option<Value>> {
         "InstanceCount" => {
             let w = world(lua)?;
             let d = w.d();
-            Value::Integer(d.dom.descendants_of(d.dom.root_ref()).count() as i64)
+            Value::Integer(d.dom.descendants_of(d.dom.root_ref()).count() as mlua::Integer)
         }
         "PrimitivesCount" | "MovingPrimitivesCount" => {
             let w = world(lua)?;
@@ -1250,9 +1250,9 @@ fn stats_prop(lua: &Lua, key: &str) -> mlua::Result<Option<Value>> {
                     .filter(|i| w.velocities.get(&i.referent()).is_some_and(|v| v.length_squared() > 1e-6))
                     .count()
             };
-            Value::Integer(n as i64)
+            Value::Integer(n as mlua::Integer)
         }
-        "ContactsCount" => Value::Integer(perf::contacts(world(lua)?.d().id) as i64),
+        "ContactsCount" => Value::Integer(perf::contacts(world(lua)?.d().id) as mlua::Integer),
         "MemoryTrackingEnabled" => Value::Boolean(true),
         "FrameTime" => Value::Number(st(|s| s.frame_time)?),
         "HeartbeatTime" => Value::Number(st(|s| s.heartbeat_time)?),
@@ -1277,14 +1277,14 @@ fn stats_prop(lua: &Lua, key: &str) -> mlua::Result<Option<Value>> {
             match key {
                 "RenderCPUFrameTime" => Value::Number(f.cpu_s),
                 "RenderGPUFrameTime" => Value::Number(f.gpu_s),
-                "SceneDrawcallCount" => Value::Integer(f.n[0] as i64),
-                "SceneTriangleCount" => Value::Integer(f.n[1] as i64),
-                "ShadowsDrawcallCount" => Value::Integer(f.n[2] as i64),
-                "ShadowsTriangleCount" => Value::Integer(f.n[3] as i64),
-                "UI2DDrawcallCount" => Value::Integer(f.n[4] as i64),
-                "UI2DTriangleCount" => Value::Integer(f.n[5] as i64),
-                "UI3DDrawcallCount" => Value::Integer(f.n[6] as i64),
-                "UI3DTriangleCount" => Value::Integer(f.n[7] as i64),
+                "SceneDrawcallCount" => Value::Integer(f.n[0] as mlua::Integer),
+                "SceneTriangleCount" => Value::Integer(f.n[1] as mlua::Integer),
+                "ShadowsDrawcallCount" => Value::Integer(f.n[2] as mlua::Integer),
+                "ShadowsTriangleCount" => Value::Integer(f.n[3] as mlua::Integer),
+                "UI2DDrawcallCount" => Value::Integer(f.n[4] as mlua::Integer),
+                "UI2DTriangleCount" => Value::Integer(f.n[5] as mlua::Integer),
+                "UI3DDrawcallCount" => Value::Integer(f.n[6] as mlua::Integer),
+                "UI3DTriangleCount" => Value::Integer(f.n[7] as mlua::Integer),
                 _ => return Ok(None),
             }
         }

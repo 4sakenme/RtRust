@@ -384,7 +384,7 @@ fn call_inner(lua: &Lua, name: &str, this: Ref, args: &MultiValue) -> mlua::Resu
         "GetUserThumbnailAsync" => {
             let id = match arg(args, 1) {
                 Value::Number(n) => n as i64,
-                Value::Integer(n) => n,
+                Value::Integer(n) => n as i64,
                 _ => return Err(rt_err("Argument 1 missing or nil")),
             };
             let kind = opt_ud::<LEnumItem>(&arg(args, 2)).ok_or_else(|| rt_err("Argument 2 missing or nil"))?;
@@ -424,7 +424,7 @@ fn call_inner(lua: &Lua, name: &str, this: Ref, args: &MultiValue) -> mlua::Resu
         "GetCharacterAppearanceInfoAsync" => {
             let uid = match arg(args, 1) {
                 Value::Number(n) => n as i64,
-                Value::Integer(n) => n,
+                Value::Integer(n) => n as i64,
                 _ => return Err(rt_err("Argument 1 missing or nil")),
             };
             let look = world(lua)?.avatar.clone().filter(|l| l.user_id as i64 == uid);
@@ -760,7 +760,7 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
         lua.create_function(|lua, (kind, a, b): (String, Value, Value)| {
             let int = |v: &Value| match v {
                 Value::Number(n) => *n as i64,
-                Value::Integer(n) => *n,
+                Value::Integer(n) => *n as i64,
                 _ => 0,
             };
             let text = |v: &Value| match v {

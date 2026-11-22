@@ -245,7 +245,7 @@ pub fn prop_get(lua: &Lua, r: Ref, class: &str, key: &str) -> mlua::Result<Optio
     Ok(match key {
         "BaseUrl" => Some(Value::String(lua.create_string("https://www.roblox.com/")?)),
         "RequestQueueSize" => Some(Value::Integer(
-            rustudio_core::assets::content_queue_size() as i64,
+            rustudio_core::assets::content_queue_size() as mlua::Integer,
         )),
         _ => None,
     })

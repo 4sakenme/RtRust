@@ -101,7 +101,7 @@ pub fn call(lua: &Lua, name: &str, args: &MultiValue) -> Option<mlua::Result<Mul
         b.refresh(time, players);
         if name == "GetRequestBudgetForRequestType" {
             return Ok(MultiValue::from_vec(vec![Value::Integer(
-                b.get(i, players) as i64,
+                b.get(i, players) as mlua::Integer,
             )]));
         }
         let number = |index: usize| -> mlua::Result<f32> {

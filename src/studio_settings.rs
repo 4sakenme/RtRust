@@ -1229,13 +1229,13 @@ pub fn lua_get(lua: &mlua::Lua, class: &str, key: &str) -> mlua::Result<Option<m
     Ok(Some(match (d.kind, v) {
         (Kind::ReadOnly, _) => match key {
             "RobloxVersion" => Value::String(lua.create_string(version())?),
-            k => Value::Integer(live(k).unwrap_or(0)),
+            k => Value::Integer(live(k).unwrap_or(0) as mlua::Integer),
         },
         // Qt types have no Luau form (Studio: "Unable to get property Font, type QFont").
         (Kind::Font, _) => return Err(rt_err(format!("Unable to get property {key}, type QFont"))),
         (Kind::Dir, _) => return Err(rt_err(format!("Unable to get property {key}, type QDir"))),
         (Kind::Bool, Val::Bool(b)) => Value::Boolean(b),
-        (Kind::Int, Val::Num(n)) => Value::Integer(n.round() as i64),
+        (Kind::Int, Val::Num(n)) => Value::Integer(n.round() as mlua::Integer),
         (Kind::Float, Val::Num(n)) => Value::Number(n),
         // Theme is a StudioTheme object and DisplayLanguage a string in
         // Studio; rustudio has neither object, so they're left unanswered.

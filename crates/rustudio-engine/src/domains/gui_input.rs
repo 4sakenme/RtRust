@@ -969,7 +969,7 @@ pub fn install(lua: &Lua) -> mlua::Result<()> {
             Ok(match super::avatar::web::poll(id) {
                 None => MultiValue::new(),
                 Some(Ok((status, text))) => MultiValue::from_vec(vec![
-                    Value::Integer(status as i64),
+                    Value::Integer(status as mlua::Integer),
                     Value::String(lua.create_string(text)?),
                 ]),
                 Some(Err(e)) => MultiValue::from_vec(vec![Value::Integer(0), Value::String(lua.create_string(e)?)]),

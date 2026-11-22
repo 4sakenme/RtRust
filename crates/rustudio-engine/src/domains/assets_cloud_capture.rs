@@ -164,8 +164,8 @@ pub fn prop_get(lua:&Lua,r:Ref,class:&str,key:&str)->mlua::Result<Option<Value>>
         "CaptureTime"=>Some(Value::UserData(lua.create_userdata(LDateTime{millis:info.time})?)),
         "CaptureType"=>Some(capture_type(lua)?),
         "LocalId"=>Some(Value::String(lua.create_string("")?)),
-        "SourcePlaceId"=>Some(Value::Integer(info.place)),
-        "SourceUniverseId"=>Some(Value::Integer(info.universe)),
+        "SourcePlaceId"=>Some(Value::Number(info.place as f64)),
+        "SourceUniverseId"=>Some(Value::Number(info.universe as f64)),
         _=>None,
     })
 }

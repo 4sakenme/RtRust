@@ -683,7 +683,7 @@ pub fn prop_get(lua: &Lua, r: Ref, class: &str, key: &str) -> mlua::Result<Optio
         ("AudioSearchParams", "MaxPageSize") => {
             let w = world(lua)?;
             Some(Value::Integer(match w.d().prop(r, "MaxPageSize") {
-                Some(Variant::Int32(i)) => i as i64,
+                Some(Variant::Int32(i)) => i as mlua::Integer,
                 _ => 0,
             }))
         }
@@ -1314,7 +1314,7 @@ fn player_play(lua: &Lua, r: Ref, play: bool, args: &MultiValue) -> mlua::Result
         let id = m.next_action;
         m.next_action += 1;
         m.actions.push(Action { id, target: r, play, at });
-        return Ok(one(Value::Integer(id)));
+        return Ok(one(Value::Integer(id as mlua::Integer)));
     }
     set_playing(lua, r, play)?;
     Ok(MultiValue::new())
@@ -1703,7 +1703,7 @@ fn set_access(lua: &Lua, r: Ref, args: &MultiValue) -> mlua::Result<MultiValue> 
     for v in t.sequence_values::<Value>() {
         if let Some(n) = match v? {
             Value::Number(n) => Some(n.round() as i64),
-            Value::Integer(i) => Some(i),
+            Value::Integer(i) => Some(i as i64),
             _ => None,
         } {
             if !ids.contains(&n) {

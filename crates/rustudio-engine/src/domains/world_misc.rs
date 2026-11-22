@@ -483,7 +483,7 @@ pub fn prop_get(lua: &Lua, r: Ref, class: &str, key: &str) -> mlua::Result<Optio
                     seen.len()
                 })
             };
-            Value::Integer(n as i64)
+            Value::Integer(n as mlua::Integer)
         }
         ("StarterGear", "Loaded") => Value::Boolean(false),
         ("ProceduralModel", "GenerationError") => Value::String(lua.create_string("")?),
