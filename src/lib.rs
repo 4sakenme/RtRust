@@ -1265,11 +1265,25 @@ pub fn run() -> eframe::Result<()> {
 #[cfg(target_os = "android")]
 pub mod android_ime {
     use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     static QUEUE: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
     static LAST_SHOWN: AtomicBool = AtomicBool::new(false);
     static KEYBOARD_PX: AtomicI32 = AtomicI32::new(0);
+    static ACTIVITY: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_rtrust_mobile_MainActivity_nativeInitActivity(
+        mut env: jni::EnvUnowned<'_>,
+        _class: jni::objects::JClass<'_>,
+        activity: jni::objects::JObject<'_>,
+    ) {
+        let _ = env.with_env(|env| -> jni::errors::Result<()> {
+            let global = env.new_global_ref(&activity)?;
+            let _ = ACTIVITY.set(global);
+            Ok(())
+        });
+    }
 
     #[no_mangle]
     pub extern "C" fn Java_com_rtrust_mobile_MainActivity_nativeOnImeHeight(
@@ -1315,17 +1329,18 @@ pub mod android_ime {
     }
 
     fn call_set_soft_input(wanted: bool) {
+        let Some(activity) = ACTIVITY.get() else {
+            return;
+        };
         let ctx = ndk_context::android_context();
         let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) };
         if let Err(e) = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
-            let activity = unsafe { jni::objects::JObject::from_raw(env, ctx.context().cast()) };
             env.call_method(
-                &activity,
+                activity.as_obj(),
                 jni::jni_str!("setSoftInput"),
                 jni::jni_sig!("(Z)V"),
                 &[jni::objects::JValue::Bool(wanted)],
             )?;
-            std::mem::forget(activity);
             Ok(())
         }) {
             log::error!("android_ime setSoftInput({wanted}) failed: {e:?}");

@@ -691,7 +691,7 @@ impl Editor {
                                         text: &dyn egui::TextBuffer,
                                         wrap_w: f32|
                      -> Arc<egui::Galley> {
-                        let mut job = highlight(text.as_str(), error_line, font.clone());
+                        let mut job = highlight(text.as_str(), None, font.clone());
                         job.wrap.max_width = if wrap { wrap_w } else { f32::INFINITY };
                         ui.fonts_mut(|f| f.layout_job(job))
                     };

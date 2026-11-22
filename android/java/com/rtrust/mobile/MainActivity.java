@@ -23,6 +23,7 @@ public class MainActivity extends NativeActivity {
         System.loadLibrary("rtrust_mobile");
     }
 
+    private static native void nativeInitActivity(Object activity);
     private static native void nativeOnImeKey(int kind, int codepoint);
     private static native void nativeOnImeHeight(int heightPx);
 
@@ -34,6 +35,7 @@ public class MainActivity extends NativeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        nativeInitActivity(this);
         hideSystemUI();
 
         imeInput = new EditText(this);
