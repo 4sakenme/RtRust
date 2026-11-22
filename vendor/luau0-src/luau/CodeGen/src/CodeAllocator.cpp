@@ -133,6 +133,8 @@ static void flushInstructionCache(uint8_t* mem, size_t size)
 #ifdef __EMSCRIPTEN__
 #elif defined(__APPLE__)
     sys_icache_invalidate(mem, size);
+#elif defined(__ANDROID__) && defined(__arm__)
+    cacheflush(long(mem), long(mem + size), 0);
 #else
     __builtin___clear_cache((char*)mem, (char*)mem + size);
 #endif
