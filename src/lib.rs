@@ -1264,11 +1264,30 @@ pub fn run() -> eframe::Result<()> {
 /// Android IME bridge (`MainActivity.java` `ImeView` <-> `egui::RawInput`).
 #[cfg(target_os = "android")]
 pub mod android_ime {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
     use std::sync::Mutex;
 
     static QUEUE: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
     static LAST_SHOWN: AtomicBool = AtomicBool::new(false);
+    static KEYBOARD_PX: AtomicI32 = AtomicI32::new(0);
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_rtrust_mobile_MainActivity_nativeOnImeHeight(
+        _env: *mut std::ffi::c_void,
+        _class: *mut std::ffi::c_void,
+        height_px: i32,
+    ) {
+        KEYBOARD_PX.store(height_px.max(0), Ordering::Relaxed);
+    }
+
+    pub fn keyboard_height_dp(ctx: &egui::Context) -> f32 {
+        let px = KEYBOARD_PX.load(Ordering::Relaxed);
+        if px <= 0 {
+            0.0
+        } else {
+            px as f32 / ctx.pixels_per_point().max(1.0)
+        }
+    }
 
     #[no_mangle]
     pub extern "C" fn Java_com_rtrust_mobile_MainActivity_nativeOnImeKey(

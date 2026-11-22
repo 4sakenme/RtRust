@@ -709,6 +709,58 @@ impl Editor {
                         changed = true;
                         buf.edited = Instant::now();
                     }
+                    // VS Code-style Error Lens: show error inline next to the offending line.
+                    if let Some((err_line, err_msg)) = &buf.error {
+                        let line_idx = err_line.saturating_sub(1);
+                        let line_str = buf.text.lines().nth(line_idx).unwrap_or("");
+                        let line_w = ui.fonts_mut(|f| {
+                            f.layout_no_wrap(line_str.to_owned(), font.clone(), Color32::WHITE).size().x
+                        });
+                        let y = resp.rect.top() + (line_idx as f32) * row_h;
+                        let pos = egui::pos2(resp.rect.left() + line_w + 14.0, y);
+                        ui.painter().text(
+                            pos,
+                            egui::Align2::LEFT_TOP,
+                            format!("⚠ {err_msg}"),
+                            font.clone(),
+                            Color32::from_rgba_unmultiplied(245, 105, 105, 200),
+                        );
+                    }
+                    // Roblox Studio-style dim ghost autocomplete suffix at cursor.
+                    if resp.has_focus() {
+                        if let Some((_, top_insert)) = combined_suggestions.first() {
+                            if let Some(st) = egui::TextEdit::load_state(ui.ctx(), editor_id) {
+                                if let Some(cr) = st.cursor.char_range() {
+                                    if cr.primary.index == cr.secondary.index {
+                                        let ci = cr.primary.index.0;
+                                        let before: String = buf.text.chars().take(ci).collect();
+                                        let word_start = before
+                                            .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != ':')
+                                            .map(|i| i + 1)
+                                            .unwrap_or(0);
+                                        let typed = &before[word_start..];
+                                        if !typed.is_empty() && top_insert.starts_with(typed) && top_insert.len() > typed.len() {
+                                            let suffix = &top_insert[typed.len()..];
+                                            let (line_1, col_1) = crate::plugin_host::script_docs::pos_of(&buf.text, ci);
+                                            let line_str = buf.text.lines().nth(line_1.saturating_sub(1) as usize).unwrap_or("");
+                                            let prefix_on_line: String = line_str.chars().take(col_1.saturating_sub(1) as usize).collect();
+                                            let x_off = ui.fonts_mut(|f| {
+                                                f.layout_no_wrap(prefix_on_line, font.clone(), Color32::WHITE).size().x
+                                            });
+                                            let y = resp.rect.top() + (line_1.saturating_sub(1) as f32) * row_h;
+                                            ui.painter().text(
+                                                egui::pos2(resp.rect.left() + x_off, y),
+                                                egui::Align2::LEFT_TOP,
+                                                suffix,
+                                                font.clone(),
+                                                Color32::from_rgba_unmultiplied(180, 185, 200, 115),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if let Some(line) = goto {
                         let y = resp.rect.top() + line.saturating_sub(1) as f32 * row_h;
                         ui.scroll_to_rect(egui::Rect::from_min_size(egui::pos2(resp.rect.left(), y), egui::vec2(1.0, row_h)), Some(egui::Align::Center));
@@ -743,6 +795,55 @@ impl Editor {
             let b = crate::plugin_host::script_docs::index_of(&buf.text, sel.2, sel.3);
             st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(b), egui::text::CCursor::new(a))));
             st.store(ui.ctx(), editor_id);
+        }
+        #[cfg(target_os = "android")]
+        {
+            let kb_h = crate::android_ime::keyboard_height_dp(ui.ctx());
+            if kb_h > 0.0 {
+                let screen = ui.ctx().content_rect();
+                let bar_h = 36.0;
+                let y = (screen.bottom() - kb_h - bar_h).max(40.0);
+                egui::Area::new(egui::Id::new("mobile_kb_accessory_bar"))
+                    .order(egui::Order::Foreground)
+                    .fixed_pos(egui::pos2(0.0, y))
+                    .show(ui.ctx(), |ui| {
+                        egui::Frame::new()
+                            .fill(theme::PANEL_DARK)
+                            .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                            .inner_margin(egui::Margin::symmetric(6, 4))
+                            .show(ui, |ui| {
+                                ui.set_min_width(screen.width());
+                                ui.set_max_width(screen.width());
+                                egui::ScrollArea::horizontal().id_salt("kb_bar_scroll").show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        if let Some((lbl, ins)) = combined_suggestions.first() {
+                                            if ui.button(RichText::new(format!("⇥ {lbl}")).monospace().color(Color32::from_rgb(130, 210, 140))).clicked() {
+                                                accept = Some(ins.clone());
+                                            }
+                                        }
+                                        for (label, snip) in [
+                                            ("Tab", "    "),
+                                            ("(", "("),
+                                            (")", ")"),
+                                            ("\"", "\""),
+                                            ("=", " = "),
+                                            (":", ":"),
+                                            ("local", "local "),
+                                            ("fn", "function "),
+                                            ("end", "end"),
+                                        ] {
+                                            if ui.button(RichText::new(label).monospace().size(13.0)).clicked() {
+                                                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile_luau_snippet"), snip.to_string()));
+                                            }
+                                        }
+                                        if ui.button("✓").clicked() {
+                                            ui.ctx().memory_mut(|m| m.surrender_focus(editor_id));
+                                        }
+                                    });
+                                });
+                            });
+                    });
+            }
         }
         if let (Some(insert), Some(end)) = (accept, word_end) {
             let chars: Vec<char> = buf.text.chars().collect();

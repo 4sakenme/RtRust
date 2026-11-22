@@ -24,10 +24,12 @@ public class MainActivity extends NativeActivity {
     }
 
     private static native void nativeOnImeKey(int kind, int codepoint);
+    private static native void nativeOnImeHeight(int heightPx);
 
     private EditText imeInput;
     private String lastText = "";
     private boolean updatingText = false;
+    private int lastKbHeight = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,6 +112,22 @@ public class MainActivity extends NativeActivity {
         });
 
         addContentView(imeInput, new ViewGroup.LayoutParams(1, 1));
+
+        final View decor = getWindow().getDecorView();
+        decor.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                android.graphics.Rect r = new android.graphics.Rect();
+                decor.getWindowVisibleDisplayFrame(r);
+                int rootH = decor.getRootView().getHeight();
+                int kb = rootH - r.bottom;
+                int effective = (kb > rootH * 0.15) ? kb : 0;
+                if (effective != lastKbHeight) {
+                    lastKbHeight = effective;
+                    nativeOnImeHeight(effective);
+                }
+            }
+        });
     }
 
     private static void sendChars(CharSequence text) {
