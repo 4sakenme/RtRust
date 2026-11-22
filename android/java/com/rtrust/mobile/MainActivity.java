@@ -44,7 +44,6 @@ public class MainActivity extends NativeActivity {
         imeInput.setInputType(
             InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
         );
         imeInput.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_ACTION_DONE);
         imeInput.setSingleLine(true);

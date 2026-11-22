@@ -481,7 +481,7 @@ pub fn log_view(ui: &mut egui::Ui, st: &mut OutputState, log: &[LogLine]) -> usi
     let text_of = |st: &OutputState, i: usize| line_job(st, &log[i], &parse(&log[i])).text;
     let id = egui::Id::new("output_text");
     let mut drawn = 0;
-    egui::ScrollArea::vertical()
+    egui::ScrollArea::both()
         .scroll_source(egui::scroll_area::ScrollSource {
             scroll_bar: true,
             drag: egui::scroll_area::DragScroll::Always,
@@ -491,7 +491,8 @@ pub fn log_view(ui: &mut egui::Ui, st: &mut OutputState, log: &[LogLine]) -> usi
         .stick_to_bottom(true)
         .show_viewport(ui, |ui, viewport| {
             let total = *tops.last().unwrap_or(&0.0);
-            let (content, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), total), Sense::hover());
+            let content_w = ui.available_width().max(720.0);
+            let (content, _) = ui.allocate_exact_size(Vec2::new(content_w, total), Sense::hover());
             let view = ui.clip_rect();
             let painter = ui.painter_at(view);
             // Under the lines (they only sense hover), above nothing: the
