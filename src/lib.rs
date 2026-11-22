@@ -1270,7 +1270,7 @@ pub mod android_ime {
     static QUEUE: Mutex<Vec<(i32, i32)>> = Mutex::new(Vec::new());
     static LAST_SHOWN: AtomicBool = AtomicBool::new(false);
     static KEYBOARD_PX: AtomicI32 = AtomicI32::new(0);
-    static ACTIVITY: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
+    static ACTIVITY: OnceLock<jni::refs::Global<jni::objects::JObject<'static>>> = OnceLock::new();
 
     #[no_mangle]
     pub extern "C" fn Java_com_rtrust_mobile_MainActivity_nativeInitActivity(
