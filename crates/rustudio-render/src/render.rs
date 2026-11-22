@@ -4778,7 +4778,7 @@ impl Renderer {
     /// (effects drawn into it after `render`; the frame's globals still
     /// bound).
     fn encode_bloom(&self, encoder: &mut wgpu::CommandEncoder, target: &Target, size: f32) {
-        if size < 0.0 { return; }
+        if size < 0.0 || rustudio_core::hardware_tuner::render_scale() < 0.75 { return; }
         let scale = ((target.size[0] as f32 * target.size[1] as f32) / 2073600.0).sqrt();
         let levels = (3.0 + (scale.log2() + (size / 7.0).log2().max(0.0)).max(-1.0)).min(5.999) as usize;
         for i in 0..levels {
@@ -6020,10 +6020,12 @@ impl Renderer {
         // SSAO, then its multiply into the scene.
         // Performance > Ambient occlusion Off skips both (a full-resolution
         // pass on a weak chip).
-        if frame.quality.map_or_else(
-            || rustudio_core::rustudio_settings::performance_value("ssao") != "off",
-            |profile| profile.ssao(),
-        ) {
+        if rustudio_core::hardware_tuner::render_scale() >= 0.75
+            && frame.quality.map_or_else(
+                || rustudio_core::rustudio_settings::performance_value("ssao") != "off",
+                |profile| profile.ssao(),
+            )
+        {
             let steps: [(&str, &wgpu::RenderPipeline, usize, &wgpu::TextureView, bool); 5] = [
                 ("ssao depth", &viewport.ssao_down, 0, &target.ssao_depth_view, true),
                 ("ssao", &viewport.ssao_main, 1, &target.ssao_views[0], true),

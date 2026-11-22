@@ -135,6 +135,19 @@ static void flushInstructionCache(uint8_t* mem, size_t size)
     sys_icache_invalidate(mem, size);
 #elif defined(__ANDROID__) && defined(__arm__)
     cacheflush(long(mem), long(mem + size), 0);
+#elif defined(__ANDROID__) && defined(__aarch64__)
+    uint64_t ctr_el0 = 0;
+    asm volatile("mrs %0, ctr_el0" : "=r"(ctr_el0));
+    size_t dline = 4u << ((ctr_el0 >> 16) & 0xf);
+    size_t iline = 4u << (ctr_el0 & 0xf);
+    uintptr_t start = uintptr_t(mem);
+    uintptr_t end = start + size;
+    for (uintptr_t p = start & ~(dline - 1); p < end; p += dline)
+        asm volatile("dc cvau, %0" :: "r"(p) : "memory");
+    asm volatile("dsb ish" ::: "memory");
+    for (uintptr_t p = start & ~(iline - 1); p < end; p += iline)
+        asm volatile("ic ivau, %0" :: "r"(p) : "memory");
+    asm volatile("dsb ish\nisb" ::: "memory");
 #else
     __builtin___clear_cache((char*)mem, (char*)mem + size);
 #endif

@@ -922,14 +922,81 @@ impl Editor {
         }
     }
 
-    /// Virtual Thumbstick (bottom-left) + Jump button (bottom-right) + full-screen
-    /// touch-drag camera rotation (drag anywhere outside controls/GUI like Roblox mobile).
+    /// Virtual Thumbstick (bottom-left) + Jump button (bottom-right) + Roblox TopBar
+    /// (Menu, Chat, Zoom -/+) + full-screen touch-drag camera rotation.
     fn draw_mobile_touch_controls(&mut self, ui: &mut egui::Ui, rect: Rect, resp: &egui::Response) -> bool {
         if rect.width() < 260.0 || rect.height() < 220.0 {
             rustudio_core::mobile::set_touch_cam_held(false);
             return false;
         }
         let painter = ui.painter_at(rect);
+
+        // 0. Roblox Mobile TopBar (Menu + Chat on top-left, Zoom -/+ on top-right)
+        let menu_open = self.game.play.as_ref().is_some_and(|s| s.game.menu_open);
+        let chat_open = self.game.play.as_ref().is_some_and(|s| s.game.chat_open);
+
+        let top_btn = |ui: &mut egui::Ui, id: &str, center: Pos2, active: bool| -> egui::Response {
+            let r = Rect::from_center_size(center, Vec2::splat(36.0));
+            let resp = ui.interact(r, egui::Id::new(id), egui::Sense::click());
+            let fill = if active {
+                Color32::from_rgba_unmultiplied(46, 125, 225, 220)
+            } else if resp.is_pointer_button_down_on() {
+                Color32::from_rgba_unmultiplied(55, 62, 74, 220)
+            } else {
+                Color32::from_rgba_unmultiplied(18, 20, 26, 175)
+            };
+            painter.circle_filled(center, 18.0, fill);
+            painter.circle_stroke(center, 18.0, Stroke::new(1.2, Color32::from_rgba_unmultiplied(255, 255, 255, 110)));
+            resp
+        };
+
+        let menu_c = egui::pos2(rect.left() + 28.0, rect.top() + 26.0);
+        let menu_r = top_btn(ui, "mobile_roblox_menu_btn", menu_c, menu_open).on_hover_text("Roblox Menu (Esc)");
+        // Draw classic tilted Roblox square icon
+        let rbx_sq = Rect::from_center_size(menu_c, Vec2::splat(14.0));
+        painter.rect_stroke(rbx_sq, 2.0, Stroke::new(2.2, Color32::WHITE), egui::StrokeKind::Middle);
+        painter.rect_filled(Rect::from_center_size(menu_c, Vec2::splat(4.5)), 0.5, Color32::WHITE);
+        if menu_r.clicked() {
+            if let Some(s) = self.game.play.as_mut() {
+                s.game.menu_open = !s.game.menu_open;
+            }
+        }
+
+        let chat_c = egui::pos2(rect.left() + 72.0, rect.top() + 26.0);
+        let chat_r = top_btn(ui, "mobile_roblox_chat_btn", chat_c, chat_open).on_hover_text("Chat (/)");
+        rustudio_engine::ti::paint(&painter, Rect::from_center_size(chat_c, Vec2::splat(18.0)), "message-circle", Color32::WHITE);
+        if chat_r.clicked() {
+            if let Some(s) = self.game.play.as_mut() {
+                s.game.chat_open = !s.game.chat_open;
+            }
+        }
+
+        let zoom_out_c = egui::pos2(rect.right() - 28.0, rect.top() + 26.0);
+        let zoom_out_r = top_btn(ui, "mobile_cam_zoom_out", zoom_out_c, false).on_hover_text("Zoom Out");
+        painter.text(zoom_out_c, egui::Align2::CENTER_CENTER, "-", egui::FontId::proportional(20.0), Color32::WHITE);
+        if zoom_out_r.clicked() {
+            if let Some(s) = self.game.play.as_mut() {
+                s.wheel -= 2.5;
+            }
+        }
+
+        let zoom_in_c = egui::pos2(rect.right() - 72.0, rect.top() + 26.0);
+        let zoom_in_r = top_btn(ui, "mobile_cam_zoom_in", zoom_in_c, false).on_hover_text("Zoom In");
+        painter.text(zoom_in_c, egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(18.0), Color32::WHITE);
+        if zoom_in_r.clicked() {
+            if let Some(s) = self.game.play.as_mut() {
+                s.wheel += 2.5;
+            }
+        }
+
+        let top_bar_hit = menu_r.is_pointer_button_down_on()
+            || menu_r.clicked()
+            || chat_r.is_pointer_button_down_on()
+            || chat_r.clicked()
+            || zoom_out_r.is_pointer_button_down_on()
+            || zoom_out_r.clicked()
+            || zoom_in_r.is_pointer_button_down_on()
+            || zoom_in_r.clicked();
 
         // 1. Virtual Thumbstick (bottom-left)
         let stick_radius = 52.0;
@@ -996,7 +1063,8 @@ impl Editor {
         );
 
         // 3. Roblox-mobile-style free-drag camera rotation anywhere on the viewport
-        let drag_cam = !stick_down
+        let drag_cam = !top_bar_hit
+            && !stick_down
             && !jump
             && resp.dragged_by(egui::PointerButton::Primary);
         let look_delta = if drag_cam { resp.drag_delta() } else { egui::Vec2::ZERO };
@@ -1015,7 +1083,7 @@ impl Editor {
         ui.ctx().data_mut(|data| {
             data.insert_temp(egui::Id::new("mobile_touch_keys"), [w, a, s, d_key, jump]);
         });
-        stick_down || jump || drag_cam
+        top_bar_hit || stick_down || jump || drag_cam
     }
 
     pub(crate) fn draw_box(

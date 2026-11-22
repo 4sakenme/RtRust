@@ -1494,13 +1494,32 @@ pub fn ui(ed: &mut Editor, ctx: &egui::Context) {
     let mut do_start_srv = false;
     let mut approve_ids: Vec<(u64, String, Value)> = Vec::new();
 
-    egui::Window::new("🤖 Studio AI Assistant (MCP)")
+    egui::Window::new("AI Assistant")
         .id(egui::Id::new("rtrust_mcp_assistant_win"))
         .open(&mut win_open)
         .resizable(true)
         .default_size(default_size)
         .show(ctx, |ui| {
             with_state(|st| {
+                // Top 2-Tab Bar (Chat | Connect an AI app) like Mobile Studio v2.0
+                let tab_w = (ui.available_width() - 6.0) * 0.5;
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 0.0);
+                    if ui
+                        .add_sized([tab_w, 32.0], egui::Button::selectable(!st.show_mcp_servers, "Chat"))
+                        .clicked()
+                    {
+                        st.show_mcp_servers = false;
+                    }
+                    if ui
+                        .add_sized([tab_w, 32.0], egui::Button::selectable(st.show_mcp_servers, "Connect an AI app"))
+                        .clicked()
+                    {
+                        st.show_mcp_servers = true;
+                    }
+                });
+                ui.add_space(4.0);
+
                 // Header status bar
                 ui.horizontal_wrapped(|ui| {
                     let badge_col = match st.provider {
@@ -1510,42 +1529,78 @@ pub fn ui(ed: &mut Editor, ctx: &egui::Context) {
                         ProviderKind::CustomOpenAi => Color32::from_rgb(200, 160, 255),
                     };
                     ui.label(RichText::new(format!("● {}", st.provider.label())).strong().color(badge_col));
-                    ui.label(
-                        RichText::new(format!(
-                            "Tokens: {} in / {} out",
-                            st.total_prompt_tokens, st.total_completion_tokens
-                        ))
-                        .small()
-                        .color(Color32::from_gray(170)),
-                    );
-                });
-
-                ui.horizontal_wrapped(|ui| {
-                    if ui.selectable_label(st.auto_run_tools, "⚡ Auto-Run Tools").clicked() {
+                    if ui.selectable_label(st.auto_run_tools, "Auto-Run").clicked() {
                         st.auto_run_tools = !st.auto_run_tools;
                         st.save_config();
                     }
                     if st.ai_undo_waypoints > 0
                         && ui
-                            .button(RichText::new(format!("↩ Undo AI ({})", st.ai_undo_waypoints)).color(Color32::from_rgb(255, 140, 140)))
+                            .button(RichText::new(format!("Undo AI ({})", st.ai_undo_waypoints)).color(Color32::from_rgb(255, 140, 140)))
                             .clicked()
                     {
                         do_undo_all = true;
                     }
-                    if ui.selectable_label(st.show_settings, "⚙ Provider").clicked() {
+                    if !st.show_mcp_servers && ui.selectable_label(st.show_settings, "Provider").clicked() {
                         st.show_settings = !st.show_settings;
-                    }
-                    if ui.selectable_label(st.show_mcp_servers, "🔌 MCP Servers").clicked() {
-                        st.show_mcp_servers = !st.show_mcp_servers;
                     }
                 });
 
-                if st.show_settings {
+                if !st.show_mcp_servers && st.provider == ProviderKind::GeminiFree && st.gemini_api_key.trim().is_empty() {
+                    egui::Frame::group(ui.style())
+                        .fill(Color32::from_rgb(28, 32, 40))
+                        .inner_margin(egui::Margin::same(10))
+                        .show(ui, |ui| {
+                            ui.label(RichText::new("Build with Gemini (Free)").strong().size(15.0).color(Color32::WHITE));
+                            ui.label(
+                                RichText::new("Describe what you want and Gemini builds it in your place.")
+                                    .small()
+                                    .color(Color32::from_gray(180)),
+                            );
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("1. Get a free Gemini API key").strong().color(Color32::WHITE));
+                            ui.label(
+                                RichText::new("Sign in with Google at AI Studio and tap Create API key (free tier).")
+                                    .small()
+                                    .color(Color32::from_gray(170)),
+                            );
+                            if ui
+                                .add(egui::Button::new(RichText::new("Open Google AI Studio").color(Color32::WHITE).strong()).fill(Color32::from_rgb(29, 111, 216)))
+                                .clicked()
+                            {
+                                ctx.open_url(egui::OpenUrl::new_tab("https://aistudio.google.com/apikey"));
+                            }
+                            ui.add_space(6.0);
+                            ui.label(RichText::new("2. Come back and paste it").strong().color(Color32::WHITE));
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut st.gemini_api_key)
+                                        .password(true)
+                                        .hint_text("AIza...")
+                                        .desired_width((ui.available_width() - 90.0).max(120.0)),
+                                );
+                                if ui
+                                    .add(egui::Button::new(RichText::new("Save Key").color(Color32::WHITE)).fill(Color32::from_rgb(29, 111, 216)))
+                                    .clicked()
+                                {
+                                    st.save_config();
+                                }
+                            });
+                            ui.add_space(4.0);
+                            ui.label(RichText::new("3. Ask Gemini to build").strong().color(Color32::WHITE));
+                            ui.label(
+                                RichText::new("Type below, e.g. \"build a castle by the spawn\".")
+                                    .small()
+                                    .color(Color32::from_gray(170)),
+                            );
+                        });
+                }
+
+                if !st.show_mcp_servers && st.show_settings {
                     egui::Frame::group(ui.style()).show(ui, |ui| {
                         ui.horizontal_wrapped(|ui| {
                             for p in [
-                                ProviderKind::RobloxOfficial,
                                 ProviderKind::GeminiFree,
+                                ProviderKind::RobloxOfficial,
                                 ProviderKind::GroqFree,
                                 ProviderKind::CustomOpenAi,
                             ] {
@@ -1555,7 +1610,7 @@ pub fn ui(ed: &mut Editor, ctx: &egui::Context) {
                             }
                         });
                         ui.label(RichText::new(&st.roblox_probe_note).small().color(Color32::from_gray(180)));
-                        if ui.button("🔍 Probe Roblox Official Assistant").clicked() {
+                        if ui.button("Probe Roblox Official Assistant").clicked() {
                             do_probe = true;
                         }
                         match st.provider {
@@ -1596,7 +1651,7 @@ pub fn ui(ed: &mut Editor, ctx: &egui::Context) {
                                 });
                             }
                         }
-                        if ui.button("💾 Save Provider Config").clicked() {
+                        if ui.button("Save Provider Config").clicked() {
                             st.save_config();
                         }
                     });
@@ -1604,14 +1659,18 @@ pub fn ui(ed: &mut Editor, ctx: &egui::Context) {
 
                 if st.show_mcp_servers {
                     egui::Frame::group(ui.style()).show(ui, |ui| {
+                        ui.label(RichText::new("Connect an external AI app via MCP").strong().color(Color32::WHITE));
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(format!("Agent MCP Server: {}", st.server_status)).small());
-                            if !st.server_running && ui.small_button("▶ Start :28821").clicked() {
+                            ui.label(RichText::new(format!("Built-in MCP: {}", st.server_status)).small());
+                            if !st.server_running && ui.small_button("Start :28821").clicked() {
                                 do_start_srv = true;
+                            }
+                            if ui.small_button("Copy URL").clicked() {
+                                ctx.copy_text(format!("http://{MCP_SERVER_ADDR}/mcp"));
                             }
                         });
                         ui.label(
-                            RichText::new("RuStudio 0.3.3 Official MCP: bật nút 'MCP' trên Top Bar (127.0.0.1:44755 + Bearer token)")
+                            RichText::new("RuStudio Official MCP: 127.0.0.1:44755 (Bearer token)")
                                 .small()
                                 .color(Color32::from_rgb(130, 210, 255)),
                         );

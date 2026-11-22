@@ -76,7 +76,7 @@ impl Default for TouchBridge {
             shift_held: false,
             queued_keys: [None; 8],
             queued_len: 0,
-            toolbar_visible: true,
+            toolbar_visible: false,
         }
     }
 }

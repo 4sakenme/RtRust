@@ -199,21 +199,44 @@ impl Editor {
         };
         let mut chosen: Option<String> = None;
         let mut close = false;
-        let area = egui::Area::new(egui::Id::new("insert_object_popup"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(pop.at)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).fill(theme::PANEL_DARK).show(ui, |ui| {
-                    ui.set_width(240.0);
-                    let r = ui.add(
+        let screen = ctx.content_rect();
+        let mobile = rustudio_core::mobile::is_drawer_mode() || screen.width() < 700.0;
+        let pop_w = if mobile { (screen.width() - 32.0).clamp(260.0, 380.0) } else { 280.0 };
+        let row_h = if mobile { 38.0 } else { 26.0 };
+        let area_builder = egui::Area::new(egui::Id::new("insert_object_popup"))
+            .order(egui::Order::Foreground);
+        let area_builder = if mobile {
+            area_builder.anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
+        } else {
+            area_builder.fixed_pos(pop.at)
+        };
+        let area = area_builder.show(ctx, |ui| {
+                egui::Frame::popup(ui.style())
+                    .fill(theme::PANEL_DARK)
+                    .stroke(egui::Stroke::new(1.0, theme::DIVIDER))
+                    .corner_radius(8.0)
+                    .inner_margin(egui::Margin::same(12))
+                    .show(ui, |ui| {
+                    ui.set_width(pop_w);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Insert Object").strong().size(16.0).color(egui::Color32::WHITE));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(RichText::new("CANCEL").color(egui::Color32::from_rgb(130, 175, 255))).clicked() {
+                                close = true;
+                            }
+                        });
+                    });
+                    ui.add_space(6.0);
+                    let r = ui.add_sized(
+                        [pop_w, if mobile { 34.0 } else { 26.0 }],
                         egui::TextEdit::singleline(&mut pop.query)
-                            .hint_text("Search object")
-                            .desired_width(230.0),
+                            .hint_text("Search objects"),
                     );
                     self.ui_rects.insert("insert.search", r.rect);
-                    if pop.opened_frame + 1 >= self.game.frame_no {
+                    if !mobile && pop.opened_frame + 1 >= self.game.frame_no {
                         r.request_focus();
                     }
+                    ui.add_space(4.0);
                     let q = pop.query.to_lowercase();
                     let meta = class_meta();
                     let mut classes: Vec<&str> = rustudio_core::doc::db()
@@ -236,29 +259,39 @@ impl Editor {
                     if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         chosen = classes.first().map(|s| s.to_string());
                     }
-                    egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
+                    let max_h = if mobile { (screen.height() * 0.56).max(240.0) } else { 400.0 };
+                    egui::ScrollArea::vertical().max_height(max_h).show(ui, |ui| {
                         let mut last = String::new();
                         for c in classes.iter().take(400) {
                             if q.is_empty() {
                                 let k = cat(c);
                                 if k != last {
-                                    ui.label(RichText::new(&k).color(theme::TEXT_DIM));
+                                    ui.add_space(4.0);
+                                    ui.label(RichText::new(&k).small().color(theme::TEXT_DIM));
                                     last = k;
                                 }
                             }
-                            let (r, resp) = ui.allocate_exact_size(Vec2::new(230.0, 22.0), Sense::click());
+                            let (r, resp) = ui.allocate_exact_size(Vec2::new(pop_w - 8.0, row_h), Sense::click());
                             if resp.hovered() {
-                                ui.painter().rect_filled(r, 2.0, theme::HOVER_BG);
+                                ui.painter().rect_filled(r, 4.0, theme::HOVER_BG);
                             }
-                            let icon = egui::Rect::from_min_size(r.min + Vec2::new(2.0, 3.0), Vec2::splat(16.0));
+                            let icon_sz = if mobile { 20.0 } else { 16.0 };
+                            let icon = egui::Rect::from_center_size(
+                                egui::pos2(r.min.x + 14.0, r.center().y),
+                                Vec2::splat(icon_sz),
+                            );
                             crate::icons::paint_class_icon(ui.painter(), icon, c);
                             let col = if resp.hovered() { egui::Color32::WHITE } else { theme::TEXT };
                             ui.painter().text(
-                                egui::pos2(r.min.x + 24.0, r.center().y),
+                                egui::pos2(r.min.x + 32.0, r.center().y),
                                 egui::Align2::LEFT_CENTER,
                                 *c,
-                                egui::FontId::proportional(13.0),
+                                egui::FontId::proportional(if mobile { 15.0 } else { 13.0 }),
                                 col,
+                            );
+                            ui.painter().line_segment(
+                                [egui::pos2(r.min.x, r.max.y), egui::pos2(r.max.x, r.max.y)],
+                                egui::Stroke::new(0.5, theme::DIVIDER.gamma_multiply(0.5)),
                             );
                             if resp.clicked() {
                                 chosen = Some(c.to_string());

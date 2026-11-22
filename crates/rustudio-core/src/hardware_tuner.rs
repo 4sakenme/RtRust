@@ -7,6 +7,7 @@ pub enum PerfPreset {
     Ultra,
     Balanced,
     BatterySaver,
+    Custom,
 }
 
 impl PerfPreset {
@@ -16,6 +17,28 @@ impl PerfPreset {
             Self::Ultra => "Ultra",
             Self::Balanced => "Balanced",
             Self::BatterySaver => "Battery Saver",
+            Self::Custom => "Custom",
+        }
+    }
+
+    fn as_key(self) -> &'static str {
+        match self {
+            Self::AutoDetect => "auto",
+            Self::Ultra => "ultra",
+            Self::Balanced => "balanced",
+            Self::BatterySaver => "battery",
+            Self::Custom => "custom",
+        }
+    }
+
+    fn from_key(s: &str) -> Option<Self> {
+        match s.trim() {
+            "auto" => Some(Self::AutoDetect),
+            "ultra" => Some(Self::Ultra),
+            "balanced" => Some(Self::Balanced),
+            "battery" => Some(Self::BatterySaver),
+            "custom" => Some(Self::Custom),
+            _ => None,
         }
     }
 }
@@ -78,7 +101,7 @@ fn config_for_ram(ram_mb: u64, preset: PerfPreset) -> TunerConfig {
     match preset {
         PerfPreset::Ultra => TunerConfig {
             preset,
-            cache_budget_mb: 1024,
+            cache_budget_mb: 2048,
             luau_gc_mb: 256,
             render_scale: 0.75,
             fps_limit: 60,
@@ -86,26 +109,26 @@ fn config_for_ram(ram_mb: u64, preset: PerfPreset) -> TunerConfig {
         },
         PerfPreset::Balanced => TunerConfig {
             preset,
-            cache_budget_mb: 256,
-            luau_gc_mb: 64,
-            render_scale: 0.75,
+            cache_budget_mb: 1024,
+            luau_gc_mb: 256,
+            render_scale: 0.50,
             fps_limit: 60,
             shadows_enabled: false,
         },
         PerfPreset::BatterySaver => TunerConfig {
             preset,
-            cache_budget_mb: 64,
-            luau_gc_mb: 16,
-            render_scale: 0.65,
-            fps_limit: 30,
+            cache_budget_mb: 1024,
+            luau_gc_mb: 128,
+            render_scale: 0.35,
+            fps_limit: 60,
             shadows_enabled: false,
         },
         PerfPreset::AutoDetect => {
             if ram_mb >= 7600 {
                 TunerConfig {
                     preset,
-                    cache_budget_mb: 512,
-                    luau_gc_mb: 128,
+                    cache_budget_mb: 3072,
+                    luau_gc_mb: 256,
                     render_scale: 1.0,
                     fps_limit: 60,
                     shadows_enabled: true,
@@ -113,24 +136,114 @@ fn config_for_ram(ram_mb: u64, preset: PerfPreset) -> TunerConfig {
             } else if ram_mb >= 3800 {
                 TunerConfig {
                     preset,
-                    cache_budget_mb: 256,
-                    luau_gc_mb: 64,
-                    render_scale: 0.85,
+                    cache_budget_mb: 1536,
+                    luau_gc_mb: 256,
+                    render_scale: 0.50,
                     fps_limit: 60,
-                    shadows_enabled: true,
+                    shadows_enabled: false,
                 }
             } else {
                 TunerConfig {
                     preset,
-                    cache_budget_mb: 128,
-                    luau_gc_mb: 32,
-                    render_scale: 0.70,
-                    fps_limit: 30,
+                    cache_budget_mb: 1024,
+                    luau_gc_mb: 128,
+                    render_scale: 0.40,
+                    fps_limit: 60,
                     shadows_enabled: false,
                 }
             }
         }
+        PerfPreset::Custom => TunerConfig {
+            preset,
+            cache_budget_mb: 1024,
+            luau_gc_mb: 256,
+            render_scale: 0.50,
+            fps_limit: 60,
+            shadows_enabled: false,
+        },
     }
+}
+
+fn config_file_path() -> std::path::PathBuf {
+    if let Some(dir) = std::env::var_os("RUSTUDIO_DATA_DIR") {
+        return std::path::PathBuf::from(dir).join("hardware_tuner.cfg");
+    }
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        return std::path::PathBuf::from(xdg).join("rustudio").join("hardware_tuner.cfg");
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(home).join(".config").join("rustudio").join("hardware_tuner.cfg");
+    }
+    std::env::temp_dir().join("rustudio").join("hardware_tuner.cfg")
+}
+
+fn save_config(cfg: &TunerConfig) {
+    let path = config_file_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let body = format!(
+        "preset={}\ncache_budget_mb={}\nluau_gc_mb={}\nrender_scale={:.3}\nfps_limit={}\nshadows_enabled={}\n",
+        cfg.preset.as_key(),
+        cfg.cache_budget_mb,
+        cfg.luau_gc_mb,
+        cfg.render_scale,
+        cfg.fps_limit,
+        cfg.shadows_enabled
+    );
+    let _ = std::fs::write(path, body);
+}
+
+fn load_config(ram_mb: u64) -> Option<TunerConfig> {
+    let text = std::fs::read_to_string(config_file_path()).ok()?;
+    let mut preset = PerfPreset::AutoDetect;
+    let mut cfg = config_for_ram(ram_mb, PerfPreset::Custom);
+    let mut has_any = false;
+    for line in text.lines() {
+        let Some((k, v)) = line.split_once('=') else { continue };
+        match k.trim() {
+            "preset" => {
+                if let Some(p) = PerfPreset::from_key(v) {
+                    preset = p;
+                    has_any = true;
+                }
+            }
+            "cache_budget_mb" => {
+                if let Ok(n) = v.trim().parse::<u32>() {
+                    cfg.cache_budget_mb = n.clamp(512, 3072);
+                }
+            }
+            "luau_gc_mb" => {
+                if let Ok(n) = v.trim().parse::<u32>() {
+                    cfg.luau_gc_mb = n.clamp(16, 512);
+                }
+            }
+            "render_scale" => {
+                if let Ok(n) = v.trim().parse::<f32>() {
+                    cfg.render_scale = n.clamp(0.05, 1.25);
+                }
+            }
+            "fps_limit" => {
+                if let Ok(n) = v.trim().parse::<u32>() {
+                    cfg.fps_limit = n;
+                }
+            }
+            "shadows_enabled" => {
+                if let Ok(b) = v.trim().parse::<bool>() {
+                    cfg.shadows_enabled = b;
+                }
+            }
+            _ => {}
+        }
+    }
+    if !has_any {
+        return None;
+    }
+    cfg.preset = preset;
+    if preset != PerfPreset::Custom {
+        return Some(config_for_ram(ram_mb, preset));
+    }
+    Some(cfg)
 }
 
 fn apply_env_hints(cfg: &TunerConfig, hw: &HardwareProfile) {
@@ -172,7 +285,8 @@ fn state() -> &'static RwLock<TunerState> {
             gpu_device_type: "Unknown".to_owned(),
             is_software_gpu: false,
         };
-        let config = config_for_ram(total_ram_mb, PerfPreset::AutoDetect);
+        let config = load_config(total_ram_mb)
+            .unwrap_or_else(|| config_for_ram(total_ram_mb, PerfPreset::AutoDetect));
         crate::mobile::set_eco(config.render_scale < 0.8);
         apply_env_hints(&config, &hardware);
         RwLock::new(TunerState { hardware, config })
@@ -225,7 +339,13 @@ pub fn config() -> TunerConfig {
 pub fn apply_preset(preset: PerfPreset) {
     if let Ok(mut guard) = state().write() {
         let ram = guard.hardware.total_ram_mb;
-        let mut cfg = config_for_ram(ram, preset);
+        let mut cfg = if preset == PerfPreset::Custom {
+            let mut c = guard.config.clone();
+            c.preset = PerfPreset::Custom;
+            c
+        } else {
+            config_for_ram(ram, preset)
+        };
         if guard.hardware.is_software_gpu && preset == PerfPreset::AutoDetect {
             cfg.render_scale = cfg.render_scale.min(0.75);
             cfg.shadows_enabled = false;
@@ -233,6 +353,7 @@ pub fn apply_preset(preset: PerfPreset) {
         crate::mobile::set_eco(cfg.render_scale < 0.8);
         let hw = guard.hardware.clone();
         apply_env_hints(&cfg, &hw);
+        save_config(&cfg);
         guard.config = cfg;
     }
 }
@@ -240,12 +361,15 @@ pub fn apply_preset(preset: PerfPreset) {
 pub fn update_config(mut f: impl FnMut(&mut TunerConfig)) {
     if let Ok(mut guard) = state().write() {
         f(&mut guard.config);
-        guard.config.cache_budget_mb = guard.config.cache_budget_mb.clamp(64, 1024);
-        guard.config.render_scale = guard.config.render_scale.clamp(0.5, 1.0);
+        guard.config.preset = PerfPreset::Custom;
+        guard.config.cache_budget_mb = guard.config.cache_budget_mb.clamp(512, 3072);
+        guard.config.luau_gc_mb = guard.config.luau_gc_mb.clamp(16, 512);
+        guard.config.render_scale = guard.config.render_scale.clamp(0.05, 1.25);
         crate::mobile::set_eco(guard.config.render_scale < 0.8);
         let cfg = guard.config.clone();
         let hw = guard.hardware.clone();
         apply_env_hints(&cfg, &hw);
+        save_config(&cfg);
     }
 }
 

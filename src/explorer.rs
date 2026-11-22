@@ -16,7 +16,7 @@ use rustudio_core::doc::{DocKind, Document};
 use crate::icons;
 use rustudio_engine::theme;
 
-const ROW_H: f32 = if cfg!(target_os = "android") { 32.0 } else { 20.0 };
+const ROW_H: f32 = if cfg!(target_os = "android") { 40.0 } else { 24.0 };
 const INDENT: f32 = 14.0;
 /// Hovering a collapsed row this long while dragging expands it.
 const AUTO_EXPAND_S: f32 = 0.6;
@@ -500,7 +500,8 @@ impl Editor {
         // The "+" just right of the name while the row is hovered (Studio's quick insert).
         let label = if name.is_empty() { format!("({class})") } else { name.clone() };
         let name_w = ui.fonts_mut(|f| f.layout_no_wrap(label, egui::FontId::proportional(13.0), theme::TEXT).size().x);
-        let mobile = rustudio_core::mobile::is_drawer_mode();
+        let mobile = rustudio_core::mobile::is_drawer_mode()
+            || ui.ctx().content_rect().width() < ui.ctx().content_rect().height();
         let plus_x = (text_pos.x + name_w + 6.0 + 10.0).min(rect.max.x - 14.0);
         let plus_rect = Rect::from_center_size(
             Pos2::new(plus_x, rect.center().y),
@@ -560,7 +561,7 @@ impl Editor {
             }
         }
         let is_script = matches!(class.as_str(), "Script" | "LocalScript" | "ModuleScript");
-        if resp.double_clicked() || (mobile && selected && resp.clicked() && is_script) {
+        if resp.double_clicked() || (mobile && resp.clicked() && is_script) {
             if is_script {
                 actions.push(RowAction::OpenScript(r));
             } else if mobile {
@@ -786,6 +787,12 @@ impl Editor {
             }
             RowAction::OpenScript(r) => {
                 self.open_script.push(r);
+                if !self.ui.portrait_open_scripts.contains(&r) {
+                    self.ui.portrait_open_scripts.push(r);
+                }
+                self.ui.portrait_active_script = Some(r);
+                self.ui.portrait_tab = crate::studio_ui::PortraitTab::Code;
+                self.ui.portrait_tool_panel = None;
             }
         }
     }

@@ -2075,7 +2075,8 @@ impl Game {
         }
         // Studio's scene environment probe (env_probe.rs): the PBR
         // technologies' 128 px indoor reflection cube.
-        let probe = (quality.is_none_or(|p| p.detail() >= 2.0) && globals.env_spec[2] > 0.5 && std::env::var_os("RUSTUDIO_NO_ENV_PROBE").is_none()).then(|| {
+        let low_gpu = rustudio_core::hardware_tuner::render_scale() < 0.85;
+        let probe = (!low_gpu && quality.is_none_or(|p| p.detail() >= 2.0) && globals.env_spec[2] > 0.5 && std::env::var_os("RUSTUDIO_NO_ENV_PROBE").is_none()).then(|| {
             let _p = rustudio_core::bench::scope("env_probe");
             let revision = self.renderer.as_ref().map_or(0, |r| r.static_gen());
             let now = rustudio_core::sim_clock::since(started).as_secs_f64();
