@@ -264,8 +264,18 @@ pub fn wgpu_options(bench_mode: bool) -> egui_wgpu::WgpuConfiguration {
             let mut setup = egui_wgpu::WgpuSetupCreateNew::without_display_handle();
             #[cfg(target_os = "android")]
             {
-                setup.instance_descriptor.backends =
-                    egui_wgpu::wgpu::Backends::VULKAN | egui_wgpu::wgpu::Backends::GL;
+                // 32-bit Android devices (e.g. Mali-G52 on Galaxy A13) hit driver
+                // timeouts / VK_ERROR_DEVICE_LOST on full Vulkan shader compilation;
+                // GLES automatically enables reduced bindings and 1x MSAA.
+                #[cfg(target_arch = "arm")]
+                {
+                    setup.instance_descriptor.backends = egui_wgpu::wgpu::Backends::GL;
+                }
+                #[cfg(not(target_arch = "arm"))]
+                {
+                    setup.instance_descriptor.backends =
+                        egui_wgpu::wgpu::Backends::VULKAN | egui_wgpu::wgpu::Backends::GL;
+                }
                 setup.power_preference = egui_wgpu::wgpu::PowerPreference::LowPower;
             }
             let descriptor = setup.device_descriptor.clone();

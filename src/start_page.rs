@@ -82,6 +82,8 @@ pub struct StartPage {
     opening: Option<String>,
     /// A fetched template place, for the editor to open.
     opened: Option<(TemplateInfo, Result<(Vec<u8>, Source), String>)>,
+    /// Whether the left navigation sidebar is expanded (collapsed by default on Android).
+    nav_open: bool,
 }
 
 impl StartPage {
@@ -121,6 +123,7 @@ impl Default for StartPage {
             template_tab: None,
             opening: None,
             opened: None,
+            nav_open: !cfg!(target_os = "android"),
         }
     }
 }
@@ -468,17 +471,28 @@ impl Editor {
             });
         }
 
+        let screen_w = ui.ctx().content_rect().width();
+        let narrow = screen_w < 600.0;
+        let top_pad = if narrow { 8 } else { 16 };
         egui::Panel::top("start_top")
             .exact_size(48.0)
-            .frame(egui::Frame::new().fill(theme::MENU_BAR).inner_margin(egui::Margin::symmetric(16, 0)))
+            .frame(egui::Frame::new().fill(theme::MENU_BAR).inner_margin(egui::Margin::symmetric(top_pad, 0)))
             .show(ui, |ui| self.start_top(ui, &mut todo));
-        egui::Panel::left("start_nav")
-            .exact_size(220.0)
-            .resizable(false)
-            .frame(egui::Frame::new().fill(theme::PANEL_DARK).inner_margin(egui::Margin::symmetric(10, 14)))
-            .show(ui, |ui| self.start_nav(ui, &mut todo));
+        if self.start.nav_open {
+            let nav_w = if narrow { (screen_w * 0.62).clamp(170.0, 220.0) } else { 220.0 };
+            egui::Panel::left("start_nav")
+                .exact_size(nav_w)
+                .resizable(false)
+                .frame(egui::Frame::new().fill(theme::PANEL_DARK).inner_margin(egui::Margin::symmetric(10, 14)))
+                .show(ui, |ui| self.start_nav(ui, &mut todo));
+        }
+        let body_margin = if narrow {
+            egui::Margin { left: 10, right: 10, top: 12, bottom: 8 }
+        } else {
+            egui::Margin { left: 28, right: 20, top: 20, bottom: 12 }
+        };
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::BG).inner_margin(egui::Margin { left: 28, right: 20, top: 20, bottom: 12 }))
+            .frame(egui::Frame::new().fill(theme::BG).inner_margin(body_margin))
             .show(ui, |ui| self.start_body(ui, &mut todo));
 
         for d in todo {
@@ -486,6 +500,9 @@ impl Editor {
                 Do::Jump(k) => {
                     self.start.collapsed.remove(&k);
                     self.start.jump = Some(k);
+                    if narrow {
+                        self.start.nav_open = false;
+                    }
                 }
                 Do::Toggle(k) => {
                     if !self.start.collapsed.remove(&k) {
@@ -526,9 +543,24 @@ impl Editor {
 
     fn start_top(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
         ui.horizontal_centered(|ui| {
-            crate::icons::logo(ui, 26.0);
+            let arrow = if self.start.nav_open { "◀" } else { "▶" };
+            if ui
+                .add(
+                    egui::Button::new(RichText::new(arrow).size(14.0).color(theme::TEXT))
+                        .fill(theme::PANEL_ALT)
+                        .min_size(Vec2::new(28.0, 28.0)),
+                )
+                .on_hover_text(if self.start.nav_open { "Hide menu" } else { "Show menu" })
+                .clicked()
+            {
+                self.start.nav_open = !self.start.nav_open;
+            }
             ui.add_space(4.0);
-            ui.label(RichText::new("RtRustMobile").size(16.0).strong().color(theme::TEXT));
+            crate::icons::logo(ui, 24.0);
+            if ui.available_width() > 300.0 {
+                ui.add_space(4.0);
+                ui.label(RichText::new("RtRustMobile").size(15.0).strong().color(theme::TEXT));
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let label = if self.game.account.signed_in() {
                     self.game.account.status_short().trim_start_matches("Roblox: ").to_string()
@@ -542,11 +574,12 @@ impl Editor {
                 {
                     todo.push(Do::Account);
                 }
-                ui.add_space(8.0);
+                ui.add_space(6.0);
+                let search_w = (ui.available_width() - 12.0).clamp(72.0, 240.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.start.search)
                         .hint_text("🔍  Search")
-                        .desired_width(240.0),
+                        .desired_width(search_w),
                 );
             });
         });
@@ -603,7 +636,16 @@ impl Editor {
                 }
             }
         }
-        egui::ScrollArea::vertical().id_salt("start_nav_scroll").max_height(ui.available_height() - 24.0).show(ui, |ui| {
+        let touch_scroll = egui::scroll_area::ScrollSource {
+            scroll_bar: true,
+            drag: egui::scroll_area::DragScroll::Always,
+            mouse_wheel: true,
+        };
+        egui::ScrollArea::vertical()
+            .id_salt("start_nav_scroll")
+            .scroll_source(touch_scroll)
+            .max_height(ui.available_height() - 24.0)
+            .show(ui, |ui| {
             let mut groups_said = false;
             for (key, label, indent) in entries {
                 if indent && !groups_said {
@@ -672,19 +714,33 @@ impl Editor {
             ui.label(RichText::new(e).color(theme::WARN));
         }
         ui.add_space(10.0);
+        let touch_scroll = egui::scroll_area::ScrollSource {
+            scroll_bar: true,
+            drag: egui::scroll_area::DragScroll::Always,
+            mouse_wheel: true,
+        };
         egui::ScrollArea::vertical()
             .id_salt("start_scroll")
+            .scroll_source(touch_scroll)
             .auto_shrink([false, false])
             .show(ui, |ui| self.start_home(ui, todo));
     }
 
     fn start_url_row(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
         ui.horizontal(|ui| {
-            ui.label("Open by place ID or URL:");
+            let narrow = ui.available_width() < 460.0;
+            if !narrow {
+                ui.label("Open by place ID or URL:");
+            }
+            let input_w = if narrow {
+                (ui.available_width() - 62.0).clamp(110.0, 320.0)
+            } else {
+                320.0
+            };
             let r = ui.add(
                 egui::TextEdit::singleline(&mut self.start.url)
-                    .hint_text("roblox.com/games/… or a place ID")
-                    .desired_width(320.0),
+                    .hint_text("Place ID or roblox.com/games/…")
+                    .desired_width(input_w),
             );
             let go = ui.add_enabled(!self.start.url.trim().is_empty(), egui::Button::new("Open")).clicked()
                 || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));

@@ -285,11 +285,13 @@ struct Light { pos_range: vec4<f32>, color: vec4<f32>, dir: vec4<f32>, extra: ve
 @group(0) @binding(2) var sun_atlas: texture_2d<f32>;
 @group(0) @binding(3) var sun_grid: texture_3d<f32>;
 @group(0) @binding(4) var sun_sampler: sampler;
+//#if VERTEX_STORAGE
 @group(0) @binding(5) var<storage, read> lights: array<Light>;
 // effects::Glass (FxGlass) and each effect's list of the ones in front.
 struct Glass { x: vec4<f32>, y: vec4<f32>, z: vec4<f32>, pos: vec4<f32> };
 @group(0) @binding(6) var<storage, read> glass: array<Glass>;
 @group(0) @binding(7) var<storage, read> glass_idx: array<u32>;
+//#endif
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
 
@@ -350,10 +352,12 @@ fn fx_local(l: Light, p: vec3<f32>) -> vec3<f32> {
 // channel (ParticleLightingFS), then the sun × the voxel sun.
 fn fx_scene(p: vec3<f32>, g: vec2<f32>) -> vec3<f32> {
     var c = tone.amb.rgb + tone.outdoor.rgb * g.x + tone.env.rgb * g.x;
+//#if VERTEX_STORAGE
     let n = u32(tone.amb.w);
     for (var i = 0u; i < n; i++) {
         c += fx_local(lights[i], p);
     }
+//#endif
     return min(c, vec3<f32>(FX_LIGHT_CAP)) + tone.lamp.rgb * g.y;
 }
 
@@ -373,6 +377,7 @@ fn fx_checked(o: ptr<function, VOut>, gpu: vec3<f32>, cpu: vec3<f32>) {
     }
 }
 
+//#if VERTEX_STORAGE
 // Whether the segment from o (length len along unit d) enters the box
 // (effects::Glass::hit).
 fn fx_hit(g: Glass, o: vec3<f32>, d: vec3<f32>, len: f32) -> bool {
@@ -410,6 +415,11 @@ fn fx_transmit(p: vec3<f32>, list: vec2<u32>) -> f32 {
     }
     return t;
 }
+//#else
+fn fx_transmit(p: vec3<f32>, list: vec2<u32>) -> f32 {
+    return 1.0;
+}
+//#endif
 
 fn fx_clip(p: vec3<f32>) -> vec4<f32> {
     var c = tone.vp * vec4<f32>(p, 1.0);
@@ -800,6 +810,7 @@ pub struct WorldGuiPass {
     fx_in: wgpu::RenderPipeline,
     fx_out: wgpu::RenderPipeline,
     fx_tex: Option<([u32; 2], wgpu::TextureView)>,
+    vertex_storage: bool,
 }
 
 /// The scene's HDR format (render.rs HDR_FORMAT) and the effects' buffer.
@@ -979,8 +990,26 @@ fn mip_dirty_rect(rect: [u32; 4], source: [u32; 2], target: [u32; 2]) -> [u32; 4
 
 impl WorldGuiPass {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, target: wgpu::TextureFormat, samples: u32) -> Self {
+        let vertex_storage = !crate::gpu_caps::depth_loads_as_float(device);
         let source = if samples == 1 { SHADER.replace("texture_depth_multisampled_2d", "texture_depth_2d") } else { SHADER.to_owned() };
         let source = crate::gpu_caps::shader_for(device, &source);
+        let source = {
+            let mut out = String::with_capacity(source.len());
+            let mut branch: Option<bool> = None;
+            for line in source.lines() {
+                match line.trim() {
+                    "//#if VERTEX_STORAGE" => { branch = Some(true); continue; }
+                    "//#else" if branch.is_some() => { branch = Some(false); continue; }
+                    "//#endif" if branch.is_some() => { branch = None; continue; }
+                    _ => {}
+                }
+                if branch.is_none_or(|want| want == vertex_storage) {
+                    out.push_str(line);
+                    out.push('\n');
+                }
+            }
+            out
+        };
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("world gui"),
             source: wgpu::ShaderSource::Wgsl(
@@ -995,9 +1024,7 @@ impl WorldGuiPass {
                 .into(),
             ),
         });
-        let depth_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("world gui depth"),
-            entries: &[
+        let mut depth_entries = vec![
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -1030,6 +1057,9 @@ impl WorldGuiPass {
                     binding: 3, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D3, multisampled: false }, count: None,
                 },
+        ];
+        if vertex_storage {
+            depth_entries.extend([
                 // The frame's local lights (render.rs lights_buf).
                 wgpu::BindGroupLayoutEntry {
                     binding: 5, visibility: wgpu::ShaderStages::VERTEX,
@@ -1044,7 +1074,11 @@ impl WorldGuiPass {
                     binding: 7, visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }, count: None,
                 },
-            ],
+            ]);
+        }
+        let depth_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("world gui depth"),
+            entries: &depth_entries,
         });
         let tex_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("world gui texture"),
@@ -1326,6 +1360,7 @@ impl WorldGuiPass {
             fx_in,
             fx_out,
             fx_tex: None,
+            vertex_storage,
             sun_atlas: device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("unshadowed GUI fallback"), size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
                 mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
@@ -1463,19 +1498,24 @@ impl WorldGuiPass {
         fill(device, &rs.queue, g0, st, bytemuck::cast_slice(if f.glass.is_empty() { &pad } else { &f.glass }));
         fill(device, &rs.queue, g1, st, bytemuck::cast_slice(if f.glass_idx.is_empty() { &[0u32][..] } else { &f.glass_idx }));
         let (Some(g0), Some(g1)) = (&self.glass[0], &self.glass[1]) else { return None };
-        let depth_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("world gui depth"),
-            layout: &self.depth_bgl,
-            entries: &[
+        let mut depth_bg_entries = vec![
                 wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(depth) },
                 wgpu::BindGroupEntry { binding: 1, resource: self.tone_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&self.sun_atlas) },
                 wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(&self.sun_sampler) },
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&self.sun_grid) },
+        ];
+        if self.vertex_storage {
+            depth_bg_entries.extend([
                 wgpu::BindGroupEntry { binding: 5, resource: self.lights.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 6, resource: g0.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 7, resource: g1.as_entire_binding() },
-            ],
+            ]);
+        }
+        let depth_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("world gui depth"),
+            layout: &self.depth_bgl,
+            entries: &depth_bg_entries,
         });
         // A bind group per egui texture (and sampler).
         self.frame += 1;

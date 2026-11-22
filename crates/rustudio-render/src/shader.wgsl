@@ -221,7 +221,11 @@ fn sky_color(dir: vec3<f32>) -> vec3<f32> {
 /// prefiltered cube at mip roughness × ENV_SPEC_LOD_SPAN; here that span
 /// ends at the skybox's coarsest mip.
 fn sky_rough(dir: vec3<f32>, rough: f32) -> vec3<f32> {
+//#if FULL_BINDINGS
     let top = f32(textureNumLevels(sky_tex)) - 1.0;
+//#else
+    let top = ATMOS_ENV_CUBE_LEVELS - 1.0;
+//#endif
     return sky_color_lod(dir, max(top - ENV_SPEC_LOD_SPAN * (1.0 - rough), 0.0));
 }
 
@@ -334,7 +338,11 @@ fn fog_rgb_at(world: vec3<f32>) -> vec3<f32> {
         // than that cube, so its top levels are skipped.
         let rel = world - g.cam_pos.xyz;
         let vis = 1.0 - fog_amount(length(rel));
+//#if FULL_BINDINGS
         let top = f32(textureNumLevels(sky_tex)) - 1.0;
+//#else
+        let top = ATMOS_ENV_CUBE_LEVELS - 1.0;
+//#endif
         let lod = max(top - (ATMOS_ENV_CUBE_LEVELS - 1.0), 0.0) + max(g.atmos_sky.w, vis) * ATMOS_FOG_MIP;
         return sky_color_lod(normalize(rel), min(lod, top));
     }
@@ -686,8 +694,13 @@ fn brdf_ab(rough: f32, nv: f32) -> vec2<f32> {
 /// the skylight (HQ part FS).
 fn env_reflect(r: vec3<f32>, rough: f32, sky: f32, sharp: bool) -> vec3<f32> {
     let m = select(rough * ENV_SPEC_MIP_PER_ROUGHNESS, 0.0, sharp);
+//#if FULL_BINDINGS
     let top_s = f32(textureNumLevels(sky_tex)) - 1.0;
     let top_i = f32(textureNumLevels(indoor_tex)) - 1.0;
+//#else
+    let top_s = ATMOS_ENV_CUBE_LEVELS - 1.0;
+    let top_i = ATMOS_ENV_CUBE_LEVELS - 1.0;
+//#endif
     let lod_s = min(max(top_s - (ATMOS_ENV_CUBE_LEVELS - 1.0), 0.0) + m, top_s);
     let lod_i = min(max(top_i - (ATMOS_ENV_CUBE_LEVELS - 1.0), 0.0) + m, top_i);
     let tint = mix(g.sky_grad[1].rgb, g.sky_grad[0].rgb, clamp(r.y * ENV_REFLECT_UP_GAIN, 0.0, 1.0));
