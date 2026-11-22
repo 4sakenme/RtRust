@@ -370,16 +370,35 @@ impl Editor {
                 ui.label(rustudio_engine::ti::text("check", 12.0).color(color));
                 ui.label(RichText::new("OK").small().color(color));
             }
+            let base_font = crate::studio_settings::font_px("Studio", "Font");
+            let is_portrait = ui.ctx().content_rect().width() < ui.ctx().content_rect().height();
+            let narrow = ui.ctx().content_rect().width() < 540.0;
+            let cur_px = ui.ctx().data(|d| {
+                d.get_temp::<f32>(font_override_id)
+                    .unwrap_or(if is_portrait { base_font.max(14.5) } else { base_font })
+            });
+            let wrap_id = egui::Id::new("mobile_script_wrap_override");
+            let cur_wrap = ui.ctx().data(|d| d.get_temp::<bool>(wrap_id))
+                .unwrap_or_else(|| crate::studio_settings::flag("Studio", "Text Wrapping", false));
+            let tools_id = egui::Id::new("mobile_script_tools_open");
+            let mut tools_open = ui.ctx().data(|d| d.get_temp::<bool>(tools_id).unwrap_or(false));
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let base_font = crate::studio_settings::font_px("Studio", "Font");
-                let is_portrait = ui.ctx().content_rect().width() < ui.ctx().content_rect().height();
-                let cur_px = ui.ctx().data(|d| {
-                    d.get_temp::<f32>(font_override_id)
-                        .unwrap_or(if is_portrait { base_font.max(14.5) } else { base_font })
-                });
-                let wrap_id = egui::Id::new("mobile_script_wrap_override");
-                let cur_wrap = ui.ctx().data(|d| d.get_temp::<bool>(wrap_id))
-                    .unwrap_or_else(|| crate::studio_settings::flag("Studio", "Text Wrapping", false));
+                if narrow {
+                    let arrow = if tools_open { "▲ Tools" } else { "▼ Tools" };
+                    if ui.selectable_label(tools_open, arrow).clicked() {
+                        tools_open = !tools_open;
+                        ui.ctx().data_mut(|d| d.insert_temp(tools_id, tools_open));
+                    }
+                    if ui.selectable_label(find_open, "🔍 Find").clicked() {
+                        find_open = !find_open;
+                        ui.ctx().data_mut(|d| d.insert_temp(find_open_id, find_open));
+                    }
+                    if ui.small_button("--").on_hover_text("Toggle Comment dòng hiện tại").clicked() {
+                        toggle_comment = true;
+                    }
+                    return;
+                }
                 let ctx_menu = ui.ctx().clone();
                 ui.menu_button("Font ▼", |ui| {
                     for (id, name, cached) in crate::font_manager::available_code_fonts() {
@@ -448,6 +467,81 @@ impl Editor {
                 });
             });
         });
+
+        let narrow = ui.ctx().content_rect().width() < 540.0;
+        let tools_open = ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("mobile_script_tools_open")).unwrap_or(false));
+        if narrow && tools_open {
+            let base_font = crate::studio_settings::font_px("Studio", "Font");
+            let is_portrait = ui.ctx().content_rect().width() < ui.ctx().content_rect().height();
+            let cur_px = ui.ctx().data(|d| {
+                d.get_temp::<f32>(font_override_id)
+                    .unwrap_or(if is_portrait { base_font.max(14.5) } else { base_font })
+            });
+            let wrap_id = egui::Id::new("mobile_script_wrap_override");
+            let cur_wrap = ui.ctx().data(|d| d.get_temp::<bool>(wrap_id))
+                .unwrap_or_else(|| crate::studio_settings::flag("Studio", "Text Wrapping", false));
+            ui.horizontal_wrapped(|ui| {
+                let outline_items = scan_function_outline(&buf.text);
+                ui.menu_button("ƒ Outline", |ui| {
+                    if outline_items.is_empty() {
+                        ui.label(RichText::new("Không tìm thấy function / section").small().color(theme::TEXT_DIM));
+                    } else {
+                        egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
+                            for (line_no, label) in &outline_items {
+                                if ui.button(format!("L{line_no}: {label}")).clicked() {
+                                    jump_to_line = Some(*line_no);
+                                    ui.close();
+                                }
+                            }
+                        });
+                    }
+                });
+                let clip_id = egui::Id::new("mobile_clipboard_ring");
+                let clip_ring = ui.ctx().data(|d| d.get_temp::<Vec<String>>(clip_id).unwrap_or_default());
+                ui.menu_button("📋 History", |ui| {
+                    if clip_ring.is_empty() {
+                        ui.label(RichText::new("Chưa có lịch sử copy").small().color(theme::TEXT_DIM));
+                    } else {
+                        for item in &clip_ring {
+                            let preview: String = item.lines().next().unwrap_or("").chars().take(32).collect();
+                            if ui.button(preview).clicked() {
+                                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile_luau_snippet"), item.clone()));
+                                ui.close();
+                            }
+                        }
+                    }
+                });
+                if ui.small_button("A-").clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(font_override_id, (cur_px - 1.5).max(10.0)));
+                }
+                if ui.small_button("A+").clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(font_override_id, (cur_px + 1.5).min(24.0)));
+                }
+                if ui.selectable_label(cur_wrap, "Wrap").clicked() {
+                    ui.ctx().data_mut(|d| d.insert_temp(wrap_id, !cur_wrap));
+                }
+                let ctx_menu = ui.ctx().clone();
+                ui.menu_button("Font ▼", |ui| {
+                    for (id, name, cached) in crate::font_manager::available_code_fonts() {
+                        if id == "default" {
+                            if ui.button(name).clicked() {
+                                crate::font_manager::set_active_font(None, crate::font_manager::FontCategory::Code, &ctx_menu);
+                                ui.close();
+                            }
+                        } else if cached {
+                            if ui.button(format!("✓ {name}")).clicked() {
+                                crate::font_manager::set_active_font(Some(&id), crate::font_manager::FontCategory::Code, &ctx_menu);
+                                ui.close();
+                            }
+                        } else if let Some(item) = crate::font_manager::CATALOG.iter().find(|c| c.id == id) {
+                            if ui.button(format!("⬇ {name}")).clicked() {
+                                crate::font_manager::start_fetch(item, ctx_menu.clone());
+                            }
+                        }
+                    }
+                });
+            });
+        }
 
         // Clickable Jump-to-Error banner when Luau syntax check finds an error
         if let Some((err_line, err_msg)) = &buf.error {

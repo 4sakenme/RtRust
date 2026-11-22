@@ -12,6 +12,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -38,7 +39,11 @@ public class MainActivity extends NativeActivity {
         imeInput.setTextColor(Color.TRANSPARENT);
         imeInput.setCursorVisible(false);
         imeInput.setAlpha(0f);
-        imeInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        imeInput.setInputType(
+            InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        );
         imeInput.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_ACTION_DONE);
         imeInput.setSingleLine(true);
 
@@ -58,7 +63,6 @@ public class MainActivity extends NativeActivity {
                 while (common < minLen && lastText.charAt(common) == next.charAt(common)) {
                     common++;
                 }
-                // Avoid splitting surrogate pairs.
                 if (common > 0 && Character.isHighSurrogate(lastText.charAt(common - 1))) {
                     common--;
                 }
@@ -69,7 +73,14 @@ public class MainActivity extends NativeActivity {
                 if (common < next.length()) {
                     sendChars(next.substring(common));
                 }
-                lastText = next;
+                if (BaseInputConnection.getComposingSpanStart(s) < 0 && s.length() > 0) {
+                    updatingText = true;
+                    s.clear();
+                    lastText = "";
+                    updatingText = false;
+                } else {
+                    lastText = next;
+                }
             }
         });
 

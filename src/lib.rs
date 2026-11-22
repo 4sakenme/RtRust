@@ -1282,8 +1282,9 @@ pub mod android_ime {
         }
     }
 
-    pub fn sync_soft_keyboard(wanted: bool) {
-        if LAST_SHOWN.swap(wanted, Ordering::Relaxed) == wanted {
+    pub fn sync_soft_keyboard(wanted: bool, tapped: bool) {
+        let prev = LAST_SHOWN.swap(wanted, Ordering::Relaxed);
+        if prev == wanted && !(wanted && tapped) {
             return;
         }
         let ctx = ndk_context::android_context();
