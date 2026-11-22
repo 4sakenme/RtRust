@@ -4,13 +4,22 @@
 import asyncio
 import glob
 import os
-import subprocess
+import time
 from pathlib import Path
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 MAX_TG_LEN = 3500
+CODE_TIMEOUT_SEC = 900
+DEFAULT_TIMEOUT_SEC = 1800
+CURRENT_MODEL = "gemini-2.5-pro"
+
+MODEL_ALIASES = {
+    "pro": "gemini-2.5-pro",
+    "flash": "gemini-2.5-flash",
+    "auto": "auto",
+}
 
 
 def resolve_workspace() -> Path:
@@ -68,7 +77,9 @@ def is_authorized(update: Update, allowed_id: str) -> bool:
     return str(user.id) == allowed_id.strip()
 
 
-async def run_shell(cmd: str, cwd: Path | None = None) -> tuple[int, str]:
+async def run_shell(
+    cmd: str, cwd: Path | None = None, timeout: int = DEFAULT_TIMEOUT_SEC
+) -> tuple[int, str]:
     proc = await asyncio.create_subprocess_shell(
         cmd,
         cwd=str(cwd or WORKSPACE),
@@ -76,8 +87,66 @@ async def run_shell(cmd: str, cwd: Path | None = None) -> tuple[int, str]:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
-    out, _ = await proc.communicate()
-    return proc.returncode or 0, out.decode("utf-8", errors="replace")
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return proc.returncode or 0, out.decode("utf-8", errors="replace")
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return 124, f"Command timed out after {timeout}s."
+
+
+async def run_shell_streaming(
+    cmd: str,
+    status_msg,
+    header: str,
+    timeout: int = CODE_TIMEOUT_SEC,
+) -> tuple[int, str]:
+    """Run a shell command and periodically update a Telegram status message."""
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
+        cwd=str(WORKSPACE),
+        env=build_env(),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    chunks: list[str] = []
+    start = time.monotonic()
+
+    async def reader() -> None:
+        assert proc.stdout is not None
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            chunks.append(line.decode("utf-8", errors="replace"))
+
+    read_task = asyncio.create_task(reader())
+    last_edit = 0.0
+    try:
+        while not read_task.done():
+            await asyncio.sleep(1.5)
+            elapsed = int(time.monotonic() - start)
+            if elapsed >= timeout:
+                proc.kill()
+                await proc.wait()
+                chunks.append(f"\n[Timed out after {timeout}s]")
+                break
+            if time.monotonic() - last_edit >= 4.0:
+                last_edit = time.monotonic()
+                tail = "".join(chunks[-12:]).strip()
+                preview = truncate_msg(tail, 700) if tail else "Thinking / analyzing workspace..."
+                try:
+                    await status_msg.edit_text(f"{header}\nElapsed: {elapsed}s\n\n{preview}")
+                except Exception:
+                    pass
+        await read_task
+        rc = await proc.wait()
+    finally:
+        if not read_task.done():
+            read_task.cancel()
+
+    return rc or 0, "".join(chunks)
 
 
 def find_latest_apk() -> Path | None:
@@ -97,19 +166,50 @@ def find_latest_apk() -> Path | None:
     return found[0]
 
 
+def help_text() -> str:
+    return (
+        "RtRustMobile Cloud Agent\n"
+        f"Workspace: {WORKSPACE}\n"
+        f"Current Model: {CURRENT_MODEL}\n\n"
+        "Commands:\n"
+        "/start — Check bot status\n"
+        "/help — List all commands\n"
+        "/model <pro|flash|auto|name> — Switch Gemini model\n"
+        "/code <prompt> — Run Gemini CLI (live thinking + code review)\n"
+        "/build — Build arm64-v8a + armeabi-v7a & send APK\n"
+        "/testlab — Run Firebase Test Lab Robo on project rtrustmobile\n"
+        "/sh <command> — Run arbitrary shell command\n"
+        "/turnoff [codespace] — Stop bot (or stop Codespace if requested)"
+    )
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     allowed = os.environ.get("TG_ALLOWED_ID", "")
     if not is_authorized(update, allowed):
         return
-    await update.message.reply_text(
-        "RtRustMobile Cloud Agent ready!\n"
-        f"Workspace: {WORKSPACE}\n\n"
-        "Commands:\n"
-        "/code <prompt> — Run Gemini CLI to edit code\n"
-        "/build — Build arm64-v8a + armeabi-v7a & send APK\n"
-        "/testlab — Run Firebase Test Lab Robo on project rtrustmobile\n"
-        "/sh <command> — Run shell command"
-    )
+    await update.message.reply_text(help_text())
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    allowed = os.environ.get("TG_ALLOWED_ID", "")
+    if not is_authorized(update, allowed):
+        return
+    await update.message.reply_text(help_text())
+
+
+async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global CURRENT_MODEL
+    allowed = os.environ.get("TG_ALLOWED_ID", "")
+    if not is_authorized(update, allowed):
+        return
+    arg = " ".join(context.args).strip()
+    if not arg:
+        await update.message.reply_text(
+            f"Current model: {CURRENT_MODEL}\nUsage: /model pro | /model flash | /model auto | /model <name>"
+        )
+        return
+    CURRENT_MODEL = MODEL_ALIASES.get(arg.lower(), arg)
+    await update.message.reply_text(f"Switched Gemini model to: {CURRENT_MODEL}")
 
 
 async def cmd_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -120,12 +220,26 @@ async def cmd_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not prompt:
         await update.message.reply_text("Usage: /code <request>")
         return
-    await update.message.reply_text(f"Running Gemini CLI for:\n{prompt[:400]}")
-    safe_prompt = subprocess.list2cmdline([prompt]) if os.name == "nt" else prompt.replace("'", "'\"'\"'")
-    cmd = f"gemini -y -p '{safe_prompt}'"
-    rc, out = await run_shell(cmd)
+
+    model_flag = "" if CURRENT_MODEL == "auto" else f"-m '{CURRENT_MODEL}' "
+    header = f"[/code] Model: {CURRENT_MODEL}\nPrompt: {prompt[:300]}"
+    status_msg = await update.message.reply_text(f"{header}\n\nThinking...")
+
+    safe_prompt = prompt.replace("'", "'\"'\"'")
+    cmd = f"gemini {model_flag}-y -p '{safe_prompt}'"
+    rc, out = await run_shell_streaming(cmd, status_msg, header, timeout=CODE_TIMEOUT_SEC)
     status = "OK" if rc == 0 else f"FAILED (exit {rc})"
-    await update.message.reply_text(f"[/code {status}]\n\n{truncate_msg(out)}")
+
+    await update.message.reply_text(
+        f"[/code {status} | model: {CURRENT_MODEL}]\n\n{truncate_msg(out)}"
+    )
+
+    _, diff_stat = await run_shell("git status -s && echo '--- DIFF ---' && git diff --stat")
+    _, diff_body = await run_shell("git diff --no-color")
+    review_text = f"[Code Review]\n{diff_stat.strip()}"
+    if diff_body.strip():
+        review_text += f"\n\n{diff_body.strip()}"
+    await update.message.reply_text(truncate_msg(review_text))
 
 
 async def cmd_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -143,7 +257,6 @@ async def cmd_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"[/build FAILED exit {rc}]\n\n{truncate_msg(out)}")
         return
 
-    # Prefer signed release APK if present, else debug APK (signed & directly installable)
     apk = None
     for candidate in [
         WORKSPACE / "android/build/outputs/apk/release/RtRustMobile-release.apk",
@@ -200,16 +313,33 @@ async def cmd_sh(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f"[/sh exit {rc}]\n\n{truncate_msg(out)}")
 
 
+async def cmd_turnoff(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    allowed = os.environ.get("TG_ALLOWED_ID", "")
+    if not is_authorized(update, allowed):
+        return
+    arg = " ".join(context.args).strip().lower()
+    cs_name = os.environ.get("CODESPACE_NAME", "").strip()
+    if arg == "codespace" and cs_name:
+        await update.message.reply_text(f"Stopping Codespace {cs_name} and bot...")
+        await run_shell(f"gh codespace stop -c '{cs_name}'")
+    else:
+        await update.message.reply_text("Stopping Telegram bot...")
+    os._exit(0)
+
+
 def main() -> None:
     token = os.environ.get("TG_BOT_TOKEN", "").strip()
     if not token:
         raise SystemExit("TG_BOT_TOKEN is not set in environment.")
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("model", cmd_model))
     app.add_handler(CommandHandler("code", cmd_code))
     app.add_handler(CommandHandler("build", cmd_build))
     app.add_handler(CommandHandler("testlab", cmd_testlab))
     app.add_handler(CommandHandler("sh", cmd_sh))
+    app.add_handler(CommandHandler("turnoff", cmd_turnoff))
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
