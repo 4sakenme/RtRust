@@ -809,7 +809,7 @@ impl Editor {
                     .show(ui.ctx(), |ui| {
                         egui::Frame::new()
                             .fill(theme::PANEL_DARK)
-                            .stroke(egui::Stroke::new(1.0, theme::BORDER))
+                            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(55, 60, 72)))
                             .inner_margin(egui::Margin::symmetric(6, 4))
                             .show(ui, |ui| {
                                 ui.set_min_width(screen.width());
