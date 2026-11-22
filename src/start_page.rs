@@ -1259,12 +1259,23 @@ fn pill_button(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
     .inner
 }
 
+fn grid_layout(avail_w: f32) -> (usize, f32) {
+    if avail_w >= 240.0 && avail_w < (CARD_W * 2.0 + GAP) {
+        let card_w = ((avail_w - GAP) * 0.5).floor().max(110.0);
+        (2, card_w)
+    } else {
+        let cols = (((avail_w + GAP) / (CARD_W + GAP)).floor() as usize).max(1);
+        (cols, CARD_W)
+    }
+}
+
 fn per_row(ui: &egui::Ui) -> usize {
-    (((ui.available_width() + GAP) / (CARD_W + GAP)).floor() as usize).max(1)
+    grid_layout(ui.available_width()).0
 }
 
 fn grid(ui: &mut egui::Ui, n: usize, mut each: impl FnMut(&mut egui::Ui, usize)) {
-    let per_row = per_row(ui);
+    let (per_row, card_w) = grid_layout(ui.available_width());
+    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("start_card_w"), card_w));
     let mut i = 0;
     while i < n {
         ui.horizontal(|ui| {
@@ -1283,20 +1294,21 @@ fn grid(ui: &mut egui::Ui, n: usize, mut each: impl FnMut(&mut egui::Ui, usize))
 
 /// A card: thumbnail (drawn by `thumb`), title and one dim line.
 fn card(ui: &mut egui::Ui, title: &str, sub: &str, thumb: impl FnOnce(&egui::Painter, Rect)) -> egui::Response {
-    let (r, resp) = ui.allocate_exact_size(Vec2::new(CARD_W, CARD_H), Sense::click());
+    let card_w = ui.ctx().data(|d| d.get_temp::<f32>(egui::Id::new("start_card_w"))).unwrap_or(CARD_W);
+    let (r, resp) = ui.allocate_exact_size(Vec2::new(card_w, CARD_H), Sense::click());
     let p = ui.painter().with_clip_rect(r);
     let hov = resp.hovered();
     p.rect_filled(r, CornerRadius::same(6), if hov { theme::ACTIVE_TAB } else { theme::PANEL_DARK });
-    let tr = Rect::from_min_size(r.min, Vec2::new(CARD_W, THUMB_H));
+    let tr = Rect::from_min_size(r.min, Vec2::new(card_w, THUMB_H));
     thumb(&p.with_clip_rect(tr), tr);
     if hov {
         p.rect_stroke(r, CornerRadius::same(6), Stroke::new(1.5, theme::SELECT), egui::StrokeKind::Inside);
     }
     let font = egui::FontId::proportional(13.5);
-    let title = elide(&p, title, &font, CARD_W - 20.0);
+    let title = elide(&p, title, &font, card_w - 20.0);
     p.text(Pos2::new(r.min.x + 10.0, tr.max.y + 16.0), egui::Align2::LEFT_CENTER, title, font, theme::TEXT);
     let small = egui::FontId::proportional(11.5);
-    let sub = elide(&p, sub, &small, CARD_W - 20.0);
+    let sub = elide(&p, sub, &small, card_w - 20.0);
     p.text(Pos2::new(r.min.x + 10.0, tr.max.y + 35.0), egui::Align2::LEFT_CENTER, sub, small, theme::TEXT_DIM);
     if hov {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);

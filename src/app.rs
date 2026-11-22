@@ -2341,18 +2341,17 @@ impl RustudioApp {
         // Floating Left/Right Drawers for Explorer & Properties in Mobile Drawer Mode
         if rustudio_core::mobile::is_drawer_mode() {
             let max_h = (dock_rect.height() - 16.0).max(200.0);
-            let min_h = (max_h * 0.65).max(200.0);
+            let drawer_w = (dock_rect.width() * 0.64).clamp(210.0, 260.0);
             if self.ed.ui.mobile_explorer_open {
                 let mut open = self.ed.ui.mobile_explorer_open;
                 egui::Window::new("🌳 Explorer")
                     .id(egui::Id::new("mobile_explorer_drawer"))
                     .open(&mut open)
-                    .default_pos(egui::pos2(dock_rect.left() + 8.0, dock_rect.top() + 8.0))
-                    .default_size(egui::vec2(235.0, max_h))
-                    .min_height(min_h)
-                    .max_height(max_h)
-                    .resizable(true)
-                    .collapsible(true)
+                    .fixed_pos(egui::pos2(dock_rect.left() + 8.0, dock_rect.top() + 8.0))
+                    .fixed_size(egui::vec2(drawer_w, max_h))
+                    .movable(false)
+                    .resizable(false)
+                    .collapsible(false)
                     .show(&ctx, |ui| {
                         self.ed.explorer_ui(ui);
                     });
@@ -2363,12 +2362,11 @@ impl RustudioApp {
                 egui::Window::new("⚙ Properties")
                     .id(egui::Id::new("mobile_properties_drawer"))
                     .open(&mut open)
-                    .default_pos(egui::pos2((dock_rect.right() - 255.0).max(8.0), dock_rect.top() + 8.0))
-                    .default_size(egui::vec2(245.0, max_h))
-                    .min_height(min_h)
-                    .max_height(max_h)
-                    .resizable(true)
-                    .collapsible(true)
+                    .fixed_pos(egui::pos2((dock_rect.right() - drawer_w - 8.0).max(8.0), dock_rect.top() + 8.0))
+                    .fixed_size(egui::vec2(drawer_w, max_h))
+                    .movable(false)
+                    .resizable(false)
+                    .collapsible(false)
                     .show(&ctx, |ui| {
                         self.ed.properties_ui(ui);
                     });

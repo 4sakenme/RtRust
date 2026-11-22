@@ -559,8 +559,9 @@ impl Editor {
                 actions.push(RowAction::Click(r, m.command, m.shift));
             }
         }
-        if resp.double_clicked() {
-            if matches!(class.as_str(), "Script" | "LocalScript" | "ModuleScript") {
+        let is_script = matches!(class.as_str(), "Script" | "LocalScript" | "ModuleScript");
+        if resp.double_clicked() || (mobile && selected && resp.clicked() && is_script) {
+            if is_script {
                 actions.push(RowAction::OpenScript(r));
             } else if mobile {
                 if has_children {

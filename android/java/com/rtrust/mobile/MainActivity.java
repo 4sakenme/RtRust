@@ -2,17 +2,20 @@ package com.rtrust.mobile;
 
 import android.app.NativeActivity;
 import android.content.Context;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Editable;
 import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
+import android.widget.TextView;
 
 public class MainActivity extends NativeActivity {
     static {
@@ -21,76 +24,81 @@ public class MainActivity extends NativeActivity {
 
     private static native void nativeOnImeKey(int kind, int codepoint);
 
-    private View imeView;
+    private EditText imeInput;
+    private String lastText = "";
+    private boolean updatingText = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         hideSystemUI();
 
-        imeView = new View(this) {
+        imeInput = new EditText(this);
+        imeInput.setBackgroundColor(Color.TRANSPARENT);
+        imeInput.setTextColor(Color.TRANSPARENT);
+        imeInput.setCursorVisible(false);
+        imeInput.setAlpha(0f);
+        imeInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        imeInput.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_ACTION_DONE);
+        imeInput.setSingleLine(true);
+
+        imeInput.addTextChangedListener(new TextWatcher() {
             @Override
-            public boolean onCheckIsTextEditor() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (updatingText) return;
+                String next = s.toString();
+                int common = 0;
+                int minLen = Math.min(lastText.length(), next.length());
+                while (common < minLen && lastText.charAt(common) == next.charAt(common)) {
+                    common++;
+                }
+                // Avoid splitting surrogate pairs.
+                if (common > 0 && Character.isHighSurrogate(lastText.charAt(common - 1))) {
+                    common--;
+                }
+                int removed = lastText.codePointCount(common, lastText.length());
+                for (int i = 0; i < removed; i++) {
+                    nativeOnImeKey(1, 0);
+                }
+                if (common < next.length()) {
+                    sendChars(next.substring(common));
+                }
+                lastText = next;
+            }
+        });
+
+        imeInput.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (keyCode == KeyEvent.KEYCODE_DEL && imeInput.getText().length() == 0) {
+                        nativeOnImeKey(1, 0);
+                        return true;
+                    }
+                    if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                        nativeOnImeKey(2, 0);
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
+
+        imeInput.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                nativeOnImeKey(2, 0);
                 return true;
             }
+        });
 
-            @Override
-            public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
-                outAttrs.inputType = InputType.TYPE_NULL;
-                outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_ACTION_DONE;
-                return new BaseInputConnection(this, false) {
-                    @Override
-                    public boolean commitText(CharSequence text, int newCursorPosition) {
-                        sendChars(text);
-                        return true;
-                    }
-
-                    @Override
-                    public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                        sendChars(text);
-                        return true;
-                    }
-
-                    @Override
-                    public boolean deleteSurroundingText(int beforeLength, int afterLength) {
-                        for (int i = 0; i < beforeLength; i++) {
-                            nativeOnImeKey(1, 0);
-                        }
-                        return true;
-                    }
-
-                    @Override
-                    public boolean sendKeyEvent(KeyEvent event) {
-                        if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                            int code = event.getKeyCode();
-                            if (code == KeyEvent.KEYCODE_DEL) {
-                                nativeOnImeKey(1, 0);
-                                return true;
-                            }
-                            if (code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_NUMPAD_ENTER) {
-                                nativeOnImeKey(2, 0);
-                                return true;
-                            }
-                            int u = event.getUnicodeChar();
-                            if (u != 0 && (u & KeyEvent.META_CTRL_ON) == 0) {
-                                nativeOnImeKey(0, u);
-                                return true;
-                            }
-                        } else if (event.getAction() == KeyEvent.ACTION_MULTIPLE) {
-                            String chars = event.getCharacters();
-                            if (chars != null) {
-                                sendChars(chars);
-                                return true;
-                            }
-                        }
-                        return super.sendKeyEvent(event);
-                    }
-                };
-            }
-        };
-        imeView.setFocusable(true);
-        imeView.setFocusableInTouchMode(true);
-        addContentView(imeView, new ViewGroup.LayoutParams(1, 1));
+        addContentView(imeInput, new ViewGroup.LayoutParams(1, 1));
     }
 
     private static void sendChars(CharSequence text) {
@@ -112,13 +120,21 @@ public class MainActivity extends NativeActivity {
             @Override
             public void run() {
                 InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (imm == null || imeView == null) return;
+                if (imm == null || imeInput == null) return;
                 if (show) {
-                    imeView.requestFocus();
-                    imm.showSoftInput(imeView, InputMethodManager.SHOW_IMPLICIT);
+                    updatingText = true;
+                    imeInput.setText("");
+                    lastText = "";
+                    updatingText = false;
+                    imeInput.requestFocus();
+                    imm.showSoftInput(imeInput, InputMethodManager.SHOW_IMPLICIT);
                 } else {
-                    imm.hideSoftInputFromWindow(imeView.getWindowToken(), 0);
-                    imeView.clearFocus();
+                    imm.hideSoftInputFromWindow(imeInput.getWindowToken(), 0);
+                    imeInput.clearFocus();
+                    updatingText = true;
+                    imeInput.setText("");
+                    lastText = "";
+                    updatingText = false;
                 }
             }
         });
