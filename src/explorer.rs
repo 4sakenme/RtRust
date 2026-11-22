@@ -16,7 +16,7 @@ use rustudio_core::doc::{DocKind, Document};
 use crate::icons;
 use rustudio_engine::theme;
 
-const ROW_H: f32 = 20.0;
+const ROW_H: f32 = if cfg!(target_os = "android") { 32.0 } else { 20.0 };
 const INDENT: f32 = 14.0;
 /// Hovering a collapsed row this long while dragging expands it.
 const AUTO_EXPAND_S: f32 = 0.6;

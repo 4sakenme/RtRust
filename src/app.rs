@@ -347,6 +347,9 @@ impl RustudioApp {
                 s.spacing.scroll.bar_width = 16.0;
                 s.spacing.scroll.handle_min_length = 56.0;
                 s.spacing.scroll.floating = false;
+                s.spacing.interact_size = egui::vec2(36.0, 32.0);
+                s.spacing.button_padding = egui::vec2(10.0, 6.0);
+                s.spacing.item_spacing = egui::vec2(8.0, 6.0);
             });
         }
         rustudio_engine::mouse_lock::note_window(wayland);
@@ -2356,6 +2359,7 @@ impl RustudioApp {
                     .open(&mut open)
                     .fixed_pos(egui::pos2(dock_rect.left() + 8.0, dock_rect.top() + 8.0))
                     .fixed_size(egui::vec2(drawer_w, max_h))
+                    .min_width(drawer_w)
                     .max_width(drawer_w)
                     .max_height(max_h)
                     .movable(false)
@@ -2375,6 +2379,7 @@ impl RustudioApp {
                     .open(&mut open)
                     .fixed_pos(egui::pos2((dock_rect.right() - drawer_w - 8.0).max(8.0), dock_rect.top() + 8.0))
                     .fixed_size(egui::vec2(drawer_w, max_h))
+                    .min_width(drawer_w)
                     .max_width(drawer_w)
                     .max_height(max_h)
                     .movable(false)
