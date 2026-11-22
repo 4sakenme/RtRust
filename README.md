@@ -1,19 +1,30 @@
 <p align="center">
-  <img src="assets/icons/rustudio-256.png" width="128" alt="rustudio icon">
+  <img src="assets/icons/rtrust.svg" width="128" alt="RtRustMobile icon">
 </p>
 
-<h1 align="center">rustudio</h1>
+<h1 align="center">RtRustMobile</h1>
 
 <p align="center">
-  <a href="https://discord.gg/pdVZpADpWr"><img src="https://img.shields.io/badge/Discord-join%20the%20server-5865F2?logo=discord&logoColor=white" alt="Join the rustudio Discord"></a>
+  <strong>Native Android, Waydroid &amp; Ultra-Low-End Roblox Studio Editor/Runtime in Rust</strong><br>
+  Powered by the open-source <a href="https://github.com/rippelz/rustudio">rustudio (v0.3.4)</a> engine.
 </p>
 
-**A native Linux/Windows/macOS Roblox Studio, written in Rust.** Open, edit and save
-Roblox places, press Play and run them with real Luau, physics, characters
-and GUIs, without Wine.
+> [!NOTE]
+> **Pre-release Demo Available:** Download the Android APK (`RtRustMobile-0.3.4-debug.apk`) and view full benchmarks & feature notes in [MOBILE_DEMO.md](MOBILE_DEMO.md) or on the [v0.3.4-mobile-demo.1 Release](https://github.com/4sakenme/RtRust/releases/tag/v0.3.4-mobile-demo.1).
 
-Rustudio is very much a beta/prototype, I wouldn't call it a studio replacement
-quite yet.
+## Engine Architecture &amp; Origin
+
+- **Core Engine ([rippelz/rustudio](https://github.com/rippelz/rustudio) `v0.3.4`)**:
+  - A native Rust Roblox Studio implementation (no Wine required) that handles `.rbxl`/`.rbxlx` places and `.rbxm`/`.rbxmx` models, real Luau VM execution (`--!native` codegen), Rapier3D physics, R6/R15 character simulation, `wgpu` 3D rendering, incremental voxel lighting (~97% less CPU), multi-threaded World GUI layout, Team Create live sync, Rojo/Argon File Sync, MicroProfiler, and a built-in MCP server.
+- **RtRustMobile Layer (`4sakenme/RtRust` — `mobile` branch)**:
+  - Adapts the engine for **Android / Waydroid** and **low-end hardware**:
+    - **Hardware Tuner &amp; Thread Governor**: auto-applies `RUSTUDIO_LOWEND=1`, `RUSTUDIO_PLAY_WORKER=0`, `RAYON_NUM_THREADS=2`, and Eco 30 FPS / High 60 FPS modes (reaching **152.9 FPS** in Ultra-Low headless Play benchmark vs **31.2 FPS** in unoptimized High mode).
+    - **Mobile &amp; Touch UI**: Immersive Fullscreen (`MainActivity`), Responsive Mobile Drawers, touch-friendly Explorer (always-visible `+`, no accidental double-tap rename), 3D Workspace touch camera + `👁 Cam` toggle (marquee disabled on mobile), and Play Mode Thumbstick / `JUMP` / 360° free-drag camera + Rust Play Fallback when offline.
+    - **Android Runtime &amp; Networking**: writable app-private storage (`internal_data_path()`), `RootCerts::WebPki`, and `AndroidDnsResolver` (direct UDP DNS fallback).
+
+---
+
+*Upstream `rustudio` documentation below:*
 
 ![Playing a test place in rustudio](docs/images/play.png)
 
