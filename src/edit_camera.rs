@@ -63,9 +63,14 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     let prefs = crate::studio_settings::camera_prefs();
 
     // 1. Virtual Fly Joystick (bottom-left) + Altitude / Focus / Mode (bottom-right)
-    let ( _safe_top, safe_bottom, safe_left, safe_right) = crate::platform::get_safe_area_insets();
-    let joy_center = Pos2::new(rect.min.x + safe_left + 64.0, rect.max.y - safe_bottom - 64.0);
-    let joy_radius = 42.0;
+    // Scale proportionally to screen height so controls fit comfortably on both iPhone landscape (375pt tall) and iPad (768pt+ tall).
+    let (_safe_top, safe_bottom, safe_left, _safe_right) = crate::platform::get_safe_area_insets();
+    let h_scale = (rect.height() / 420.0).clamp(0.76, 1.05);
+    let joy_radius = (42.0 * h_scale).round();
+    let joy_center = Pos2::new(
+        rect.min.x + safe_left + 16.0 + joy_radius,
+        rect.max.y - safe_bottom - 14.0 - joy_radius,
+    );
     let joy_hit_rect = Rect::from_center_size(joy_center, Vec2::splat(joy_radius * 2.3));
     let joy_resp = ui.interact(joy_hit_rect, egui::Id::new("edit_cam_fly_joy"), Sense::click_and_drag());
 
@@ -92,7 +97,7 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     let mut joy_vec = if joy_touch_id.is_some() { prev_joy_vec } else { Vec2::ZERO };
     let mut touch_look_delta = Vec2::ZERO;
     let right_ctrl_zone = Rect::from_min_max(
-        Pos2::new(rect.max.x - safe_right - 175.0, rect.max.y - safe_bottom - 130.0),
+        Pos2::new(rect.max.x - 175.0 * h_scale, rect.max.y - safe_bottom - 140.0 * h_scale),
         Pos2::new(rect.max.x, rect.max.y),
     );
     for ev in &events {
@@ -194,38 +199,45 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         resp
     };
 
-    let up_c = Pos2::new(rect.max.x - 36.0, rect.max.y - 96.0);
-    let dn_c = Pos2::new(rect.max.x - 36.0, rect.max.y - 38.0);
-    let spd_c = Pos2::new(rect.max.x - 94.0, rect.max.y - 38.0);
-    let foc_c = Pos2::new(rect.max.x - 94.0, rect.max.y - 96.0);
-    let mode_c = Pos2::new(rect.max.x - 146.0, rect.max.y - 96.0);
+    let r_big = (24.0 * h_scale).round();
+    let r_sm = (20.0 * h_scale).round();
+    let step_x = (56.0 * h_scale).round();
+    let step_y = (56.0 * h_scale).round();
+    let base_x = rect.max.x - 14.0 - r_big;
+    let base_y = rect.max.y - safe_bottom - 14.0 - r_big;
 
-    let up_r = circle_btn(ui, "edit_cam_up_c", up_c, 24.0, false);
+    let dn_c = Pos2::new(base_x, base_y);
+    let up_c = Pos2::new(base_x, base_y - step_y);
+    let spd_c = Pos2::new(base_x - step_x, base_y);
+    let foc_c = Pos2::new(base_x - step_x, base_y - step_y);
+    let mode_c = Pos2::new(base_x - step_x * 1.9, base_y - step_y);
+
+    let up_r = circle_btn(ui, "edit_cam_up_c", up_c, r_big, false);
     let up_held = up_r.is_pointer_button_down_on();
-    rustudio_engine::ti::paint(&painter, Rect::from_center_size(up_c, Vec2::splat(22.0)), "chevron-up", Color32::WHITE);
+    rustudio_engine::ti::paint(&painter, Rect::from_center_size(up_c, Vec2::splat(20.0 * h_scale)), "chevron-up", Color32::WHITE);
 
-    let dn_r = circle_btn(ui, "edit_cam_dn_c", dn_c, 24.0, false);
+    let dn_r = circle_btn(ui, "edit_cam_dn_c", dn_c, r_big, false);
     let down_held = dn_r.is_pointer_button_down_on();
-    rustudio_engine::ti::paint(&painter, Rect::from_center_size(dn_c, Vec2::splat(22.0)), "chevron-down", Color32::WHITE);
+    rustudio_engine::ti::paint(&painter, Rect::from_center_size(dn_c, Vec2::splat(20.0 * h_scale)), "chevron-down", Color32::WHITE);
 
-    let spd_r = circle_btn(ui, "edit_cam_spd_c", spd_c, 20.0, false).on_hover_text("Camera speed (x1 / x2 / x4)");
+    let spd_r = circle_btn(ui, "edit_cam_spd_c", spd_c, r_sm, false).on_hover_text("Camera speed (x1 / x2 / x4)");
     if spd_r.clicked() {
         speed_mul = if speed_mul < 1.5 { 2.0 } else if speed_mul < 3.0 { 4.0 } else { 1.0 };
     }
     let spd_txt = if speed_mul >= 3.5 { "x4" } else if speed_mul >= 1.5 { "x2" } else { "x1" };
-    painter.text(spd_c, egui::Align2::CENTER_CENTER, spd_txt, egui::FontId::proportional(13.0), Color32::WHITE);
+    painter.text(spd_c, egui::Align2::CENTER_CENTER, spd_txt, egui::FontId::proportional(12.5 * h_scale), Color32::WHITE);
 
-    let foc_r = circle_btn(ui, "edit_cam_foc_c", foc_c, 20.0, false).on_hover_text("Focus selected (F)");
+    let foc_r = circle_btn(ui, "edit_cam_foc_c", foc_c, r_sm, false).on_hover_text("Focus selected (F)");
     if foc_r.clicked() {
         focus_clicked = true;
     }
-    rustudio_engine::ti::paint(&painter, Rect::from_center_size(foc_c, Vec2::splat(18.0)), "focus-centered", Color32::WHITE);
+    rustudio_engine::ti::paint(&painter, Rect::from_center_size(foc_c, Vec2::splat(17.0 * h_scale)), "focus-centered", Color32::WHITE);
 
     let mode_lbl = match mode {
         EditCamMode::Fly => "Fly",
         EditCamMode::Orbit => "Orb",
     };
-    let mode_r = circle_btn(ui, "edit_cam_mode_c", mode_c, 20.0, mode == EditCamMode::Orbit).on_hover_text("Fly / Orbit camera mode");
+    let mode_r = circle_btn(ui, "edit_cam_mode_c", mode_c, r_sm, mode == EditCamMode::Orbit).on_hover_text("Fly / Orbit camera mode");
     if mode_r.clicked() {
         mode = match mode {
             EditCamMode::Fly => EditCamMode::Orbit,

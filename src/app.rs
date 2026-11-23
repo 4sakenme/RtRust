@@ -2410,9 +2410,16 @@ impl RustudioApp {
 
         let screen_rect = ctx.content_rect();
         let is_portrait = screen_rect.width() < screen_rect.height();
+        let is_mobile_landscape = !is_portrait
+            && (cfg!(any(target_os = "android", target_os = "ios"))
+                || rustudio_core::mobile::is_drawer_mode());
 
         if is_portrait {
             self.ed.portrait_layout_ui(ui, &ctx, screen_rect);
+            self.ed.ui.viewport_hidden =
+                self.ed.ui.portrait_tab != crate::studio_ui::PortraitTab::Viewport;
+        } else if is_mobile_landscape {
+            self.ed.landscape_mobile_layout_ui(ui, &ctx, screen_rect);
             self.ed.ui.viewport_hidden =
                 self.ed.ui.portrait_tab != crate::studio_ui::PortraitTab::Viewport;
         } else {
@@ -2472,21 +2479,23 @@ impl RustudioApp {
 
         let _dock_scope = rustudio_core::bench::scope("dock_panels");
         let windows: Vec<(String, String)> = self.panels.popped.iter().map(|w| (w.key.clone(), w.title())).collect();
-        let mut dock_rect = egui::Rect::NOTHING;
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::BG))
-            .show(ui, |ui| {
-                dock_rect = ui.max_rect();
-                DockArea::new(&mut self.dock)
-                    .style(theme::dock_style(ui.style()))
-                    .show_add_buttons(false)
-                    .show_leaf_collapse_buttons(false)
-                    .show_leaf_close_all_buttons(false)
-                    .show_inside(ui, &mut Viewer { ed: &mut self.ed, window: None, windows: &windows });
-            });
+        let mut dock_rect = screen_rect;
+        if !is_portrait && !is_mobile_landscape {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::new().fill(theme::BG))
+                .show(ui, |ui| {
+                    dock_rect = ui.max_rect();
+                    DockArea::new(&mut self.dock)
+                        .style(theme::dock_style(ui.style()))
+                        .show_add_buttons(false)
+                        .show_leaf_collapse_buttons(false)
+                        .show_leaf_close_all_buttons(false)
+                        .show_inside(ui, &mut Viewer { ed: &mut self.ed, window: None, windows: &windows });
+                });
+        }
         drop(_dock_scope);
-        // Floating Left/Right Drawers for Explorer & Properties in Mobile Drawer Mode
-        if rustudio_core::mobile::is_drawer_mode() {
+        // Floating Left/Right Drawers for Explorer & Properties in Desktop Mobile Drawer Mode
+        if !is_portrait && !is_mobile_landscape && rustudio_core::mobile::is_drawer_mode() {
             let max_h = (dock_rect.height() - 16.0).max(200.0);
             let drawer_w = (dock_rect.width() * 0.64).clamp(210.0, 260.0);
             if self.ed.ui.mobile_explorer_open {
