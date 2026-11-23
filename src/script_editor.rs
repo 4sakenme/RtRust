@@ -697,8 +697,8 @@ impl Editor {
         let wrap_id = egui::Id::new("mobile_script_wrap_override");
         let wrap = ui.ctx().data(|d| d.get_temp::<bool>(wrap_id))
             .unwrap_or_else(|| crate::studio_settings::flag("Studio", "Text Wrapping", false));
-        let bg = crate::studio_settings::script_colors().background;
-        ui.painter().rect_filled(ui.available_rect_before_wrap(), 0.0, bg);
+        let editor_bg_rect = ui.available_rect_before_wrap();
+        crate::wallpaper::paint_code_background(ui.ctx(), ui.painter(), editor_bg_rect);
         let error_line = buf.error.as_ref().map(|e| e.0);
         let mut changed = false;
         let prev_text = buf.text.clone();

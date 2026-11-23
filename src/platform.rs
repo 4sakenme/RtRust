@@ -487,3 +487,300 @@ fn android_open_url(url: &str) {
         Ok(())
     });
 }
+
+// ── Soft Keyboard Dismissal (Tap Outside TextEdit) ──────────────────────────
+
+/// Dismisses the OS soft keyboard on iOS (`UIWindow endEditing:YES`) and Android
+/// whenever the user taps outside a focused `egui::TextEdit`.
+pub fn dismiss_soft_keyboard() {
+    #[cfg(target_os = "ios")]
+    {
+        ios_dismiss_keyboard();
+    }
+    #[cfg(target_os = "android")]
+    {
+        crate::android_ime::reset_ime_composing();
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn ios_dismiss_keyboard() {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+        if app.is_null() {
+            return;
+        }
+        let _: bool = msg_send![
+            app,
+            sendAction: objc2::sel!(resignFirstResponder),
+            to: std::ptr::null::<AnyObject>(),
+            from: std::ptr::null::<AnyObject>(),
+            forEvent: std::ptr::null::<AnyObject>()
+        ];
+        let windows: *mut AnyObject = msg_send![app, windows];
+        if !windows.is_null() {
+            let count: usize = msg_send![windows, count];
+            for idx in 0..count {
+                let win: *mut AnyObject = msg_send![windows, objectAtIndex: idx];
+                if !win.is_null() {
+                    let _: bool = msg_send![win, endEditing: true];
+                }
+            }
+        }
+    }
+}
+
+// ── Cross-Platform Wallpaper Image Picker (iOS / Android / Desktop) ─────────
+
+static PENDING_WALLPAPER_PICK: std::sync::Mutex<Option<(String, PathBuf)>> =
+    std::sync::Mutex::new(None);
+static ACTIVE_PICK_TARGET: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Drains any newly picked wallpaper image from the native iOS/Android/Desktop picker
+/// and notifies `crate::wallpaper::notify_picked_wallpaper`.
+pub fn poll_picked_wallpaper() {
+    if let Ok(mut guard) = PENDING_WALLPAPER_PICK.lock() {
+        if let Some((target, path)) = guard.take() {
+            drop(guard);
+            crate::wallpaper::notify_picked_wallpaper(&target, path);
+        }
+    }
+}
+
+/// Opens the native device image picker for `"studio"` or `"code"` wallpaper target.
+pub fn pick_wallpaper_image(target: &str) {
+    if let Ok(mut g) = ACTIVE_PICK_TARGET.lock() {
+        *g = Some(target.to_string());
+    }
+    #[cfg(target_os = "ios")]
+    {
+        ios_pick_wallpaper_image(target);
+        return;
+    }
+    #[cfg(target_os = "android")]
+    {
+        android_pick_wallpaper_image(target);
+        return;
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    {
+        let target_owned = target.to_string();
+        std::thread::spawn(move || {
+            if let Some(src_path) = rfd::FileDialog::new()
+                .add_filter("Images", &["png", "jpg", "jpeg", "webp"])
+                .pick_file()
+            {
+                let dir = app_data_dir().join("wallpapers");
+                let _ = std::fs::create_dir_all(&dir);
+                let ext = src_path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("png");
+                let dest = dir.join(format!("custom_{target_owned}.{ext}"));
+                if std::fs::copy(&src_path, &dest).is_ok() {
+                    if let Ok(mut g) = PENDING_WALLPAPER_PICK.lock() {
+                        *g = Some((target_owned, dest));
+                    }
+                }
+            }
+        });
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn ios_pick_wallpaper_image(_target: &str) {
+    use objc2::declare::ClassBuilder;
+    use objc2::runtime::{AnyClass, AnyObject, Sel};
+    use objc2::{class, msg_send, sel};
+    use objc2_foundation::NSString;
+    use std::sync::Once;
+
+    static REGISTER_DELEGATE: Once = Once::new();
+
+    unsafe extern "C" fn did_finish_picking(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        picker: *mut AnyObject,
+        info: *mut AnyObject,
+    ) {
+        unsafe {
+            if !info.is_null() {
+                let target_str = ACTIVE_PICK_TARGET
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.clone())
+                    .unwrap_or_else(|| "studio".to_string());
+                let dir = app_data_dir().join("wallpapers");
+                let _ = std::fs::create_dir_all(&dir);
+                let dest = dir.join(format!("ios_{target_str}_wallpaper.png"));
+
+                // 1. Check UIImagePickerControllerImageURL first (preserves original PNG/JPEG bytes)
+                let key_url = NSString::from_str("UIImagePickerControllerImageURL");
+                let ns_url: *mut AnyObject = msg_send![info, objectForKey: &*key_url];
+                let mut copied = false;
+                if !ns_url.is_null() {
+                    let path_ns: *mut AnyObject = msg_send![ns_url, path];
+                    if !path_ns.is_null() {
+                        let utf8: *const std::ffi::c_char = msg_send![path_ns, UTF8String];
+                        if !utf8.is_null() {
+                            let s = std::ffi::CStr::from_ptr(utf8).to_string_lossy().into_owned();
+                            if std::fs::copy(&s, &dest).is_ok() {
+                                copied = true;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Fallback: write UIImagePickerControllerOriginalImage via NSData writeToFile
+                if !copied {
+                    let key_img = NSString::from_str("UIImagePickerControllerOriginalImage");
+                    let ui_img: *mut AnyObject = msg_send![info, objectForKey: &*key_img];
+                    if !ui_img.is_null() {
+                        extern "C" {
+                            fn UIImagePNGRepresentation(image: *mut AnyObject) -> *mut AnyObject;
+                        }
+                        let png_data = UIImagePNGRepresentation(ui_img);
+                        if !png_data.is_null() {
+                            let dest_str = NSString::from_str(&dest.display().to_string());
+                            let ok: bool = msg_send![png_data, writeToFile: &*dest_str, atomically: true];
+                            if ok {
+                                copied = true;
+                            }
+                        }
+                    }
+                }
+
+                if copied {
+                    if let Ok(mut g) = PENDING_WALLPAPER_PICK.lock() {
+                        *g = Some((target_str, dest));
+                    }
+                }
+            }
+            if !picker.is_null() {
+                let null_block: *const AnyObject = std::ptr::null();
+                let _: () = msg_send![picker, dismissViewControllerAnimated: true, completion: null_block];
+            }
+        }
+    }
+
+    unsafe extern "C" fn did_cancel(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        picker: *mut AnyObject,
+    ) {
+        unsafe {
+            if !picker.is_null() {
+                let null_block: *const AnyObject = std::ptr::null();
+                let _: () = msg_send![picker, dismissViewControllerAnimated: true, completion: null_block];
+            }
+        }
+    }
+
+    REGISTER_DELEGATE.call_once(|| unsafe {
+        if let Some(mut builder) = ClassBuilder::new(c"RtRustWallpaperPickerDelegate", class!(NSObject)) {
+            builder.add_method(
+                sel!(imagePickerController:didFinishPickingMediaWithInfo:),
+                did_finish_picking
+                    as unsafe extern "C" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(imagePickerControllerDidCancel:),
+                did_cancel as unsafe extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            let _ = builder.register();
+        }
+    });
+
+    unsafe {
+        let Some(del_cls) = AnyClass::get(c"RtRustWallpaperPickerDelegate") else {
+            return;
+        };
+        let delegate: *mut AnyObject = msg_send![del_cls, new];
+        let picker: *mut AnyObject = msg_send![class!(UIImagePickerController), new];
+        if picker.is_null() || delegate.is_null() {
+            return;
+        }
+        // sourceType 0 = UIImagePickerControllerSourceTypePhotoLibrary
+        let _: () = msg_send![picker, setSourceType: 0isize];
+        let _: () = msg_send![picker, setDelegate: delegate];
+
+        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+        if app.is_null() {
+            return;
+        }
+        let windows: *mut AnyObject = msg_send![app, windows];
+        if windows.is_null() {
+            return;
+        }
+        let count: usize = msg_send![windows, count];
+        for idx in 0..count {
+            let win: *mut AnyObject = msg_send![windows, objectAtIndex: idx];
+            if win.is_null() {
+                continue;
+            }
+            let root_vc: *mut AnyObject = msg_send![win, rootViewController];
+            if !root_vc.is_null() {
+                let null_block: *const AnyObject = std::ptr::null();
+                let _: () = msg_send![
+                    root_vc,
+                    presentViewController: picker,
+                    animated: true,
+                    completion: null_block
+                ];
+                break;
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn android_pick_wallpaper_image(target: &str) {
+    let dir = app_data_dir().join("wallpapers");
+    let _ = std::fs::create_dir_all(&dir);
+    for candidate in ["/sdcard/Download/wallpaper.png", "/sdcard/Download/wallpaper.jpg", "/sdcard/Pictures/wallpaper.png"] {
+        let p = Path::new(candidate);
+        if p.exists() {
+            let dest = dir.join(format!("android_{target}.png"));
+            if std::fs::copy(p, &dest).is_ok() {
+                if let Ok(mut g) = PENDING_WALLPAPER_PICK.lock() {
+                    *g = Some((target.to_string(), dest));
+                }
+                return;
+            }
+        }
+    }
+    let ctx = ndk_context::android_context();
+    if ctx.vm().is_null() || ctx.context().is_null() {
+        return;
+    }
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) };
+    let activity_ptr: jni::sys::jobject = ctx.context().cast();
+    let _ = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+        let activity = unsafe { jni::objects::JObject::from_raw(env, activity_ptr) };
+        let j_action = env.new_string("android.intent.action.OPEN_DOCUMENT")?;
+        let j_type = env.new_string("image/*")?;
+        let intent = env.new_object(
+            jni::jni_str!("android/content/Intent"),
+            jni::jni_sig!("(Ljava/lang/String;)V"),
+            &[jni::objects::JValue::Object(&j_action)],
+        )?;
+        let _ = env.call_method(
+            &intent,
+            jni::jni_str!("setType"),
+            jni::jni_sig!("(Ljava/lang/String;)Landroid/content/Intent;"),
+            &[jni::objects::JValue::Object(&j_type)],
+        )?;
+        let _ = env.call_method(
+            &activity,
+            jni::jni_str!("startActivity"),
+            jni::jni_sig!("(Landroid/content/Intent;)V"),
+            &[jni::objects::JValue::Object(&intent)],
+        );
+        std::mem::forget(activity);
+        Ok(())
+    });
+}
+

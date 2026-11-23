@@ -124,10 +124,14 @@ pub const RUSTUDIO_PAGE: usize = PAGES.len();
 const RUSTUDIO_PAGE_NAME: &str = "rustudio";
 pub const FONTS_PAGE: usize = PAGES.len() + 1;
 const FONTS_PAGE_NAME: &str = "Fonts & Typography";
+pub const WALLPAPERS_PAGE: usize = PAGES.len() + 2;
+const WALLPAPERS_PAGE_NAME: &str = "Themes & Wallpapers";
 
 fn page_name(i: usize) -> &'static str {
     if i == FONTS_PAGE {
         FONTS_PAGE_NAME
+    } else if i == WALLPAPERS_PAGE {
+        WALLPAPERS_PAGE_NAME
     } else {
         PAGES.get(i).copied().unwrap_or(RUSTUDIO_PAGE_NAME)
     }
@@ -646,6 +650,11 @@ impl Dialog {
             self.page = RUSTUDIO_PAGE;
         } else if page.eq_ignore_ascii_case(FONTS_PAGE_NAME) || page.eq_ignore_ascii_case("fonts") {
             self.page = FONTS_PAGE;
+        } else if page.eq_ignore_ascii_case(WALLPAPERS_PAGE_NAME)
+            || page.eq_ignore_ascii_case("wallpapers")
+            || page.eq_ignore_ascii_case("themes")
+        {
+            self.page = WALLPAPERS_PAGE;
         }
     }
 
@@ -735,6 +744,9 @@ impl Dialog {
         let q = self.search.trim().to_lowercase();
         if q.is_empty() || "fonts typography monaspace jetbrains fira inter vietnam roboto fredoka".contains(&q) {
             visible.push(FONTS_PAGE);
+        }
+        if q.is_empty() || "themes wallpapers background image pastel code editor color".contains(&q) {
+            visible.push(WALLPAPERS_PAGE);
         }
         if !visible.contains(&self.page) {
             if let Some(&f) = visible.first() {
@@ -832,6 +844,10 @@ impl Dialog {
         }
         if self.page == FONTS_PAGE {
             crate::font_manager::settings_ui(ui);
+            return;
+        }
+        if self.page == WALLPAPERS_PAGE {
+            crate::wallpaper::settings_ui(ui);
             return;
         }
         let page = PAGES[self.page];

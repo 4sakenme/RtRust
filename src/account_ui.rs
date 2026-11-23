@@ -66,6 +66,13 @@ impl Editor {
                 })
             });
         let popup_rect = shown.inner.response.rect.expand(12.0);
+        crate::wallpaper::draw_luminous_border_trail(
+            ctx,
+            &ctx.layer_painter(shown.response.layer_id),
+            shown.inner.response.rect,
+            8.0,
+            crate::wallpaper::PASTEL_LAVENDER,
+        );
         // Click outside (not on the button, which toggles) or Esc closes it.
         // Do not auto-close on outside press while a text field has keyboard focus,
         // so tapping to dismiss the iOS keyboard or tapping Sign in while the

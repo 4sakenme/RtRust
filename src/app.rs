@@ -2373,6 +2373,18 @@ impl RustudioApp {
         if (ctx.zoom_factor() - ed.ui.zoom).abs() > 1e-3 {
             ctx.set_zoom_factor(ed.ui.zoom);
         }
+        // If keyboard input was wanted last frame and is no longer wanted this frame,
+        // or the user tapped outside any focused widget, dismiss the iOS/Android soft keyboard.
+        {
+            let wants_kb = ctx.egui_wants_keyboard_input();
+            let prev_kb_id = egui::Id::new("mobile_prev_wants_kb");
+            let prev_wants_kb = ctx.data(|d| d.get_temp::<bool>(prev_kb_id).unwrap_or(false));
+            if prev_wants_kb && !wants_kb {
+                crate::platform::dismiss_soft_keyboard();
+            }
+            ctx.data_mut(|d| d.insert_temp(prev_kb_id, wants_kb));
+        }
+        crate::wallpaper::modal_ui(&ctx);
         // The Start Page replaces the editor's chrome until something opens.
         if ed.start_page_ui(ui) {
             ed.confirm_ui(&ctx);
@@ -2380,6 +2392,8 @@ impl RustudioApp {
             ed.cloud_windows(&ctx);
             ed.mcp_windows(&ctx);
             ed.file_sync_popover_ui(&ctx);
+            ed.ui.studio_settings.ui(&ctx);
+            crate::wallpaper::modal_ui(&ctx);
             ed.mcp_tick(&ctx);
             if ed.harness.run.screenshot.is_some() {
                 ed.harness_tick(&ctx);

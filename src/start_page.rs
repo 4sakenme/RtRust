@@ -473,27 +473,72 @@ impl Editor {
 
         let screen_w = ui.ctx().content_rect().width();
         let narrow = screen_w < 600.0;
-        let top_pad = if narrow { 8 } else { 16 };
+        let (safe_top, safe_bottom, safe_left, safe_right) = crate::platform::get_safe_area_insets();
+        let top_pad_x = ((if narrow { 8.0 } else { 16.0 }) + safe_left.max(safe_right)).round().clamp(4.0, 96.0) as i8;
+        let top_pad_y = if safe_top > 0.0 { (safe_top + 4.0).round().clamp(0.0, 96.0) as i8 } else { 0 };
         egui::Panel::top("start_top")
-            .exact_size(48.0)
-            .frame(egui::Frame::new().fill(theme::MENU_BAR).inner_margin(egui::Margin::symmetric(top_pad, 0)))
+            .exact_size(48.0 + if safe_top > 0.0 { safe_top + 4.0 } else { 0.0 })
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(18, 20, 27, 236))
+                    .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.22)))
+                    .inner_margin(egui::Margin {
+                        left: top_pad_x,
+                        right: top_pad_x,
+                        top: top_pad_y,
+                        bottom: 0,
+                    }),
+            )
             .show(ui, |ui| self.start_top(ui, &mut todo));
-        if self.start.nav_open {
-            let nav_w = if narrow { (screen_w * 0.62).clamp(170.0, 220.0) } else { 220.0 };
+
+        // Smooth animated collapsible left sidebar (0.0 .. 1.0 slide-in/out)
+        let nav_anim = ctx.animate_bool_with_time(
+            egui::Id::new("start_nav_slide_anim"),
+            self.start.nav_open,
+            0.18,
+        );
+        if nav_anim > 0.01 {
+            let target_w = if narrow {
+                (screen_w * 0.64).clamp(178.0, 226.0)
+            } else {
+                226.0
+            };
+            let nav_w = (target_w * nav_anim).max(16.0);
             egui::Panel::left("start_nav")
                 .exact_size(nav_w)
                 .resizable(false)
-                .frame(egui::Frame::new().fill(theme::PANEL_DARK).inner_margin(egui::Margin::symmetric(10, 14)))
-                .show(ui, |ui| self.start_nav(ui, &mut todo));
+                .frame(
+                    egui::Frame::new()
+                        .fill(Color32::from_rgba_unmultiplied(16, 18, 25, 238))
+                        .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.25)))
+                        .inner_margin(egui::Margin {
+                            left: (10.0 + safe_left).round().clamp(8.0, 80.0) as i8,
+                            right: 10,
+                            top: 14,
+                            bottom: (14.0 + safe_bottom).round().clamp(10.0, 80.0) as i8,
+                        }),
+                )
+                .show(ui, |ui| {
+                    ui.set_clip_rect(ui.max_rect());
+                    self.start_nav(ui, &mut todo);
+                });
         }
         let body_margin = if narrow {
-            egui::Margin { left: 10, right: 10, top: 12, bottom: 8 }
+            egui::Margin {
+                left: (10.0 + safe_left).round().clamp(8.0, 80.0) as i8,
+                right: (10.0 + safe_right).round().clamp(8.0, 80.0) as i8,
+                top: 12,
+                bottom: (8.0 + safe_bottom).round().clamp(8.0, 80.0) as i8,
+            }
         } else {
             egui::Margin { left: 28, right: 20, top: 20, bottom: 12 }
         };
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(theme::BG).inner_margin(body_margin))
-            .show(ui, |ui| self.start_body(ui, &mut todo));
+            .show(ui, |ui| {
+                crate::wallpaper::paint_studio_background(&ctx, ui.painter(), ui.max_rect().expand(40.0));
+                self.start_body(ui, &mut todo);
+            });
 
         for d in todo {
             match d {
@@ -543,42 +588,95 @@ impl Editor {
 
     fn start_top(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
         ui.horizontal_centered(|ui| {
-            let arrow = if self.start.nav_open { "◀" } else { "▶" };
+            let arrow = if self.start.nav_open { "◀" } else { "☰" };
             if ui
                 .add(
-                    egui::Button::new(RichText::new(arrow).size(14.0).color(theme::TEXT))
-                        .fill(theme::PANEL_ALT)
-                        .min_size(Vec2::new(28.0, 28.0)),
+                    egui::Button::new(
+                        RichText::new(arrow)
+                            .size(14.5)
+                            .strong()
+                            .color(crate::wallpaper::PASTEL_LAVENDER),
+                    )
+                    .fill(Color32::from_rgba_unmultiplied(34, 37, 48, 220))
+                    .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.45)))
+                    .corner_radius(CornerRadius::same(8))
+                    .min_size(Vec2::new(32.0, 30.0)),
                 )
-                .on_hover_text(if self.start.nav_open { "Hide menu" } else { "Show menu" })
+                .on_hover_text(if self.start.nav_open { "Hide sidebar" } else { "Open navigation drawer" })
                 .clicked()
             {
                 self.start.nav_open = !self.start.nav_open;
             }
-            ui.add_space(4.0);
+            ui.add_space(6.0);
             crate::icons::logo(ui, 24.0);
-            if ui.available_width() > 300.0 {
+            if ui.available_width() > 260.0 {
                 ui.add_space(4.0);
-                ui.label(RichText::new("RtRustMobile").size(15.0).strong().color(theme::TEXT));
+                ui.label(
+                    RichText::new("RtRust Studio")
+                        .size(15.5)
+                        .strong()
+                        .color(crate::wallpaper::PASTEL_LAVENDER),
+                );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let label = if self.game.account.signed_in() {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                // Gear / Theme Settings Button
+                if ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new("⚙")
+                                .size(15.0)
+                                .color(crate::wallpaper::PASTEL_MINT),
+                        )
+                        .fill(Color32::from_rgba_unmultiplied(34, 37, 48, 220))
+                        .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_MINT.gamma_multiply(0.45)))
+                        .corner_radius(CornerRadius::same(8))
+                        .min_size(Vec2::new(32.0, 30.0)),
+                    )
+                    .on_hover_text("Studio Settings — Themes & Wallpapers")
+                    .clicked()
+                {
+                    crate::wallpaper::toggle_modal(ui.ctx());
+                }
+
+                let signed = self.game.account.signed_in();
+                let label = if signed {
                     self.game.account.status_short().trim_start_matches("Roblox: ").to_string()
                 } else {
                     "Sign in".to_string()
                 };
-                if ui
-                    .add(egui::Button::new(RichText::new(label).color(theme::TEXT)).fill(theme::PANEL_ALT))
-                    .on_hover_text("Roblox account")
-                    .clicked()
-                {
+                let acc_accent = if signed {
+                    crate::wallpaper::PASTEL_MINT
+                } else {
+                    crate::wallpaper::PASTEL_LAVENDER
+                };
+                let acc_btn = ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new(label)
+                                .size(12.5)
+                                .strong()
+                                .color(if signed { Color32::WHITE } else { Color32::BLACK }),
+                        )
+                        .fill(if signed {
+                            Color32::from_rgba_unmultiplied(38, 52, 46, 230)
+                        } else {
+                            acc_accent
+                        })
+                        .stroke(Stroke::new(1.0, acc_accent.gamma_multiply(0.7)))
+                        .corner_radius(CornerRadius::same(14))
+                        .min_size(Vec2::new(68.0, 30.0)),
+                    )
+                    .on_hover_text("Roblox account");
+                self.ui_rects.insert("account", acc_btn.rect);
+                if acc_btn.clicked() {
                     todo.push(Do::Account);
                 }
-                ui.add_space(6.0);
-                let search_w = (ui.available_width() - 12.0).clamp(72.0, 240.0);
+
+                let search_w = (ui.available_width() - 8.0).clamp(68.0, 230.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.start.search)
-                        .hint_text("🔍  Search")
+                        .hint_text("🔍 Search places & templates")
                         .desired_width(search_w),
                 );
             });
@@ -586,37 +684,73 @@ impl Editor {
     }
 
     fn start_nav(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
-        ui.spacing_mut().item_spacing.y = 2.0;
+        ui.spacing_mut().item_spacing.y = 4.0;
         let w = ui.available_width();
-        let big = |ui: &mut egui::Ui, text: &str, fill: Color32| {
+        let big = |ui: &mut egui::Ui, text: &str, fill: Color32, fg: Color32, border: Color32| {
             ui.add_sized(
-                [w, 34.0],
-                egui::Button::new(RichText::new(text).color(Color32::WHITE).strong())
+                [w, 36.0],
+                egui::Button::new(RichText::new(text).color(fg).strong().size(13.0))
                     .fill(fill)
-                    .corner_radius(CornerRadius::same(4)),
+                    .stroke(Stroke::new(1.0, border))
+                    .corner_radius(CornerRadius::same(10)),
             )
         };
-        if big(ui, "+  New Experience", theme::ACCENT).on_hover_text(format!("A new Baseplate place ({})", crate::studio_ui::shortcut_label("Ctrl+N"))).clicked() {
+        if big(
+            ui,
+            "✨ + New Baseplate",
+            crate::wallpaper::PASTEL_LAVENDER,
+            Color32::from_rgb(16, 18, 26),
+            crate::wallpaper::PASTEL_LAVENDER,
+        )
+        .on_hover_text(format!("A new Baseplate place ({})", crate::studio_ui::shortcut_label("Ctrl+N")))
+        .clicked()
+        {
             todo.push(Do::Template(self.start.default_template()));
         }
-        ui.add_space(6.0);
-        if big(ui, "Open from File…", theme::PANEL_ALT).on_hover_text(crate::studio_ui::shortcut_label("Ctrl+O")).clicked() {
+        if big(
+            ui,
+            "📂 Open File (.rbxl)…",
+            Color32::from_rgba_unmultiplied(30, 34, 46, 220),
+            Color32::WHITE,
+            crate::wallpaper::PASTEL_SKY.gamma_multiply(0.45),
+        )
+        .on_hover_text(crate::studio_ui::shortcut_label("Ctrl+O"))
+        .clicked()
+        {
             todo.push(Do::OpenFile(None));
         }
-        if big(ui, "Open Folder…", theme::PANEL_ALT)
-            .on_hover_text("A *.project.json folder (files are the truth)")
-            .clicked()
+        if big(
+            ui,
+            "📁 Open Project Folder…",
+            Color32::from_rgba_unmultiplied(30, 34, 46, 220),
+            Color32::WHITE,
+            crate::wallpaper::PASTEL_MINT.gamma_multiply(0.45),
+        )
+        .on_hover_text("A *.project.json folder (files are the truth)")
+        .clicked()
         {
             todo.push(Do::OpenFolder);
         }
-        ui.add_space(14.0);
-        ui.label(RichText::new("JUMP TO").small().color(theme::TEXT_DIM));
+        if big(
+            ui,
+            "🎨 Themes & Wallpapers",
+            Color32::from_rgba_unmultiplied(34, 30, 46, 220),
+            crate::wallpaper::PASTEL_PEACH,
+            crate::wallpaper::PASTEL_PEACH.gamma_multiply(0.5),
+        )
+        .clicked()
+        {
+            crate::wallpaper::toggle_modal(ui.ctx());
+        }
+        ui.add_space(10.0);
+        ui.label(RichText::new("NAVIGATION").small().strong().color(crate::wallpaper::PASTEL_LAVENDER));
         ui.add_space(4.0);
         let mut entries: Vec<(String, String, bool)> = vec![
-            ("recent".into(), "Recent".into(), false),
-            ("files".into(), "Recent Files".into(), false),
-            ("mine".into(), "My Experiences".into(), false),
-            ("shared".into(), "Shared with Me".into(), false),
+            ("templates".into(), "🏠 Home & Templates".into(), false),
+            ("recent".into(), "🕒 Recent Cloud".into(), false),
+            ("files".into(), "📄 Recent Local Files".into(), false),
+            ("mine".into(), "🎮 My Experiences".into(), false),
+            ("shared".into(), "🤝 Shared with Me".into(), false),
         ];
         if let Some(Ok(groups)) = &self.start.groups {
             for g in groups {
@@ -692,28 +826,17 @@ impl Editor {
     fn start_body(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
         // The open-by-ID row sits at the bottom, as in File > Open from Roblox.
         egui::Panel::bottom("start_url")
-            .frame(egui::Frame::new().inner_margin(egui::Margin { left: 0, right: 0, top: 8, bottom: 0 }))
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(18, 20, 28, 215))
+                    .inner_margin(egui::Margin { left: 8, right: 8, top: 8, bottom: 4 }),
+            )
             .show_separator_line(true)
             .show(ui, |ui| self.start_url_row(ui, todo));
 
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Home").size(22.0).strong().color(theme::TEXT));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add_enabled(!self.start.busy(), egui::Button::new("Refresh")).clicked() {
-                    todo.push(Do::Refresh);
-                }
-                if self.start.busy() || self.cloud.busy() {
-                    ui.spinner();
-                    if self.cloud.busy() {
-                        ui.label(RichText::new("Opening…").color(theme::TEXT_DIM));
-                    }
-                }
-            });
-        });
         if let Some(e) = self.cloud.open_error.clone().or(self.start.url_error.clone()) {
             ui.label(RichText::new(e).color(theme::WARN));
         }
-        ui.add_space(10.0);
         let touch_scroll = egui::scroll_area::ScrollSource {
             scroll_bar: true,
             drag: egui::scroll_area::DragScroll::Always,
@@ -723,7 +846,88 @@ impl Editor {
             .id_salt("start_scroll")
             .scroll_source(touch_scroll)
             .auto_shrink([false, false])
-            .show(ui, |ui| self.start_home(ui, todo));
+            .show(ui, |ui| {
+                // Hero Welcome Banner with Pastel Accents & Quick Action Pills
+                let hero_frame = egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(24, 26, 38, 215))
+                    .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.45)))
+                    .corner_radius(CornerRadius::same(16))
+                    .inner_margin(egui::Margin::symmetric(16, 14));
+                let hero_shown = hero_frame.show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal_wrapped(|ui| {
+                        ui.vertical(|ui| {
+                            ui.label(
+                                RichText::new("✨ Welcome to RtRust Studio")
+                                    .size(19.0)
+                                    .strong()
+                                    .color(crate::wallpaper::PASTEL_LAVENDER),
+                            );
+                            ui.label(
+                                RichText::new("Build, script in Luau, and playtest 3D worlds right on your phone.")
+                                    .size(12.5)
+                                    .color(theme::TEXT_DIM),
+                            );
+                        });
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .add_enabled(
+                                    !self.start.busy(),
+                                    egui::Button::new(RichText::new("↻ Refresh").color(crate::wallpaper::PASTEL_SKY))
+                                        .fill(Color32::from_rgba_unmultiplied(32, 36, 48, 220))
+                                        .corner_radius(CornerRadius::same(12)),
+                                )
+                                .clicked()
+                            {
+                                todo.push(Do::Refresh);
+                            }
+                            if self.start.busy() || self.cloud.busy() {
+                                ui.spinner();
+                            }
+                        });
+                    });
+                    ui.add_space(8.0);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
+                        for (label, accent, action) in [
+                            ("🚀 + New Baseplate", crate::wallpaper::PASTEL_LAVENDER, 0u8),
+                            ("📂 Open .rbxl File", crate::wallpaper::PASTEL_MINT, 1u8),
+                            ("🎨 Themes & Wallpaper", crate::wallpaper::PASTEL_PEACH, 2u8),
+                            ("⚙ Studio Settings", crate::wallpaper::PASTEL_SKY, 3u8),
+                        ] {
+                            let btn = egui::Button::new(
+                                RichText::new(label)
+                                    .size(12.0)
+                                    .strong()
+                                    .color(Color32::from_rgb(16, 18, 25)),
+                            )
+                            .fill(accent)
+                            .corner_radius(CornerRadius::same(14));
+                            if ui.add(btn).clicked() {
+                                match action {
+                                    0 => todo.push(Do::Template(self.start.default_template())),
+                                    1 => todo.push(Do::OpenFile(None)),
+                                    2 => crate::wallpaper::toggle_modal(ui.ctx()),
+                                    3 => {
+                                        let ctx_c = ui.ctx().clone();
+                                        self.ui_action(&ctx_c, "studio_settings");
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    });
+                });
+                crate::wallpaper::draw_luminous_border_trail(
+                    ui.ctx(),
+                    ui.painter(),
+                    hero_shown.response.rect,
+                    16.0,
+                    crate::wallpaper::PASTEL_LAVENDER,
+                );
+                ui.add_space(14.0);
+                self.start_home(ui, todo);
+            });
     }
 
     fn start_url_row(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
@@ -1292,25 +1496,66 @@ fn grid(ui: &mut egui::Ui, n: usize, mut each: impl FnMut(&mut egui::Ui, usize))
     }
 }
 
-/// A card: thumbnail (drawn by `thumb`), title and one dim line.
+/// A card: thumbnail (drawn by `thumb`), title and one dim line, styled with
+/// RtRust's Pastel Accent palette and smooth hover/press scale animation.
 fn card(ui: &mut egui::Ui, title: &str, sub: &str, thumb: impl FnOnce(&egui::Painter, Rect)) -> egui::Response {
     let card_w = ui.ctx().data(|d| d.get_temp::<f32>(egui::Id::new("start_card_w"))).unwrap_or(CARD_W);
-    let (r, resp) = ui.allocate_exact_size(Vec2::new(card_w, CARD_H), Sense::click());
-    let p = ui.painter().with_clip_rect(r);
-    let hov = resp.hovered();
-    p.rect_filled(r, CornerRadius::same(6), if hov { theme::ACTIVE_TAB } else { theme::PANEL_DARK });
-    let tr = Rect::from_min_size(r.min, Vec2::new(card_w, THUMB_H));
+    let (base_r, resp) = ui.allocate_exact_size(Vec2::new(card_w, CARD_H), Sense::click());
+    let h = title.bytes().fold(13u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) as usize;
+    let accent = crate::wallpaper::pastel_for_index(h);
+    let active = resp.hovered() || resp.is_pointer_button_down_on();
+    let anim = ui.ctx().animate_bool_with_time(resp.id.with("pastel_card_scale"), active, 0.14);
+    let scale = 1.0 + 0.035 * anim;
+    let r = Rect::from_center_size(base_r.center(), base_r.size() * scale);
+    let p = ui.painter().with_clip_rect(r.expand(2.0));
+
+    let fill = if active {
+        Color32::from_rgba_unmultiplied(32, 35, 48, 240)
+    } else {
+        Color32::from_rgba_unmultiplied(22, 24, 34, 224)
+    };
+    p.rect_filled(r, CornerRadius::same(12), fill);
+    let tr = Rect::from_min_size(r.min, Vec2::new(r.width(), THUMB_H * scale));
     thumb(&p.with_clip_rect(tr), tr);
-    if hov {
-        p.rect_stroke(r, CornerRadius::same(6), Stroke::new(1.5, theme::SELECT), egui::StrokeKind::Inside);
-    }
+
+    // Pastel accent pill bar at top of footer
+    let bar_r = Rect::from_min_size(
+        Pos2::new(r.min.x + 10.0, tr.max.y + 4.0),
+        Vec2::new(28.0 + 18.0 * anim, 2.5),
+    );
+    p.rect_filled(bar_r, CornerRadius::same(2), accent);
+
+    let border_col = if active {
+        accent
+    } else {
+        accent.gamma_multiply(0.35)
+    };
+    p.rect_stroke(
+        r,
+        CornerRadius::same(12),
+        Stroke::new(if active { 1.6 } else { 1.0 }, border_col),
+        egui::StrokeKind::Inside,
+    );
+
     let font = egui::FontId::proportional(13.5);
-    let title = elide(&p, title, &font, card_w - 20.0);
-    p.text(Pos2::new(r.min.x + 10.0, tr.max.y + 16.0), egui::Align2::LEFT_CENTER, title, font, theme::TEXT);
-    let small = egui::FontId::proportional(11.5);
-    let sub = elide(&p, sub, &small, card_w - 20.0);
-    p.text(Pos2::new(r.min.x + 10.0, tr.max.y + 35.0), egui::Align2::LEFT_CENTER, sub, small, theme::TEXT_DIM);
-    if hov {
+    let title_str = elide(&p, title, &font, r.width() - 20.0);
+    p.text(
+        Pos2::new(r.min.x + 10.0, tr.max.y + 18.0),
+        egui::Align2::LEFT_CENTER,
+        title_str,
+        font,
+        Color32::WHITE,
+    );
+    let small = egui::FontId::proportional(11.0);
+    let sub_str = elide(&p, sub, &small, r.width() - 20.0);
+    p.text(
+        Pos2::new(r.min.x + 10.0, tr.max.y + 36.0),
+        egui::Align2::LEFT_CENTER,
+        sub_str,
+        small,
+        accent.gamma_multiply(0.85),
+    );
+    if active {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     resp
@@ -1333,22 +1578,43 @@ fn group_id(key: &str) -> Option<u64> {
     key.strip_prefix("group:")?.parse().ok()
 }
 
-/// The experience's icon, centred on a blurred-looking fill; a letter tile
+/// The experience's icon, centred on a pastel-tinted slate fill; a pastel letter tile
 /// until it loads.
 fn icon_thumb(p: &egui::Painter, r: Rect, icon: Option<egui::TextureId>, name: &str) {
-    p.rect_filled(r, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, theme::PANEL_ALT);
-    let side = r.height() - 16.0;
+    let h = name.bytes().fold(7u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) as usize;
+    let accent = crate::wallpaper::pastel_for_index(h);
+    p.rect_filled(
+        r,
+        CornerRadius { nw: 12, ne: 12, sw: 0, se: 0 },
+        Color32::from_rgba_unmultiplied(
+            (accent.r() as u16 / 6) as u8 + 16,
+            (accent.g() as u16 / 6) as u8 + 18,
+            (accent.b() as u16 / 6) as u8 + 26,
+            235,
+        ),
+    );
+    let side = r.height() - 18.0;
     let ir = Rect::from_center_size(r.center(), Vec2::splat(side));
     match icon {
         Some(t) => {
             p.image(t, ir, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
         }
         None => {
-            let h = name.bytes().fold(7u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32));
-            let c = Color32::from_rgb(60 + (h % 90) as u8, 70 + ((h >> 8) % 80) as u8, 110 + ((h >> 16) % 100) as u8);
-            p.rect_filled(ir, CornerRadius::same(6), c);
+            p.rect_filled(ir, CornerRadius::same(10), accent.gamma_multiply(0.28));
+            p.rect_stroke(
+                ir,
+                CornerRadius::same(10),
+                Stroke::new(1.2, accent.gamma_multiply(0.8)),
+                egui::StrokeKind::Inside,
+            );
             let letter: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
-            p.text(ir.center(), egui::Align2::CENTER_CENTER, letter, egui::FontId::proportional(36.0), Color32::WHITE);
+            p.text(
+                ir.center(),
+                egui::Align2::CENTER_CENTER,
+                letter,
+                egui::FontId::proportional(34.0),
+                accent,
+            );
         }
     }
 }

@@ -766,6 +766,7 @@ impl Editor {
 
                         ui.separator();
                         ui.label(egui::RichText::new("Tools & Settings").strong().small().color(theme::TEXT_DIM));
+                        if ui.button("🎨 Themes & Wallpapers...").clicked() { crate::wallpaper::toggle_modal(ctx); ui.close(); }
                         if ui.button("Toolbox").clicked() { self.ui_action(ctx, "toolbox"); ui.close(); }
                         if ui.button("Manage Plugins...").clicked() { self.ui_action(ctx, "manage_plugins"); ui.close(); }
                         if ui.button("Studio Settings...").clicked() { self.ui_action(ctx, "studio_settings"); ui.close(); }
@@ -773,12 +774,78 @@ impl Editor {
                         if ui.button("AI Assistant (MCP)").clicked() { crate::mcp_assistant::toggle_open(); ui.close(); }
                     });
 
+                    // Compact Category Pill Dropdown Box (replaces cramped horizontal ribbon tab scroll)
+                    let cat_pop_id = egui::Id::new("portrait_cat_dropdown_open");
+                    let mut cat_open = ctx.data(|d| d.get_temp::<bool>(cat_pop_id).unwrap_or(false));
+                    let cat_icon = match self.ui.tab {
+                        RibbonTab::Home => "pointer",
+                        RibbonTab::Model => "cube",
+                        RibbonTab::Avatar => "user-cog",
+                        RibbonTab::Ui => "app-window",
+                        RibbonTab::Script => "file-code",
+                        RibbonTab::Plugins => "sparkles",
+                    };
+                    let cat_accent = match self.ui.tab {
+                        RibbonTab::Home => crate::wallpaper::PASTEL_LAVENDER,
+                        RibbonTab::Model => crate::wallpaper::PASTEL_MINT,
+                        RibbonTab::Avatar => crate::wallpaper::PASTEL_GOLD,
+                        RibbonTab::Ui => crate::wallpaper::PASTEL_ROSE,
+                        RibbonTab::Script => crate::wallpaper::PASTEL_SKY,
+                        RibbonTab::Plugins => crate::wallpaper::PASTEL_PEACH,
+                    };
+                    let pill_label = format!("{} ▾", self.ui.tab.label());
+                    let font = egui::FontId::proportional(12.5);
+                    let text_w = ui.fonts_mut(|f| f.layout_no_wrap(pill_label.clone(), font.clone(), Color32::WHITE).size().x);
+                    let pill_sz = egui::vec2((text_w + 34.0).max(86.0), 26.0);
+                    let (pill_rect, pill_resp) = ui.allocate_exact_size(pill_sz, Sense::click());
+                    let pill_bg = if cat_open {
+                        Color32::from_rgba_unmultiplied(40, 44, 58, 240)
+                    } else if pill_resp.hovered() {
+                        Color32::from_rgba_unmultiplied(32, 36, 48, 230)
+                    } else {
+                        Color32::from_rgba_unmultiplied(24, 27, 36, 220)
+                    };
+                    ui.painter().rect_filled(pill_rect, egui::CornerRadius::same(13), pill_bg);
+                    ui.painter().rect_stroke(
+                        pill_rect,
+                        egui::CornerRadius::same(13),
+                        egui::Stroke::new(1.0, cat_accent.gamma_multiply(0.65)),
+                        egui::StrokeKind::Inside,
+                    );
+                    let ic_rect = Rect::from_center_size(
+                        egui::pos2(pill_rect.left() + 14.0, pill_rect.center().y),
+                        Vec2::splat(14.0),
+                    );
+                    rustudio_engine::ti::paint(ui.painter(), ic_rect, cat_icon, cat_accent);
+                    ui.painter().text(
+                        egui::pos2(pill_rect.left() + 26.0, pill_rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        &pill_label,
+                        font,
+                        Color32::WHITE,
+                    );
+                    if pill_resp.clicked() {
+                        cat_open = !cat_open;
+                        ctx.data_mut(|d| d.insert_temp(cat_pop_id, cat_open));
+                    }
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("portrait_cat_pill_rect"), pill_rect));
+
+                    let arrow = if ribbon_open { "▴" } else { "▾" };
+                    if ui.small_button(arrow).on_hover_text("Thu gọn/mở thanh công cụ Ribbon").clicked() {
+                        ribbon_open = !ribbon_open;
+                        ctx.data_mut(|d| d.insert_temp(ribbon_open_id, ribbon_open));
+                    }
+
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let signed = self.game.account.signed_in();
                         let acc_label = if signed { "✓" } else { "Sign In" };
                         if ui.selectable_label(signed, acc_label).on_hover_text("Roblox Account").clicked() {
                             self.game.account.open = !self.game.account.open;
                             self.game.account.adding = false;
+                        }
+
+                        if ui.small_button("🎨").on_hover_text("Themes & Wallpapers").clicked() {
+                            crate::wallpaper::toggle_modal(ctx);
                         }
 
                         let cfg = rustudio_core::hardware_tuner::config();
@@ -810,35 +877,133 @@ impl Editor {
                         if ui.small_button("↶").on_hover_text("Undo").clicked() {
                             self.ui_action(ctx, "undo");
                         }
-                        let arrow = if ribbon_open { "▴" } else { "▾" };
-                        if ui.small_button(arrow).on_hover_text("Thu gọn/mở Ribbon").clicked() {
-                            ribbon_open = !ribbon_open;
-                            ctx.data_mut(|d| d.insert_temp(ribbon_open_id, ribbon_open));
-                        }
-
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            egui::ScrollArea::horizontal().id_salt("portrait_ribbon_tab_scroll").show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.spacing_mut().item_spacing = egui::vec2(2.0, 0.0);
-                                    for tab in crate::studio_ui::RibbonTab::ALL {
-                                        let active = self.ui.tab == tab && ribbon_open;
-                                        if ui.selectable_label(active, tab.label()).clicked() {
-                                            if self.ui.tab == tab {
-                                                ribbon_open = !ribbon_open;
-                                                ctx.data_mut(|d| d.insert_temp(ribbon_open_id, ribbon_open));
-                                            } else {
-                                                self.ui.tab = tab;
-                                                ribbon_open = true;
-                                                ctx.data_mut(|d| d.insert_temp(ribbon_open_id, true));
-                                            }
-                                        }
-                                    }
-                                });
-                            });
-                        });
                     });
                 });
             });
+
+        // Floating Rounded Category Popover Menu with Smooth Pop-In & Luminous Border Trail
+        {
+            let cat_pop_id = egui::Id::new("portrait_cat_dropdown_open");
+            let mut cat_open = ctx.data(|d| d.get_temp::<bool>(cat_pop_id).unwrap_or(false));
+            let anim = ctx.animate_bool_with_time(egui::Id::new("portrait_cat_pop_anim"), cat_open, 0.16);
+            if cat_open || anim > 0.01 {
+                let anchor_rect = ctx
+                    .data(|d| d.get_temp::<Rect>(egui::Id::new("portrait_cat_pill_rect")))
+                    .unwrap_or_else(|| Rect::from_min_size(egui::pos2(56.0, 44.0), Vec2::new(90.0, 26.0)));
+                let pop_pos = egui::pos2(anchor_rect.left(), anchor_rect.bottom() + 6.0 * anim);
+                let shown = egui::Area::new(egui::Id::new("portrait_cat_dropdown_area"))
+                    .order(egui::Order::Foreground)
+                    .interactable(true)
+                    .fixed_pos(pop_pos)
+                    .show(ctx, |ui| {
+                        let frame = egui::Frame::new()
+                            .fill(Color32::from_rgba_unmultiplied(20, 22, 30, (242.0 * anim) as u8))
+                            .corner_radius(egui::CornerRadius::same(14))
+                            .inner_margin(egui::Margin::same(8))
+                            .shadow(egui::epaint::Shadow {
+                                offset: [0, 8],
+                                blur: 20,
+                                spread: 0,
+                                color: Color32::from_black_alpha((120.0 * anim) as u8),
+                            });
+                        frame.show(ui, |ui| {
+                            ui.set_width(184.0);
+                            ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+                            ui.label(
+                                egui::RichText::new("RIBBON CATEGORY")
+                                    .size(10.5)
+                                    .strong()
+                                    .color(theme::TEXT_DIM),
+                            );
+                            for (tab, icon, accent, sub) in [
+                                (RibbonTab::Home, "pointer", crate::wallpaper::PASTEL_LAVENDER, "Select, Move, Scale"),
+                                (RibbonTab::Model, "cube", crate::wallpaper::PASTEL_MINT, "Parts, Rig, Snap"),
+                                (RibbonTab::Avatar, "user-cog", crate::wallpaper::PASTEL_GOLD, "Rig Builder & Animations"),
+                                (RibbonTab::Ui, "app-window", crate::wallpaper::PASTEL_ROSE, "ScreenGui, Frame, Text"),
+                                (RibbonTab::Script, "file-code", crate::wallpaper::PASTEL_SKY, "Luau Scripts & Debug"),
+                                (RibbonTab::Plugins, "sparkles", crate::wallpaper::PASTEL_PEACH, "Installed Studio Plugins"),
+                            ] {
+                                let selected = self.ui.tab == tab;
+                                let (row_r, row_resp) = ui.allocate_exact_size(Vec2::new(168.0, 34.0), Sense::click());
+                                let fill = if selected {
+                                    accent.gamma_multiply(0.22)
+                                } else if row_resp.hovered() {
+                                    Color32::from_rgba_unmultiplied(45, 50, 64, 180)
+                                } else {
+                                    Color32::TRANSPARENT
+                                };
+                                ui.painter().rect_filled(row_r, egui::CornerRadius::same(8), fill);
+                                if selected {
+                                    ui.painter().rect_stroke(
+                                        row_r,
+                                        egui::CornerRadius::same(8),
+                                        egui::Stroke::new(1.0, accent.gamma_multiply(0.75)),
+                                        egui::StrokeKind::Inside,
+                                    );
+                                }
+                                let ic_r = Rect::from_center_size(
+                                    egui::pos2(row_r.left() + 16.0, row_r.center().y),
+                                    Vec2::splat(16.0),
+                                );
+                                rustudio_engine::ti::paint(ui.painter(), ic_r, icon, accent);
+                                ui.painter().text(
+                                    egui::pos2(row_r.left() + 32.0, row_r.top() + 11.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    tab.label(),
+                                    egui::FontId::proportional(13.0),
+                                    Color32::WHITE,
+                                );
+                                ui.painter().text(
+                                    egui::pos2(row_r.left() + 32.0, row_r.bottom() - 8.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    sub,
+                                    egui::FontId::proportional(10.0),
+                                    theme::TEXT_DIM,
+                                );
+                                if row_resp.clicked() {
+                                    self.ui.tab = tab;
+                                    ribbon_open = true;
+                                    ctx.data_mut(|d| {
+                                        d.insert_temp(ribbon_open_id, true);
+                                        d.insert_temp(cat_pop_id, false);
+                                    });
+                                    cat_open = false;
+                                }
+                            }
+                            ui.separator();
+                            if ui
+                                .button(
+                                    egui::RichText::new("⛰ Open Terrain Editor")
+                                        .size(12.0)
+                                        .color(crate::wallpaper::PASTEL_MINT),
+                                )
+                                .clicked()
+                            {
+                                self.ui.portrait_tool_panel = Some(crate::app::Tab::TerrainEditor);
+                                ctx.data_mut(|d| d.insert_temp(cat_pop_id, false));
+                                cat_open = false;
+                            }
+                        })
+                    });
+                let pop_rect = shown.inner.response.rect;
+                crate::wallpaper::draw_luminous_border_trail(
+                    ctx,
+                    &ctx.layer_painter(shown.response.layer_id),
+                    pop_rect,
+                    14.0,
+                    crate::wallpaper::PASTEL_LAVENDER,
+                );
+                let clicked_out = ctx.input(|i| {
+                    i.pointer.any_pressed()
+                        && i.pointer.interact_pos().is_some_and(|p| {
+                            !pop_rect.expand(8.0).contains(p) && !anchor_rect.expand(4.0).contains(p)
+                        })
+                });
+                if clicked_out {
+                    ctx.data_mut(|d| d.insert_temp(cat_pop_id, false));
+                }
+            }
+        }
 
         if ribbon_open {
             egui::Panel::top("portrait_ribbon_tools")
@@ -866,7 +1031,7 @@ impl Editor {
 
                         let is_3d = self.ui.portrait_tab == PortraitTab::Viewport
                             && self.ui.portrait_tool_panel.is_none();
-                        if ui.selectable_label(is_3d, "3D View").clicked() {
+                        if ui.selectable_label(is_3d, "Workspace").clicked() {
                             self.ui.portrait_tab = PortraitTab::Viewport;
                             self.ui.portrait_tool_panel = None;
                         }
@@ -922,99 +1087,29 @@ impl Editor {
                 });
             });
 
-        // 3. Bottom Navigation Bar (5 large buttons: 3D | Code | Explorer | Output | +)
-        egui::Panel::bottom("portrait_bottom_bar")
-            .exact_size(48.0 + safe_bottom)
-            .frame(
-                egui::Frame::new()
-                    .fill(theme::PANEL_DARK)
-                    .inner_margin(egui::Margin {
-                        left: side_left,
-                        right: side_right,
-                        top: 6,
-                        bottom: bot_pad,
-                    }),
-            )
-            .show(ui, |ui| {
-                let w = ((ui.available_width() - 24.0) / 5.0).max(48.0);
-                let h = 34.0;
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 0.0);
-                    if ui
-                        .add_sized(
-                            [w, h],
-                            egui::Button::selectable(
-                                self.ui.portrait_tab == PortraitTab::Viewport
-                                    && self.ui.portrait_tool_panel.is_none()
-                                    && !self.ui.portrait_explorer_drawer
-                                    && !self.ui.portrait_output_drawer,
-                                "3D",
-                            ),
-                        )
-                        .clicked()
-                    {
-                        self.ui.portrait_tab = PortraitTab::Viewport;
-                        self.ui.portrait_tool_panel = None;
-                        self.ui.portrait_explorer_drawer = false;
-                        self.ui.portrait_output_drawer = false;
-                        self.ui.portrait_quick_grid_open = false;
-                    }
-                    if ui
-                        .add_sized(
-                            [w, h],
-                            egui::Button::selectable(
-                                self.ui.portrait_tab == PortraitTab::Code && self.ui.portrait_tool_panel.is_none(),
-                                "Code",
-                            ),
-                        )
-                        .clicked()
-                    {
-                        self.ui.portrait_tab = PortraitTab::Code;
-                        self.ui.portrait_tool_panel = None;
-                        self.ui.portrait_quick_grid_open = false;
-                    }
-                    if ui
-                        .add_sized(
-                            [w, h],
-                            egui::Button::selectable(self.ui.portrait_explorer_drawer, "Explorer"),
-                        )
-                        .clicked()
-                    {
-                        self.ui.portrait_explorer_drawer = !self.ui.portrait_explorer_drawer;
-                        if self.ui.portrait_explorer_drawer {
-                            self.ui.portrait_output_drawer = false;
-                            self.ui.portrait_quick_grid_open = false;
-                        }
-                    }
-                    if ui
-                        .add_sized(
-                            [w, h],
-                            egui::Button::selectable(self.ui.portrait_output_drawer, "Output"),
-                        )
-                        .clicked()
-                    {
-                        self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
-                        if self.ui.portrait_output_drawer {
-                            self.ui.portrait_explorer_drawer = false;
-                            self.ui.portrait_quick_grid_open = false;
-                        }
-                    }
-                    if ui
-                        .add_sized(
-                            [w, h],
-                            egui::Button::selectable(self.ui.portrait_quick_grid_open, "+"),
-                        )
-                        .clicked()
-                    {
-                        self.ui.portrait_quick_grid_open = !self.ui.portrait_quick_grid_open;
-                    }
-                });
-            });
+        // 3. Collapsible Dark-Translucent Bottom Pill Dock (`Workspace | Code | Explorer | Output | +`)
+        //    with Press-to-Glow & Horizontal Finger Scrubbing.
+        let dock_collapsed_id = egui::Id::new("portrait_pill_dock_collapsed");
+        let mut dock_collapsed = ctx.data(|d| d.get_temp::<bool>(dock_collapsed_id).unwrap_or(false));
+        let dock_open_t = ctx.animate_bool_with_time(
+            egui::Id::new("portrait_pill_dock_slide_t"),
+            !dock_collapsed,
+            0.18,
+        );
 
-        // 4. Touch Luau Snippet Bar (above Bottom Tab Bar, or lifted above soft keyboard when typing in Code tab)
+        // Reserve bottom space only when dock is expanded and not in Code tab with keyboard up
+        if !dock_collapsed {
+            egui::Panel::bottom("portrait_bottom_bar_spacer")
+                .exact_size((58.0 + safe_bottom) * dock_open_t.max(0.05))
+                .frame(egui::Frame::NONE)
+                .show(ui, |_ui| {});
+        }
+
+        // 4. Touch Luau Snippet Bar (above Bottom Pill Dock, or lifted above soft keyboard when typing in Code tab)
         if self.ui.portrait_tab == PortraitTab::Code && self.ui.portrait_tool_panel.is_none() {
             let kb_h = crate::platform::keyboard_height_points(ctx);
-            let kb_spacer = (kb_h - (48.0 + safe_bottom)).max(0.0);
+            let reserved_bot = if dock_collapsed { 0.0 } else { 58.0 + safe_bottom };
+            let kb_spacer = (kb_h - reserved_bot).max(0.0);
             if kb_spacer > 1.0 {
                 egui::Panel::bottom("portrait_kb_spacer")
                     .exact_size(kb_spacer)
@@ -1161,27 +1256,56 @@ impl Editor {
             });
         }
 
-        // 5. Output Bottom Drawer (only when toggled)
-        if self.ui.portrait_output_drawer {
-            let drawer_h = (screen_rect.height() * 0.38).clamp(160.0, 380.0);
+        // 5. Output Panel (Supports Bottom Dock, Left/Right Snap, or Floating Window mode with luminous border trail)
+        let out_mode_id = egui::Id::new("portrait_output_dock_mode");
+        // 0 = Bottom Dock, 1 = Floating Window, 2 = Left Dock, 3 = Right Dock
+        let mut out_mode = ctx.data(|d| d.get_temp::<u8>(out_mode_id).unwrap_or(0));
+        if self.ui.portrait_output_drawer && out_mode == 0 {
+            let drawer_h = (screen_rect.height() * 0.36).clamp(150.0, 360.0);
             egui::Panel::bottom("portrait_output_drawer")
                 .exact_size(drawer_h)
                 .frame(
                     egui::Frame::new()
-                        .fill(theme::PANEL)
-                        .inner_margin(egui::Margin::symmetric(6, 4)),
+                        .fill(Color32::from_rgba_unmultiplied(22, 24, 32, 242))
+                        .stroke(egui::Stroke::new(1.0, crate::wallpaper::PASTEL_SKY.gamma_multiply(0.35)))
+                        .inner_margin(egui::Margin::symmetric(8, 5)),
                 )
                 .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("📟 Output")
+                                .strong()
+                                .size(12.5)
+                                .color(crate::wallpaper::PASTEL_SKY),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("✕").clicked() {
+                                self.ui.portrait_output_drawer = false;
+                            }
+                            if ui
+                                .small_button("❐ Float")
+                                .on_hover_text("Chuyển sang cửa sổ nổi (Floating Window)")
+                                .clicked()
+                            {
+                                out_mode = 1;
+                                ctx.data_mut(|d| d.insert_temp(out_mode_id, out_mode));
+                            }
+                        });
+                    });
+                    ui.separator();
                     self.output_ui(ui);
                 });
         }
 
-        // 6. Central Full-Screen Tab (3D Viewport, Luau Code Editor, or Tool Panel)
+        // 6. Central Full-Screen Tab (Workspace 3D Viewport, Luau Code Editor, or Tool Panel)
         let mut content_rect = screen_rect;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(theme::BG))
             .show(ui, |ui| {
                 content_rect = ui.max_rect();
+                if self.ui.portrait_tab == PortraitTab::Code || self.ui.portrait_tool_panel.is_some() {
+                    crate::wallpaper::paint_studio_background(ctx, ui.painter(), content_rect);
+                }
                 if let Some(tool_tab) = self.ui.portrait_tool_panel {
                     ui.horizontal(|ui| {
                         if ui.button("← Back").clicked() {
@@ -1233,17 +1357,87 @@ impl Editor {
                 }
             });
 
-        // 7. Quick Tools & Plugins Grid Popup (from bottom `+` button)
+        // 5b. Floating / Snap-Docked Output Window when out_mode != 0
+        if self.ui.portrait_output_drawer && out_mode != 0 {
+            let win_w = (screen_rect.width() * 0.84).clamp(240.0, 440.0);
+            let win_h = (content_rect.height() * 0.42).clamp(170.0, 340.0);
+            let mut win = egui::Window::new("📟 Output")
+                .id(egui::Id::new("portrait_floating_output_win"))
+                .title_bar(false)
+                .resizable(true)
+                .default_size(Vec2::new(win_w, win_h))
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(Color32::from_rgba_unmultiplied(20, 22, 30, 238))
+                        .stroke(egui::Stroke::new(1.0, crate::wallpaper::PASTEL_SKY.gamma_multiply(0.5)))
+                        .corner_radius(egui::CornerRadius::same(14))
+                        .inner_margin(egui::Margin::same(8)),
+                );
+            if out_mode == 2 {
+                win = win.current_pos(egui::pos2(screen_rect.left() + 6.0, content_rect.top() + 8.0));
+            } else if out_mode == 3 {
+                win = win.current_pos(egui::pos2((screen_rect.right() - win_w - 6.0).max(6.0), content_rect.top() + 8.0));
+            }
+            if let Some(shown) = win.show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("📟 Output (Floating / Snap)")
+                            .strong()
+                            .size(12.5)
+                            .color(crate::wallpaper::PASTEL_SKY),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("✕").clicked() {
+                            self.ui.portrait_output_drawer = false;
+                        }
+                        if ui.selectable_label(out_mode == 0, "⬇ Bot").on_hover_text("Snap Bottom").clicked() {
+                            out_mode = 0;
+                            ctx.data_mut(|d| d.insert_temp(out_mode_id, out_mode));
+                        }
+                        if ui.selectable_label(out_mode == 3, "➡ R").on_hover_text("Snap Right").clicked() {
+                            out_mode = 3;
+                            ctx.data_mut(|d| d.insert_temp(out_mode_id, out_mode));
+                        }
+                        if ui.selectable_label(out_mode == 2, "⬅ L").on_hover_text("Snap Left").clicked() {
+                            out_mode = 2;
+                            ctx.data_mut(|d| d.insert_temp(out_mode_id, out_mode));
+                        }
+                        if ui.selectable_label(out_mode == 1, "❐ Float").on_hover_text("Free Float").clicked() {
+                            out_mode = 1;
+                            ctx.data_mut(|d| d.insert_temp(out_mode_id, out_mode));
+                        }
+                    });
+                });
+                ui.separator();
+                self.output_ui(ui);
+            }) {
+                crate::wallpaper::draw_luminous_border_trail(
+                    ctx,
+                    &ctx.layer_painter(shown.response.layer_id),
+                    shown.response.rect,
+                    14.0,
+                    crate::wallpaper::PASTEL_SKY,
+                );
+            }
+        }
+
+        // 7. Quick Tools & Plugins Grid Popup (from bottom `+` button) with Luminous Border Trail
         if self.ui.portrait_quick_grid_open {
             let mut open = self.ui.portrait_quick_grid_open;
-            egui::Window::new("⚡ Quick Tools & Plugins")
+            let shown = egui::Window::new("⚡ Quick Tools & Plugins")
                 .id(egui::Id::new("portrait_quick_grid"))
                 .open(&mut open)
                 .collapsible(false)
                 .resizable(false)
-                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -56.0))
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -(68.0 + safe_bottom)))
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(Color32::from_rgba_unmultiplied(20, 22, 30, 242))
+                        .corner_radius(egui::CornerRadius::same(16))
+                        .inner_margin(egui::Margin::same(12)),
+                )
                 .show(ctx, |ui| {
-                    let btn_sz = egui::vec2(110.0, 44.0);
+                    let btn_sz = egui::vec2(108.0, 42.0);
                     egui::Grid::new("portrait_tools_grid").spacing([8.0, 8.0]).show(ui, |ui| {
                         if ui.add_sized(btn_sz, egui::Button::new("🔌 Plugins")).clicked() {
                             self.ui_action(ctx, "manage_plugins");
@@ -1271,65 +1465,107 @@ impl Editor {
                             self.ui.portrait_quick_grid_open = false;
                         }
                         ui.end_row();
+                        if ui.add_sized(btn_sz, egui::Button::new("🎨 Wallpapers")).clicked() {
+                            crate::wallpaper::toggle_modal(ctx);
+                            self.ui.portrait_quick_grid_open = false;
+                        }
+                        if ui.add_sized(btn_sz, egui::Button::new("⚙ Settings")).clicked() {
+                            self.ui_action(ctx, "studio_settings");
+                            self.ui.portrait_quick_grid_open = false;
+                        }
+                        if ui.add_sized(btn_sz, egui::Button::new("🤖 AI (MCP)")).clicked() {
+                            crate::mcp_assistant::toggle_open();
+                            self.ui.portrait_quick_grid_open = false;
+                        }
+                        ui.end_row();
                     });
                 });
+            if let Some(r) = shown {
+                crate::wallpaper::draw_luminous_border_trail(
+                    ctx,
+                    &ctx.layer_painter(r.response.layer_id),
+                    r.response.rect,
+                    16.0,
+                    crate::wallpaper::PASTEL_PEACH,
+                );
+            }
             if !open {
                 self.ui.portrait_quick_grid_open = false;
             }
         }
 
-        // 8. Non-blocking Floating / Dockable Side Drawer with Left Dark Resize Handle
+        // 8. Non-blocking Floating / Dockable Explorer & Properties Tool Panel with Snap Zones (Left, Right, Bottom, Float)
         if self.ui.portrait_explorer_drawer {
             let width_id = egui::Id::new("portrait_explorer_width");
-            let max_w = (screen_rect.width() - 28.0).max(200.0);
-            let default_w = (screen_rect.width() * 0.42).clamp(185.0, 340.0);
-            let mut drawer_w = ctx.data(|d| d.get_temp::<f32>(width_id).unwrap_or(default_w)).clamp(160.0, max_w);
+            let max_w = (screen_rect.width() - 20.0).max(200.0);
+            let default_w = (screen_rect.width() * 0.46).clamp(195.0, 340.0);
+            let mut drawer_w = ctx.data(|d| d.get_temp::<f32>(width_id).unwrap_or(default_w)).clamp(165.0, max_w);
             let popup_h = (content_rect.height() - 12.0).clamp(240.0, 680.0);
-            let pin_id = egui::Id::new("portrait_explorer_pinned");
-            let pinned = ctx.data(|d| d.get_temp::<bool>(pin_id).unwrap_or(true));
-            let pinned_pos = egui::pos2(screen_rect.right() - drawer_w - 4.0, content_rect.top() + 4.0);
+            // 0 = Float, 1 = Snap Left, 2 = Snap Right (default), 3 = Snap Bottom
+            let snap_id = egui::Id::new("portrait_explorer_snap_zone");
+            let mut snap_zone = ctx.data(|d| d.get_temp::<u8>(snap_id).unwrap_or(2));
+
+            let (win_size, pinned_pos) = match snap_zone {
+                1 => (
+                    egui::vec2(drawer_w, popup_h),
+                    egui::pos2(screen_rect.left() + 4.0, content_rect.top() + 4.0),
+                ),
+                3 => {
+                    let bh = (content_rect.height() * 0.46).clamp(200.0, 360.0);
+                    (
+                        egui::vec2((screen_rect.width() - 12.0).max(220.0), bh),
+                        egui::pos2(screen_rect.left() + 6.0, (content_rect.bottom() - bh - 4.0).max(content_rect.top() + 4.0)),
+                    )
+                }
+                _ => (
+                    egui::vec2(drawer_w, popup_h),
+                    egui::pos2(screen_rect.right() - drawer_w - 4.0, content_rect.top() + 4.0),
+                ),
+            };
 
             let mut win = egui::Window::new("Explorer & Properties")
                 .id(egui::Id::new("portrait_floating_explorer"))
                 .title_bar(false)
                 .resizable(false)
-                .movable(!pinned)
-                .fixed_size(egui::vec2(drawer_w, popup_h))
+                .movable(snap_zone == 0)
+                .fixed_size(win_size)
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .fill(Color32::from_rgba_unmultiplied(30, 32, 38, 236))
-                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(70, 74, 84)))
+                        .fill(Color32::from_rgba_unmultiplied(22, 24, 32, 238))
+                        .stroke(egui::Stroke::new(1.0, crate::wallpaper::PASTEL_MINT.gamma_multiply(0.45)))
+                        .corner_radius(egui::CornerRadius::same(14))
                         .inner_margin(egui::Margin::symmetric(6, 6)),
                 );
-            if pinned {
+            if snap_zone != 0 {
                 win = win.current_pos(pinned_pos);
             } else {
                 win = win.default_pos(pinned_pos);
             }
-            win.show(ctx, |ui| {
-                ui.set_max_width(drawer_w - 12.0);
+            if let Some(shown) = win.show(ctx, |ui| {
+                ui.set_max_width(win_size.x - 12.0);
                 ui.horizontal(|ui| {
-                    // Left dark vertical resize bar with 5 grip dots (Mobile Studio v2.0 style)
+                    // Left dark vertical resize bar with 5 grip dots
                     let handle_w = 12.0;
                     let (handle_rect, handle_resp) = ui.allocate_exact_size(
-                        egui::vec2(handle_w, (popup_h - 14.0).max(140.0)),
+                        egui::vec2(handle_w, (win_size.y - 14.0).max(140.0)),
                         egui::Sense::drag(),
                     );
                     if handle_resp.hovered() || handle_resp.dragged() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
                     }
                     if handle_resp.dragged() {
-                        drawer_w = (drawer_w - handle_resp.drag_delta().x).clamp(160.0, max_w);
+                        let sign = if snap_zone == 1 { 1.0 } else { -1.0 };
+                        drawer_w = (drawer_w + sign * handle_resp.drag_delta().x).clamp(165.0, max_w);
                         ctx.data_mut(|d| d.insert_temp(width_id, drawer_w));
                     }
                     let bar_col = if handle_resp.dragged() {
-                        theme::SELECT.gamma_multiply(0.85)
+                        crate::wallpaper::PASTEL_MINT.gamma_multiply(0.85)
                     } else if handle_resp.hovered() {
                         Color32::from_rgb(28, 31, 38)
                     } else {
                         Color32::from_rgb(15, 16, 19)
                     };
-                    ui.painter().rect_filled(handle_rect, 2.0, bar_col);
+                    ui.painter().rect_filled(handle_rect, 3.0, bar_col);
                     let dot_col = if handle_resp.dragged() || handle_resp.hovered() {
                         Color32::WHITE
                     } else {
@@ -1344,31 +1580,45 @@ impl Editor {
                     }
 
                     ui.vertical(|ui| {
-                        let inner_w = (drawer_w - handle_w - 22.0).max(120.0);
+                        let inner_w = (win_size.x - handle_w - 22.0).max(120.0);
                         ui.set_width(inner_w);
                         ui.set_max_width(inner_w);
 
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Explorer").strong().size(12.5));
+                            ui.label(
+                                egui::RichText::new("🌳 Explorer")
+                                    .strong()
+                                    .size(12.5)
+                                    .color(crate::wallpaper::PASTEL_MINT),
+                            );
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.small_button("▶").on_hover_text("Thu gọn").clicked() {
+                                if ui.small_button("✕").on_hover_text("Đóng").clicked() {
                                     self.ui.portrait_explorer_drawer = false;
                                 }
-                                if ui
-                                    .selectable_label(pinned, "Pin")
-                                    .on_hover_text("Ghim / Bỏ ghim để kéo di chuyển")
-                                    .clicked()
-                                {
-                                    ctx.data_mut(|d| d.insert_temp(pin_id, !pinned));
+                                if ui.selectable_label(snap_zone == 3, "⬇").on_hover_text("Dock Bottom").clicked() {
+                                    snap_zone = 3;
+                                    ctx.data_mut(|d| d.insert_temp(snap_id, snap_zone));
+                                }
+                                if ui.selectable_label(snap_zone == 2, "➡").on_hover_text("Dock Right").clicked() {
+                                    snap_zone = 2;
+                                    ctx.data_mut(|d| d.insert_temp(snap_id, snap_zone));
+                                }
+                                if ui.selectable_label(snap_zone == 1, "⬅").on_hover_text("Dock Left").clicked() {
+                                    snap_zone = 1;
+                                    ctx.data_mut(|d| d.insert_temp(snap_id, snap_zone));
+                                }
+                                if ui.selectable_label(snap_zone == 0, "❐").on_hover_text("Floating Window").clicked() {
+                                    snap_zone = 0;
+                                    ctx.data_mut(|d| d.insert_temp(snap_id, snap_zone));
                                 }
                             });
                         });
                         ui.separator();
 
-                        let total_h = (ui.available_height() - 18.0).max(160.0);
+                        let total_h = (ui.available_height() - 18.0).max(150.0);
                         let split = self.ui.portrait_drawer_split.clamp(0.2, 0.8);
-                        let top_h = (total_h * split).max(80.0);
-                        let bot_h = (total_h - top_h).max(80.0);
+                        let top_h = (total_h * split).max(75.0);
+                        let bot_h = (total_h - top_h).max(75.0);
 
                         ui.allocate_ui_with_layout(
                             egui::vec2(inner_w, top_h),
@@ -1390,7 +1640,7 @@ impl Editor {
                         ui.painter().rect_filled(
                             egui::Rect::from_center_size(split_rect.center(), egui::vec2(44.0, 3.0)),
                             2.0,
-                            theme::TEXT_DIM,
+                            crate::wallpaper::PASTEL_MINT.gamma_multiply(0.6),
                         );
 
                         ui.allocate_ui_with_layout(
@@ -1398,19 +1648,32 @@ impl Editor {
                             egui::Layout::top_down(egui::Align::Min),
                             |ui| {
                                 ui.set_max_width(inner_w);
-                                ui.label(egui::RichText::new("Properties").strong().size(12.0));
+                                ui.label(
+                                    egui::RichText::new("⚙ Properties")
+                                        .strong()
+                                        .size(12.0)
+                                        .color(crate::wallpaper::PASTEL_LAVENDER),
+                                );
                                 self.properties_ui(ui);
                             },
                         );
                     });
                 });
-            });
+            }) {
+                crate::wallpaper::draw_luminous_border_trail(
+                    ctx,
+                    &ctx.layer_painter(shown.response.layer_id),
+                    shown.response.rect,
+                    14.0,
+                    crate::wallpaper::PASTEL_MINT,
+                );
+            }
         } else {
             egui::Area::new(egui::Id::new("portrait_drawer_handle"))
                 .anchor(egui::Align2::RIGHT_CENTER, egui::vec2(-2.0, 0.0))
                 .show(ctx, |ui| {
                     if ui
-                        .add_sized([28.0, 48.0], egui::Button::new("◀"))
+                        .add_sized([26.0, 46.0], egui::Button::new("◀").corner_radius(10.0))
                         .on_hover_text("Mở Explorer & Properties")
                         .clicked()
                     {
@@ -1418,9 +1681,297 @@ impl Editor {
                     }
                 });
         }
+
+        // 9. Floating Collapsible Dark-Translucent Bottom Pill Dock (`Workspace | Code | Explorer | Output | +`)
+        //    with Arrow Collapse Toggle (`▾` / `▴`), Press-to-Glow, and Horizontal Finger Scrubbing.
+        self.floating_bottom_pill_dock_ui(ctx, screen_rect, safe_bottom, &mut dock_collapsed, dock_open_t);
+        ctx.data_mut(|d| d.insert_temp(dock_collapsed_id, dock_collapsed));
+
         Self::hardware_perf_popup_ui(ctx);
         crate::mcp_assistant::ui(self, ctx);
         crate::touch_input_bridge::floating_shortcut_pill_ui(ctx, has_open_plugin);
+    }
+
+    fn floating_bottom_pill_dock_ui(
+        &mut self,
+        ctx: &egui::Context,
+        screen_rect: Rect,
+        safe_bottom: f32,
+        dock_collapsed: &mut bool,
+        dock_open_t: f32,
+    ) {
+        use crate::studio_ui::PortraitTab;
+
+        // When collapsed, show a sleek upward arrow pill (`▴ Dock`) at the bottom center
+        if *dock_collapsed && dock_open_t < 0.05 {
+            let pill_w = 88.0;
+            let pill_h = 26.0;
+            let pos = egui::pos2(
+                screen_rect.center().x - pill_w * 0.5,
+                screen_rect.bottom() - safe_bottom.max(6.0) - pill_h - 4.0,
+            );
+            egui::Area::new(egui::Id::new("portrait_pill_dock_collapsed_restore"))
+                .order(egui::Order::Foreground)
+                .interactable(true)
+                .fixed_pos(pos)
+                .show(ctx, |ui| {
+                    let (r, resp) = ui.allocate_exact_size(Vec2::new(pill_w, pill_h), Sense::click());
+                    ui.painter().rect_filled(
+                        r,
+                        egui::CornerRadius::same(13),
+                        Color32::from_rgba_unmultiplied(18, 20, 26, 200),
+                    );
+                    ui.painter().rect_stroke(
+                        r,
+                        egui::CornerRadius::same(13),
+                        egui::Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.6)),
+                        egui::StrokeKind::Inside,
+                    );
+                    ui.painter().text(
+                        r.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "▴ Dock",
+                        egui::FontId::proportional(12.0),
+                        crate::wallpaper::PASTEL_LAVENDER,
+                    );
+                    if resp.clicked() {
+                        *dock_collapsed = false;
+                    }
+                });
+            return;
+        }
+
+        let dock_w = (screen_rect.width() - 20.0).clamp(270.0, 440.0);
+        let dock_h = 54.0;
+        let slide_offset = (1.0 - dock_open_t) * (dock_h + safe_bottom + 20.0);
+        let dock_x = screen_rect.center().x - dock_w * 0.5;
+        let dock_y = screen_rect.bottom() - safe_bottom.max(6.0) - dock_h - 4.0 + slide_offset;
+
+        egui::Area::new(egui::Id::new("portrait_floating_pill_dock_area"))
+            .order(egui::Order::Foreground)
+            .interactable(true)
+            .fixed_pos(egui::pos2(dock_x, dock_y))
+            .show(ctx, |ui| {
+                let (full_r, _) = ui.allocate_exact_size(Vec2::new(dock_w, dock_h), Sense::hover());
+
+                // Dark-Translucent Pill Dock background: rgba(18, 20, 26, 0.72) (~184 alpha), rounding 24.0, 1px crisp border
+                let cr = egui::CornerRadius::same(24);
+                ui.painter().rect_filled(
+                    full_r,
+                    cr,
+                    Color32::from_rgba_unmultiplied(18, 20, 26, 188),
+                );
+                ui.painter().rect_stroke(
+                    full_r,
+                    cr,
+                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(184, 181, 255, 78)),
+                    egui::StrokeKind::Inside,
+                );
+
+                // Right-edge compact collapse arrow toggle (`▾`)
+                let collapse_w = 26.0;
+                let tabs_area_w = dock_w - collapse_w - 10.0;
+                let item_w = (tabs_area_w / 5.0).max(42.0);
+                let items: [(&str, &str, Color32); 5] = [
+                    ("cube", "Workspace", crate::wallpaper::PASTEL_LAVENDER),
+                    ("file-code", "Code", crate::wallpaper::PASTEL_SKY),
+                    ("layout-list", "Explorer", crate::wallpaper::PASTEL_MINT),
+                    ("terminal-2", "Output", crate::wallpaper::PASTEL_GOLD),
+                    ("sparkles", "+", crate::wallpaper::PASTEL_PEACH),
+                ];
+
+                // Track Press-to-Glow & Horizontal Scrubbing across the 5 tabs
+                let tabs_rect = Rect::from_min_size(
+                    egui::pos2(full_r.left() + 6.0, full_r.top() + 4.0),
+                    Vec2::new(tabs_area_w, dock_h - 8.0),
+                );
+                let scrub_id = egui::Id::new("portrait_pill_dock_scrub_state");
+                // (press_start_time: Option<f64>, hovered_idx: Option<usize>, scrubbing: bool)
+                let (mut press_t0, mut scrub_idx, mut is_scrubbing) = ctx
+                    .data(|d| d.get_temp::<(Option<f64>, Option<usize>, bool)>(scrub_id))
+                    .unwrap_or((None, None, false));
+
+                let now = ctx.input(|i| i.time);
+                let ptr_pos = ctx.input(|i| i.pointer.interact_pos());
+                let ptr_down = ctx.input(|i| i.pointer.primary_down());
+                let ptr_pressed = ctx.input(|i| i.pointer.any_pressed());
+                let ptr_released = ctx.input(|i| i.pointer.any_released());
+                let drag_delta = ctx.input(|i| i.pointer.delta());
+
+                if ptr_pressed {
+                    if let Some(p) = ptr_pos {
+                        if tabs_rect.contains(p) {
+                            press_t0 = Some(now);
+                            let rel_x = (p.x - tabs_rect.left()).clamp(0.0, tabs_area_w - 0.01);
+                            scrub_idx = Some(((rel_x / item_w).floor() as usize).min(4));
+                            is_scrubbing = false;
+                        }
+                    }
+                }
+
+                if ptr_down {
+                    if let (Some(t0), Some(p)) = (press_t0, ptr_pos) {
+                        if (now - t0) > 0.14 || drag_delta.x.abs() > 3.5 {
+                            is_scrubbing = true;
+                        }
+                        if tabs_rect.expand(18.0).contains(p) {
+                            let rel_x = (p.x - tabs_rect.left()).clamp(0.0, tabs_area_w - 0.01);
+                            scrub_idx = Some(((rel_x / item_w).floor() as usize).min(4));
+                        }
+                        ctx.request_repaint();
+                    }
+                }
+
+                let glow_intensity = ctx.animate_bool_with_time(
+                    egui::Id::new("portrait_pill_dock_glow"),
+                    is_scrubbing || press_t0.is_some(),
+                    0.14,
+                );
+
+                let mut activated_idx: Option<usize> = None;
+                if ptr_released {
+                    if press_t0.is_some() {
+                        activated_idx = scrub_idx;
+                    }
+                    press_t0 = None;
+                    scrub_idx = None;
+                    is_scrubbing = false;
+                }
+
+                ctx.data_mut(|d| d.insert_temp(scrub_id, (press_t0, scrub_idx, is_scrubbing)));
+
+                for (idx, (icon, label, accent)) in items.iter().enumerate() {
+                    let is_active = match idx {
+                        0 => {
+                            self.ui.portrait_tab == PortraitTab::Viewport
+                                && self.ui.portrait_tool_panel.is_none()
+                                && !self.ui.portrait_explorer_drawer
+                                && !self.ui.portrait_output_drawer
+                        }
+                        1 => {
+                            self.ui.portrait_tab == PortraitTab::Code
+                                && self.ui.portrait_tool_panel.is_none()
+                        }
+                        2 => self.ui.portrait_explorer_drawer,
+                        3 => self.ui.portrait_output_drawer,
+                        4 => self.ui.portrait_quick_grid_open,
+                        _ => false,
+                    };
+                    let is_scrub_target = scrub_idx == Some(idx);
+                    let highlight = is_active || is_scrub_target;
+
+                    let base_r = Rect::from_min_size(
+                        egui::pos2(tabs_rect.left() + idx as f32 * item_w + 2.0, tabs_rect.top()),
+                        Vec2::new(item_w - 4.0, tabs_rect.height()),
+                    );
+                    let scale = if is_scrub_target {
+                        1.0 + 0.06 * glow_intensity
+                    } else if is_active {
+                        1.02
+                    } else {
+                        1.0
+                    };
+                    let item_r = Rect::from_center_size(base_r.center(), base_r.size() * scale);
+
+                    if highlight {
+                        let fill_alpha = if is_scrub_target {
+                            (58.0 + 42.0 * glow_intensity) as u8
+                        } else {
+                            46
+                        };
+                        ui.painter().rect_filled(
+                            item_r,
+                            egui::CornerRadius::same(18),
+                            Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), fill_alpha),
+                        );
+                        ui.painter().rect_stroke(
+                            item_r,
+                            egui::CornerRadius::same(18),
+                            egui::Stroke::new(
+                                1.0 + 0.6 * glow_intensity,
+                                accent.gamma_multiply(0.65 + 0.35 * glow_intensity),
+                            ),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+
+                    // Icon on top, label below
+                    let ic_r = Rect::from_center_size(
+                        egui::pos2(item_r.center().x, item_r.top() + 14.0),
+                        Vec2::splat(17.0),
+                    );
+                    let ic_col = if highlight { *accent } else { theme::TEXT.gamma_multiply(0.82) };
+                    rustudio_engine::ti::paint(ui.painter(), ic_r, icon, ic_col);
+
+                    let lbl_col = if highlight { Color32::WHITE } else { theme::TEXT_DIM };
+                    ui.painter().text(
+                        egui::pos2(item_r.center().x, item_r.bottom() - 10.0),
+                        egui::Align2::CENTER_CENTER,
+                        *label,
+                        egui::FontId::proportional(10.5),
+                        lbl_col,
+                    );
+                }
+
+                if let Some(idx) = activated_idx {
+                    match idx {
+                        0 => {
+                            self.ui.portrait_tab = PortraitTab::Viewport;
+                            self.ui.portrait_tool_panel = None;
+                            self.ui.portrait_explorer_drawer = false;
+                            self.ui.portrait_output_drawer = false;
+                            self.ui.portrait_quick_grid_open = false;
+                        }
+                        1 => {
+                            self.ui.portrait_tab = PortraitTab::Code;
+                            self.ui.portrait_tool_panel = None;
+                            self.ui.portrait_quick_grid_open = false;
+                        }
+                        2 => {
+                            self.ui.portrait_explorer_drawer = !self.ui.portrait_explorer_drawer;
+                            if self.ui.portrait_explorer_drawer {
+                                self.ui.portrait_output_drawer = false;
+                                self.ui.portrait_quick_grid_open = false;
+                            }
+                        }
+                        3 => {
+                            self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
+                            if self.ui.portrait_output_drawer {
+                                self.ui.portrait_explorer_drawer = false;
+                                self.ui.portrait_quick_grid_open = false;
+                            }
+                        }
+                        4 => {
+                            self.ui.portrait_quick_grid_open = !self.ui.portrait_quick_grid_open;
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Right-edge Collapse Arrow Button (`▾`)
+                let col_r = Rect::from_center_size(
+                    egui::pos2(full_r.right() - collapse_w * 0.5 - 3.0, full_r.center().y),
+                    Vec2::new(22.0, 34.0),
+                );
+                let col_resp = ui.interact(col_r, egui::Id::new("portrait_pill_dock_collapse_btn"), Sense::click());
+                if col_resp.hovered() {
+                    ui.painter().rect_filled(
+                        col_r,
+                        egui::CornerRadius::same(11),
+                        Color32::from_rgba_unmultiplied(60, 65, 82, 160),
+                    );
+                }
+                ui.painter().text(
+                    col_r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "▾",
+                    egui::FontId::proportional(13.5),
+                    crate::wallpaper::PASTEL_LAVENDER,
+                );
+                if col_resp.on_hover_text("Ẩn thanh Dock xuống (Collapse Dock)").clicked() {
+                    *dock_collapsed = true;
+                }
+            });
     }
 
     fn hardware_perf_popup_ui(ctx: &egui::Context) {
