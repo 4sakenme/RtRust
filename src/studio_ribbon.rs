@@ -2158,6 +2158,7 @@ impl Editor {
         let target_insp_w = (screen_rect.width() * 0.26).clamp(210.0, 280.0);
         if insp_anim > 0.01 {
             let cur_w = (target_insp_w * insp_anim).max(24.0);
+            let right_pad = (8.0 + safe_right).round().clamp(8.0, 120.0) as i8;
             egui::Panel::right("landscape_right_inspector")
                 .exact_size(cur_w)
                 .resizable(false)
@@ -2166,15 +2167,15 @@ impl Editor {
                         .fill(Color32::from_rgba_unmultiplied(20, 22, 29, 246))
                         .stroke(egui::Stroke::new(1.0, Color32::from_rgb(42, 46, 58)))
                         .inner_margin(egui::Margin {
-                            left: 4,
-                            right: side_right,
-                            top: 4,
-                            bottom: (4.0 + safe_bottom * 0.5).round() as i8,
+                            left: 6,
+                            right: right_pad,
+                            top: 6,
+                            bottom: (6.0 + safe_bottom * 0.5).round() as i8,
                         }),
                 )
                 .show(ui, |ui| {
                     ui.set_clip_rect(ui.max_rect());
-                    let inner_w = (ui.available_width() - 4.0).max(160.0);
+                    let inner_w = (ui.available_width() - 6.0).max(140.0);
                     let total_h = (ui.available_height() - 16.0).max(140.0);
                     let split = self.ui.portrait_drawer_split.clamp(0.25, 0.75);
                     let top_h = (total_h * split).max(70.0);
@@ -2531,6 +2532,8 @@ impl Editor {
         );
         let prev_exp_drawer = self.ui.portrait_explorer_drawer;
         let mut eff_collapsed = effective_dock_collapsed;
+        let cam_lift = if !effective_dock_collapsed { 64.0 } else { 0.0 };
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("pill_dock_cam_lift"), cam_lift));
         self.floating_bottom_pill_dock_ui(ctx, left_pane_rect, safe_bottom, &mut eff_collapsed, dock_open_t);
         if kb_h <= 40.0 {
             dock_collapsed = eff_collapsed;
@@ -2595,10 +2598,12 @@ impl Editor {
             return;
         }
 
-        let dock_w = (screen_rect.width() - 20.0).clamp(270.0, 440.0);
+        let max_dock_w = (screen_rect.width() - 16.0).max(220.0);
+        let dock_w = max_dock_w.clamp(220.0, 440.0).min(max_dock_w);
         let dock_h = 54.0;
         let slide_offset = (1.0 - dock_open_t) * (dock_h + safe_bottom + 20.0);
-        let dock_x = screen_rect.center().x - dock_w * 0.5;
+        let dock_x = (screen_rect.center().x - dock_w * 0.5)
+            .clamp(screen_rect.left() + 8.0, (screen_rect.right() - dock_w - 8.0).max(screen_rect.left() + 8.0));
         let dock_y = screen_rect.bottom() - safe_bottom.max(6.0) - dock_h - 4.0 + slide_offset;
 
         egui::Area::new(egui::Id::new("portrait_floating_pill_dock_area"))

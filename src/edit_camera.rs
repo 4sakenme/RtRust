@@ -65,11 +65,12 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     // 1. Virtual Fly Joystick (bottom-left) + Altitude / Focus / Mode (bottom-right)
     // Scale proportionally to screen height so controls fit comfortably on both iPhone landscape (375pt tall) and iPad (768pt+ tall).
     let (_safe_top, safe_bottom, safe_left, _safe_right) = crate::platform::get_safe_area_insets();
+    let dock_lift = ctx.data(|d| d.get_temp::<f32>(egui::Id::new("pill_dock_cam_lift")).unwrap_or(0.0));
     let h_scale = (rect.height() / 420.0).clamp(0.76, 1.05);
     let joy_radius = (42.0 * h_scale).round();
     let joy_center = Pos2::new(
         rect.min.x + safe_left + 16.0 + joy_radius,
-        rect.max.y - safe_bottom - 14.0 - joy_radius,
+        rect.max.y - safe_bottom - 14.0 - joy_radius - dock_lift * 0.5,
     );
     let joy_hit_rect = Rect::from_center_size(joy_center, Vec2::splat(joy_radius * 2.3));
     let joy_resp = ui.interact(joy_hit_rect, egui::Id::new("edit_cam_fly_joy"), Sense::click_and_drag());
@@ -97,7 +98,7 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     let mut joy_vec = if joy_touch_id.is_some() { prev_joy_vec } else { Vec2::ZERO };
     let mut touch_look_delta = Vec2::ZERO;
     let right_ctrl_zone = Rect::from_min_max(
-        Pos2::new(rect.max.x - 175.0 * h_scale, rect.max.y - safe_bottom - 140.0 * h_scale),
+        Pos2::new(rect.max.x - 175.0 * h_scale, rect.max.y - safe_bottom - dock_lift - 140.0 * h_scale),
         Pos2::new(rect.max.x, rect.max.y),
     );
     for ev in &events {
@@ -204,7 +205,7 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     let step_x = (56.0 * h_scale).round();
     let step_y = (56.0 * h_scale).round();
     let base_x = rect.max.x - 14.0 - r_big;
-    let base_y = rect.max.y - safe_bottom - 14.0 - r_big;
+    let base_y = rect.max.y - safe_bottom - 14.0 - r_big - dock_lift;
 
     let dn_c = Pos2::new(base_x, base_y);
     let up_c = Pos2::new(base_x, base_y - step_y);
