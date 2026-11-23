@@ -18,7 +18,7 @@
 //!   tooltip;
 //! - Log: Output's look and filter bar.
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::rfd;
 use egui::{Align, Color32, FontId, Layout, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use rustudio_engine::theme;

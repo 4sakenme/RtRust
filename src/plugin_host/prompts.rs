@@ -10,7 +10,7 @@
 //! none open, the next one this thread's plugins open (a run that answers
 //! many dialogs in turn without timing them).
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::rfd;
 use std::collections::HashMap;
 use std::path::PathBuf;

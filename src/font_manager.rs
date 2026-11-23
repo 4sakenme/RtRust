@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::rfd;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

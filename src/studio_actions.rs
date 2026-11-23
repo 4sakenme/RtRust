@@ -9,7 +9,7 @@ use rbx_dom_weak::types::{Ref, Variant};
 use crate::app::{Editor, PendingAction, Tab, Tool};
 use rustudio_render::render::MeshKind;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::rfd;
 use crate::studio_ui::{menu_rect_key, menu_shortcuts, RunType, MENUS, M};
 use rustudio_engine::theme;

@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Instant;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::rfd;
 
 use egui::{Key, KeyboardShortcut, Modifiers, RichText};

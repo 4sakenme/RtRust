@@ -11,7 +11,7 @@
 //! Generate / Import share one box selection with handles, Sea Level has
 //! its own box. Every stroke or button press is one undo step.
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::rfd;
 use egui::{Color32, Pos2, Rect, Stroke};
 use glam::Vec3;

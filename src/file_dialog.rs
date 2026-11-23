@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::rfd;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
