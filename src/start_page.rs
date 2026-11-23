@@ -1504,8 +1504,11 @@ fn card(ui: &mut egui::Ui, title: &str, sub: &str, thumb: impl FnOnce(&egui::Pai
     let h = title.bytes().fold(13u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) as usize;
     let accent = crate::wallpaper::pastel_for_index(h);
     let active = resp.hovered() || resp.is_pointer_button_down_on();
-    let anim = ui.ctx().animate_bool_with_time(resp.id.with("pastel_card_scale"), active, 0.14);
-    let scale = 1.0 + 0.035 * anim;
+    let pressed = resp.is_pointer_button_down_on();
+    let hov_anim = ui.ctx().animate_bool_with_time(resp.id.with("pastel_card_scale"), active, 0.14);
+    let press_anim = ui.ctx().animate_bool_with_time(resp.id.with("pastel_card_press"), pressed, 0.09);
+    // Tactile 0.96x press squish, or 1.03x hover lift
+    let scale = (1.0 + 0.03 * hov_anim) * (1.0 - 0.04 * press_anim);
     let r = Rect::from_center_size(base_r.center(), base_r.size() * scale);
     let p = ui.painter().with_clip_rect(r.expand(2.0));
 
@@ -1521,7 +1524,7 @@ fn card(ui: &mut egui::Ui, title: &str, sub: &str, thumb: impl FnOnce(&egui::Pai
     // Pastel accent pill bar at top of footer
     let bar_r = Rect::from_min_size(
         Pos2::new(r.min.x + 10.0, tr.max.y + 4.0),
-        Vec2::new(28.0 + 18.0 * anim, 2.5),
+        Vec2::new(28.0 + 18.0 * hov_anim, 2.5),
     );
     p.rect_filled(bar_r, CornerRadius::same(2), accent);
 

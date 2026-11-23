@@ -545,6 +545,7 @@ impl Editor {
 
         // Clickable Jump-to-Error banner when Luau syntax check finds an error
         if let Some((err_line, err_msg)) = &buf.error {
+            let clean_msg = strip_diag_prefix(err_msg);
             let banner = egui::Frame::new()
                 .fill(Color32::from_rgb(95, 25, 28))
                 .inner_margin(egui::Margin::symmetric(8, 5))
@@ -553,7 +554,7 @@ impl Editor {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
-                            RichText::new(format!("⚠ Line {err_line}: {err_msg}"))
+                            RichText::new(format!("⚠ Line {err_line}: {clean_msg}"))
                                 .color(Color32::from_rgb(255, 210, 210))
                                 .strong(),
                         );
@@ -786,21 +787,60 @@ impl Editor {
                     if resp.clicked() {
                         crate::android_ime::force_show_keyboard();
                     }
-                    // VS Code-style Error Lens: show error inline next to the offending line.
+                    // Non-overlapping Inline Diagnostic Pill: strip `<InstancePath>:<line>: ` prefix
+                    // and render either after the line (`line_w + 16.0`) if it fits, or inside a
+                    // floating tooltip pill positioned below the error line (`line_bottom + 4.0`)
+                    // with solid dark background `rgba(24, 26, 34, 0.94)` clamped inside viewport width.
                     if let Some((err_line, err_msg)) = &buf.error {
+                        let clean_msg = strip_diag_prefix(err_msg);
                         let line_idx = err_line.saturating_sub(1);
                         let line_str = buf.text.lines().nth(line_idx).unwrap_or("");
                         let line_w = ui.fonts_mut(|f| {
                             f.layout_no_wrap(line_str.to_owned(), font.clone(), Color32::WHITE).size().x
                         });
-                        let y = resp.rect.top() + (line_idx as f32) * row_h;
-                        let pos = egui::pos2(resp.rect.left() + line_w + 14.0, y);
-                        ui.painter().text(
-                            pos,
-                            egui::Align2::LEFT_TOP,
-                            format!("⚠ {err_msg}"),
-                            font.clone(),
-                            Color32::from_rgba_unmultiplied(245, 105, 105, 200),
+                        let diag_font = FontId::monospace((font_px - 1.5).max(11.0));
+                        let diag_text = format!("⚠ {clean_msg}");
+                        let clip_r = ui.clip_rect();
+                        let max_pill_w = (clip_r.width() - 16.0).max(140.0);
+                        let diag_galley = ui.fonts_mut(|f| {
+                            let mut job = LayoutJob::simple(
+                                diag_text,
+                                diag_font.clone(),
+                                Color32::from_rgb(255, 165, 165),
+                                max_pill_w - 14.0,
+                            );
+                            job.wrap.max_rows = 2;
+                            f.layout_job(job)
+                        });
+                        let pill_size = diag_galley.size() + egui::vec2(12.0, 6.0);
+                        let line_top = resp.rect.top() + (line_idx as f32) * row_h;
+                        let line_bottom = line_top + row_h;
+                        let inline_x = resp.rect.left() + line_w + 16.0;
+                        let fits_inline = inline_x + pill_size.x <= clip_r.right() - 6.0;
+
+                        let pill_pos = if fits_inline {
+                            egui::pos2(inline_x, line_top + (row_h - pill_size.y).max(0.0) * 0.5)
+                        } else {
+                            let clamped_x = (resp.rect.left() + 8.0)
+                                .min((clip_r.right() - pill_size.x - 6.0).max(clip_r.left() + 4.0));
+                            egui::pos2(clamped_x, line_bottom + 4.0)
+                        };
+                        let pill_rect = egui::Rect::from_min_size(pill_pos, pill_size);
+                        ui.painter().rect_filled(
+                            pill_rect,
+                            egui::CornerRadius::same(6),
+                            Color32::from_rgba_unmultiplied(24, 26, 34, 240),
+                        );
+                        ui.painter().rect_stroke(
+                            pill_rect,
+                            egui::CornerRadius::same(6),
+                            Stroke::new(1.0, Color32::from_rgba_unmultiplied(245, 105, 105, 150)),
+                            egui::StrokeKind::Inside,
+                        );
+                        ui.painter().galley(
+                            pill_rect.min + egui::vec2(6.0, 3.0),
+                            diag_galley,
+                            Color32::from_rgb(255, 165, 165),
                         );
                     }
                     // Roblox Studio-style dim ghost autocomplete suffix at cursor.
@@ -1240,6 +1280,31 @@ impl Editor {
 
 fn buf_needs_repaint(b: Option<&ScriptBuf>) -> bool {
     b.is_some_and(|b| b.checked.as_deref() != Some(b.text.as_str()))
+}
+
+/// Strips redundant `<InstancePath>:<line>: ` or `[string "..."]:<line>: ` prefix
+/// from a Luau compile error so inline diagnostics stay concise and readable.
+fn strip_diag_prefix(msg: &str) -> &str {
+    let trimmed = msg.trim();
+    // Look for `:<digits>: ` pattern and return everything after it
+    let bytes = trimmed.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b':' {
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > i + 1 && bytes.get(j) == Some(&b':') {
+                let rest = trimmed[j + 1..].trim_start();
+                if !rest.is_empty() {
+                    return rest;
+                }
+            }
+        }
+        i += 1;
+    }
+    trimmed
 }
 
 fn mobile_luau_suggestions(

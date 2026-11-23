@@ -2420,8 +2420,8 @@ impl RustudioApp {
                 self.ed.ui.portrait_tab != crate::studio_ui::PortraitTab::Viewport;
         } else if is_mobile_landscape {
             self.ed.landscape_mobile_layout_ui(ui, &ctx, screen_rect);
-            self.ed.ui.viewport_hidden =
-                self.ed.ui.portrait_tab != crate::studio_ui::PortraitTab::Viewport;
+            // Always keep the 3D Viewport rendered as the base layer in Landscape mode
+            self.ed.ui.viewport_hidden = false;
         } else {
             let _p = rustudio_core::bench::scope("editor_chrome");
             egui::Panel::top("menu")

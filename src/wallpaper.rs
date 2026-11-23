@@ -270,77 +270,50 @@ fn paint_cover_image(painter: &egui::Painter, rect: Rect, tex: &TextureHandle) {
     painter.image(tex.id(), rect, uv, Color32::WHITE);
 }
 
-/// Draws a smooth animated luminous border trail orbiting `rect` for popovers, modals, and floating panels.
+/// Draws a clean, static 1px glass-edge rim border (`rgba(255, 255, 255, 0.14)`)
+/// and subtle top specular highlight on popovers, modals, and floating panels
+/// (without any rotating/traveling neon trail).
 pub fn draw_luminous_border_trail(
-    ctx: &egui::Context,
+    _ctx: &egui::Context,
     painter: &egui::Painter,
     rect: Rect,
     rounding: f32,
-    accent: Color32,
+    _accent: Color32,
 ) {
-    let enabled = {
-        let mut g = state().lock().unwrap();
-        ensure_loaded(&mut g);
-        g.cfg.luminous_trails
-    };
     let cr = CornerRadius::same(rounding.round().clamp(0.0, 255.0) as u8);
-    // Crisp base border
+    // Soft outer ambient drop rim
+    painter.rect_stroke(
+        rect.expand(1.0),
+        cr,
+        Stroke::new(1.5, Color32::from_black_alpha(75)),
+        egui::StrokeKind::Outside,
+    );
+    // Crisp 1px subtle glass rim border: rgba(255, 255, 255, 0.14) (~36 alpha)
     painter.rect_stroke(
         rect,
         cr,
-        Stroke::new(1.0, accent.gamma_multiply(0.32)),
+        Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
         egui::StrokeKind::Inside,
     );
-    if !enabled {
-        return;
-    }
-    let t = (ctx.input(|i| i.time) as f32) * 0.55;
-    let perimeterPoints = rect_perimeter_points(rect.shrink(0.5), 48);
-    if perimeterPoints.len() < 8 {
-        return;
-    }
-    let n = perimeterPoints.len();
-    let head = ((t.fract()) * (n as f32)) as usize;
-    let trail_len = 14usize;
-    for step in 0..trail_len {
-        let i0 = (head + n - step) % n;
-        let i1 = (head + n - step - 1) % n;
-        let fade = 1.0 - (step as f32 / trail_len as f32);
-        let col = accent.gamma_multiply(fade * fade * 0.95);
-        painter.line_segment(
-            [perimeterPoints[i1], perimeterPoints[i0]],
-            Stroke::new(1.8 + fade * 0.7, col),
-        );
-    }
-    ctx.request_repaint_after(std::time::Duration::from_millis(33));
 }
 
-fn rect_perimeter_points(r: Rect, count: usize) -> Vec<Pos2> {
-    let w = r.width().max(1.0);
-    let h = r.height().max(1.0);
-    let perim = 2.0 * (w + h);
-    let mut out = Vec::with_capacity(count);
-    for i in 0..count {
-        let mut d = (i as f32 / count as f32) * perim;
-        let p = if d < w {
-            Pos2::new(r.min.x + d, r.min.y)
-        } else {
-            d -= w;
-            if d < h {
-                Pos2::new(r.max.x, r.min.y + d)
-            } else {
-                d -= h;
-                if d < w {
-                    Pos2::new(r.max.x - d, r.max.y)
-                } else {
-                    d -= w;
-                    Pos2::new(r.min.x, r.max.y - d)
-                }
-            }
-        };
-        out.push(p);
-    }
-    out
+/// Ease-out-back spring curve (`t` in `0.0..=1.0`) for iOS/macOS-style popovers
+/// (`scale: 0.92 -> 1.00`, `8pt` directional slide, and opacity fade).
+#[inline]
+pub fn ease_out_back(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let c1 = 1.45;
+    let c3 = c1 + 1.0;
+    let tm1 = t - 1.0;
+    (1.0 + c3 * tm1 * tm1 * tm1 + c1 * tm1 * tm1).clamp(0.0, 1.08)
+}
+
+/// Staggered item reveal factor (`0.0..=1.0`) for item `index` given overall menu progress `menu_t` (`0.0..=1.0`),
+/// producing a snappy ~12ms per-item sequential cascade.
+#[inline]
+pub fn staggered_item_alpha(menu_t: f32, index: usize) -> f32 {
+    let delay = (index as f32) * 0.065;
+    ((menu_t - delay) / (1.0 - delay.min(0.65))).clamp(0.0, 1.0)
 }
 
 /// Interactive settings page inside `Studio Settings -> Background & Wallpapers`

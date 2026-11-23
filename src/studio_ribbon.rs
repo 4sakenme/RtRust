@@ -881,33 +881,37 @@ impl Editor {
                 });
             });
 
-        // Floating Rounded Category Popover Menu with Smooth Pop-In & Luminous Border Trail
+        // Floating Rounded Category Popover Menu with 180ms Ease-Out-Back Spring Pop-In,
+        // Staggered 12ms Item Reveal, and 1px Glass-Edge Rim
         {
             let cat_pop_id = egui::Id::new("portrait_cat_dropdown_open");
             let mut cat_open = ctx.data(|d| d.get_temp::<bool>(cat_pop_id).unwrap_or(false));
-            let anim = ctx.animate_bool_with_time(egui::Id::new("portrait_cat_pop_anim"), cat_open, 0.16);
+            let anim = ctx.animate_bool_with_time(egui::Id::new("portrait_cat_pop_anim"), cat_open, 0.18);
             if cat_open || anim > 0.01 {
+                let spring = crate::wallpaper::ease_out_back(anim);
+                let scale = 0.92 + 0.08 * spring;
+                let slide_y = (1.0 - anim) * -8.0;
                 let anchor_rect = ctx
                     .data(|d| d.get_temp::<Rect>(egui::Id::new("portrait_cat_pill_rect")))
                     .unwrap_or_else(|| Rect::from_min_size(egui::pos2(56.0, 44.0), Vec2::new(90.0, 26.0)));
-                let pop_pos = egui::pos2(anchor_rect.left(), anchor_rect.bottom() + 6.0 * anim);
+                let pop_pos = egui::pos2(anchor_rect.left(), anchor_rect.bottom() + 6.0 + slide_y);
                 let shown = egui::Area::new(egui::Id::new("portrait_cat_dropdown_area"))
                     .order(egui::Order::Foreground)
                     .interactable(true)
                     .fixed_pos(pop_pos)
                     .show(ctx, |ui| {
                         let frame = egui::Frame::new()
-                            .fill(Color32::from_rgba_unmultiplied(20, 22, 30, (242.0 * anim) as u8))
+                            .fill(Color32::from_rgba_unmultiplied(20, 22, 30, (242.0 * anim.clamp(0.0, 1.0)) as u8))
                             .corner_radius(egui::CornerRadius::same(14))
                             .inner_margin(egui::Margin::same(8))
                             .shadow(egui::epaint::Shadow {
-                                offset: [0, 8],
-                                blur: 20,
+                                offset: [0, 10],
+                                blur: 24,
                                 spread: 0,
-                                color: Color32::from_black_alpha((120.0 * anim) as u8),
+                                color: Color32::from_black_alpha((135.0 * anim.clamp(0.0, 1.0)) as u8),
                             });
                         frame.show(ui, |ui| {
-                            ui.set_width(184.0);
+                            ui.set_width((184.0 * scale).max(150.0));
                             ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
                             ui.label(
                                 egui::RichText::new("RIBBON CATEGORY")
@@ -915,20 +919,30 @@ impl Editor {
                                     .strong()
                                     .color(theme::TEXT_DIM),
                             );
-                            for (tab, icon, accent, sub) in [
+                            for (idx, (tab, icon, accent, sub)) in [
                                 (RibbonTab::Home, "pointer", crate::wallpaper::PASTEL_LAVENDER, "Select, Move, Scale"),
                                 (RibbonTab::Model, "cube", crate::wallpaper::PASTEL_MINT, "Parts, Rig, Snap"),
                                 (RibbonTab::Avatar, "user-cog", crate::wallpaper::PASTEL_GOLD, "Rig Builder & Animations"),
                                 (RibbonTab::Ui, "app-window", crate::wallpaper::PASTEL_ROSE, "ScreenGui, Frame, Text"),
                                 (RibbonTab::Script, "file-code", crate::wallpaper::PASTEL_SKY, "Luau Scripts & Debug"),
                                 (RibbonTab::Plugins, "sparkles", crate::wallpaper::PASTEL_PEACH, "Installed Studio Plugins"),
-                            ] {
+                            ]
+                            .into_iter()
+                            .enumerate()
+                            {
+                                let item_alpha = crate::wallpaper::staggered_item_alpha(anim, idx);
+                                let item_slide_x = (1.0 - item_alpha) * -6.0;
                                 let selected = self.ui.tab == tab;
-                                let (row_r, row_resp) = ui.allocate_exact_size(Vec2::new(168.0, 34.0), Sense::click());
+                                let (base_r, row_resp) = ui.allocate_exact_size(Vec2::new(168.0 * scale, 34.0 * scale), Sense::click());
+                                let press_squish = if row_resp.is_pointer_button_down_on() { 0.96 } else { 1.0 };
+                                let row_r = Rect::from_center_size(
+                                    base_r.center() + Vec2::new(item_slide_x, 0.0),
+                                    base_r.size() * press_squish,
+                                );
                                 let fill = if selected {
-                                    accent.gamma_multiply(0.22)
+                                    accent.gamma_multiply(0.22 * item_alpha)
                                 } else if row_resp.hovered() {
-                                    Color32::from_rgba_unmultiplied(45, 50, 64, 180)
+                                    Color32::from_rgba_unmultiplied(45, 50, 64, (180.0 * item_alpha) as u8)
                                 } else {
                                     Color32::TRANSPARENT
                                 };
@@ -937,7 +951,7 @@ impl Editor {
                                     ui.painter().rect_stroke(
                                         row_r,
                                         egui::CornerRadius::same(8),
-                                        egui::Stroke::new(1.0, accent.gamma_multiply(0.75)),
+                                        egui::Stroke::new(1.0, accent.gamma_multiply(0.75 * item_alpha)),
                                         egui::StrokeKind::Inside,
                                     );
                                 }
@@ -945,20 +959,20 @@ impl Editor {
                                     egui::pos2(row_r.left() + 16.0, row_r.center().y),
                                     Vec2::splat(16.0),
                                 );
-                                rustudio_engine::ti::paint(ui.painter(), ic_r, icon, accent);
+                                rustudio_engine::ti::paint(ui.painter(), ic_r, icon, accent.gamma_multiply(item_alpha));
                                 ui.painter().text(
                                     egui::pos2(row_r.left() + 32.0, row_r.top() + 11.0),
                                     egui::Align2::LEFT_CENTER,
                                     tab.label(),
                                     egui::FontId::proportional(13.0),
-                                    Color32::WHITE,
+                                    Color32::WHITE.gamma_multiply(item_alpha),
                                 );
                                 ui.painter().text(
                                     egui::pos2(row_r.left() + 32.0, row_r.bottom() - 8.0),
                                     egui::Align2::LEFT_CENTER,
                                     sub,
                                     egui::FontId::proportional(10.0),
-                                    theme::TEXT_DIM,
+                                    theme::TEXT_DIM.gamma_multiply(item_alpha),
                                 );
                                 if row_resp.clicked() {
                                     self.ui.tab = tab;
@@ -1088,28 +1102,30 @@ impl Editor {
             });
 
         // 3. Collapsible Dark-Translucent Bottom Pill Dock (`Workspace | Code | Explorer | Output | +`)
-        //    with Press-to-Glow & Horizontal Finger Scrubbing.
+        //    with Press-to-Glow, Jelly Pill Glide & Horizontal Finger Scrubbing.
+        //    Auto-collapse the Pill Dock while the soft keyboard is open so the Luau toolbar sits cleanly above the keyboard.
+        let kb_h = crate::platform::keyboard_height_points(ctx);
         let dock_collapsed_id = egui::Id::new("portrait_pill_dock_collapsed");
         let mut dock_collapsed = ctx.data(|d| d.get_temp::<bool>(dock_collapsed_id).unwrap_or(false));
+        let effective_dock_collapsed = dock_collapsed || kb_h > 40.0;
         let dock_open_t = ctx.animate_bool_with_time(
             egui::Id::new("portrait_pill_dock_slide_t"),
-            !dock_collapsed,
+            !effective_dock_collapsed,
             0.18,
         );
 
-        // Reserve bottom space only when dock is expanded and not in Code tab with keyboard up
-        if !dock_collapsed {
+        // Reserve bottom space equal to visible Pill Dock height (`dock_height + safe_bottom + 8.0`)
+        // so the Luau quick-insert bar and Output panel sit cleanly ABOVE the Pill Dock instead of underneath it.
+        if !effective_dock_collapsed || dock_open_t > 0.02 {
             egui::Panel::bottom("portrait_bottom_bar_spacer")
-                .exact_size((58.0 + safe_bottom) * dock_open_t.max(0.05))
+                .exact_size((62.0 + safe_bottom) * dock_open_t.max(0.02))
                 .frame(egui::Frame::NONE)
                 .show(ui, |_ui| {});
         }
 
         // 4. Touch Luau Snippet Bar (above Bottom Pill Dock, or lifted above soft keyboard when typing in Code tab)
         if self.ui.portrait_tab == PortraitTab::Code && self.ui.portrait_tool_panel.is_none() {
-            let kb_h = crate::platform::keyboard_height_points(ctx);
-            let reserved_bot = if dock_collapsed { 0.0 } else { 58.0 + safe_bottom };
-            let kb_spacer = (kb_h - reserved_bot).max(0.0);
+            let kb_spacer = kb_h.max(0.0);
             if kb_spacer > 1.0 {
                 egui::Panel::bottom("portrait_kb_spacer")
                     .exact_size(kb_spacer)
@@ -1683,8 +1699,12 @@ impl Editor {
         }
 
         // 9. Floating Collapsible Dark-Translucent Bottom Pill Dock (`Workspace | Code | Explorer | Output | +`)
-        //    with Arrow Collapse Toggle (`▾` / `▴`), Press-to-Glow, and Horizontal Finger Scrubbing.
-        self.floating_bottom_pill_dock_ui(ctx, screen_rect, safe_bottom, &mut dock_collapsed, dock_open_t);
+        //    with Arrow Collapse Toggle (`▾` / `▴`), Press-to-Glow, Jelly Pill Glide & Horizontal Finger Scrubbing.
+        let mut eff_collapsed = effective_dock_collapsed;
+        self.floating_bottom_pill_dock_ui(ctx, screen_rect, safe_bottom, &mut eff_collapsed, dock_open_t);
+        if kb_h <= 40.0 {
+            dock_collapsed = eff_collapsed;
+        }
         ctx.data_mut(|d| d.insert_temp(dock_collapsed_id, dock_collapsed));
 
         Self::hardware_perf_popup_ui(ctx);
@@ -1813,6 +1833,28 @@ impl Editor {
                         if ui.button("Manage Plugins...").clicked() { self.ui_action(ctx, "manage_plugins"); ui.close(); }
                         if ui.button("AI Assistant (MCP)").clicked() { crate::mcp_assistant::toggle_open(); ui.close(); }
                     });
+
+                    // Always-visible `3D Viewport` / `Workspace` pill button so user can return to pure 3D view anytime
+                    let is_pure_3d = self.ui.portrait_tab == PortraitTab::Viewport
+                        && self.ui.portrait_tool_panel.is_none();
+                    let ws_btn = egui::Button::new(
+                        egui::RichText::new("🌐 3D Viewport")
+                            .size(12.0)
+                            .strong()
+                            .color(if is_pure_3d { Color32::BLACK } else { Color32::WHITE }),
+                    )
+                    .fill(if is_pure_3d {
+                        crate::wallpaper::PASTEL_LAVENDER
+                    } else {
+                        Color32::from_rgba_unmultiplied(32, 36, 48, 220)
+                    })
+                    .corner_radius(13.0)
+                    .min_size(Vec2::new(88.0, 28.0));
+                    if ui.add(ws_btn).on_hover_text("Return to pure 3D Viewport").clicked() {
+                        self.ui.portrait_tab = PortraitTab::Viewport;
+                        self.ui.portrait_tool_panel = None;
+                        self.ui.portrait_quick_grid_open = false;
+                    }
 
                     // Play / Stop compact button
                     let playing = self.game.play.is_some();
@@ -2143,8 +2185,13 @@ impl Editor {
                             ui.set_max_width(inner_w);
                             ui.horizontal(|ui| {
                                 if ui
-                                    .small_button("▶")
-                                    .on_hover_text("Slide out / Collapse Inspector")
+                                    .add_sized(
+                                        [28.0, 24.0],
+                                        egui::Button::new(egui::RichText::new("✕").strong())
+                                            .fill(Color32::from_rgba_unmultiplied(45, 48, 60, 200))
+                                            .corner_radius(6.0),
+                                    )
+                                    .on_hover_text("Close / Slide out Inspector")
                                     .clicked()
                                 {
                                     inspector_open = false;
@@ -2261,64 +2308,150 @@ impl Editor {
                 });
         }
 
-        // 3. Left Main 3D Viewport (~74% width, full height below top bar) or Code Editor
+        // 3. Left Main 3D Viewport (~74% width, full height below top bar)
+        //    ALWAYS rendered as the base layer so the 3D scene never turns into a blank black screen!
         let mut left_pane_rect = screen_rect;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(theme::BG))
             .show(ui, |ui| {
                 left_pane_rect = ui.max_rect();
-                if self.ui.portrait_tab == PortraitTab::Code || self.ui.portrait_tool_panel.is_some() {
-                    crate::wallpaper::paint_studio_background(ctx, ui.painter(), left_pane_rect);
-                }
-                if let Some(tool_tab) = self.ui.portrait_tool_panel {
-                    ui.horizontal(|ui| {
-                        if ui.button("← Back to Workspace").clicked() {
-                            self.ui.portrait_tool_panel = None;
-                        }
-                        ui.label(egui::RichText::new(tool_tab.title()).strong());
-                    });
-                    ui.separator();
-                    match tool_tab {
-                        crate::app::Tab::Toolbox => self.toolbox_ui(ui),
-                        crate::app::Tab::TerrainEditor => self.terrain_editor_ui(ui),
-                        _ => {}
-                    }
-                    return;
-                }
+                self.viewport_ui(ui);
+            });
 
-                match self.ui.portrait_tab {
-                    PortraitTab::Viewport => {
-                        self.viewport_ui(ui);
-                    }
-                    PortraitTab::Code => {
-                        if self.ui.portrait_open_scripts.is_empty() {
-                            if let Some(first_ref) = self
-                                .game
-                                .doc
-                                .dom
-                                .descendants_of(self.game.doc.dom.root_ref())
-                                .find(|i| matches!(i.class.as_str(), "Script" | "LocalScript" | "ModuleScript"))
-                                .map(|i| i.referent())
-                            {
-                                self.ui.portrait_open_scripts.push(first_ref);
-                                self.ui.portrait_active_script = Some(first_ref);
-                            }
-                        }
-                        if self.ui.portrait_active_script.is_none() {
-                            self.ui.portrait_active_script = self.ui.portrait_open_scripts.first().copied();
-                        }
-                        if let Some(r) = self.ui.portrait_active_script {
-                            self.script_tab_ui(ui, r);
-                        } else {
-                            ui.centered_and_justified(|ui| {
-                                if ui.button("📜 + Tạo Script Luau mới").clicked() {
-                                    self.ui_action(ctx, "script");
+        // 3b. Dismissible Floating / Overlay Card for Script Editor or Tool Panel (`Toolbox` / `Terrain`)
+        //     with a prominent `← Back to 3D` pill button so the user is never trapped away from the 3D scene.
+        if self.ui.portrait_tab == PortraitTab::Code || self.ui.portrait_tool_panel.is_some() {
+            let card_rect = left_pane_rect.shrink2(Vec2::new(10.0, 8.0));
+            let shown = egui::Area::new(egui::Id::new("landscape_overlay_editor_card"))
+                .order(egui::Order::Middle)
+                .interactable(true)
+                .fixed_pos(card_rect.min)
+                .show(ctx, |ui| {
+                    egui::Frame::new()
+                        .fill(Color32::from_rgba_unmultiplied(18, 20, 28, 245))
+                        .corner_radius(egui::CornerRadius::same(14))
+                        .inner_margin(egui::Margin::same(10))
+                        .shadow(egui::epaint::Shadow {
+                            offset: [0, 8],
+                            blur: 22,
+                            spread: 0,
+                            color: Color32::from_black_alpha(140),
+                        })
+                        .show(ui, |ui| {
+                            ui.set_min_size(card_rect.size() - Vec2::splat(20.0));
+                            ui.set_max_size(card_rect.size() - Vec2::splat(20.0));
+                            crate::wallpaper::paint_studio_background(ctx, ui.painter(), ui.max_rect());
+
+                            // Top navigation bar with `← Back to 3D` pill button + open script tabs
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                let back_btn = egui::Button::new(
+                                    egui::RichText::new("← Back to 3D")
+                                        .size(13.0)
+                                        .strong()
+                                        .color(Color32::BLACK),
+                                )
+                                .fill(crate::wallpaper::PASTEL_LAVENDER)
+                                .corner_radius(14.0)
+                                .min_size(Vec2::new(112.0, 32.0));
+                                if ui.add(back_btn).clicked() {
+                                    self.ui.portrait_tab = PortraitTab::Viewport;
+                                    self.ui.portrait_tool_panel = None;
+                                }
+
+                                if let Some(tool_tab) = self.ui.portrait_tool_panel {
+                                    ui.label(
+                                        egui::RichText::new(tool_tab.title())
+                                            .size(14.0)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    );
+                                } else {
+                                    egui::ScrollArea::horizontal().id_salt("landscape_script_tabs_bar").show(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            let mut close_idx: Option<usize> = None;
+                                            let open_list = self.ui.portrait_open_scripts.clone();
+                                            for (idx, r) in open_list.into_iter().enumerate() {
+                                                let name = self
+                                                    .game
+                                                    .doc
+                                                    .dom
+                                                    .get_by_ref(r)
+                                                    .map(|i| i.name.as_str())
+                                                    .unwrap_or("Script");
+                                                let active = self.ui.portrait_active_script == Some(r);
+                                                if ui.selectable_label(active, format!("📜 {name}")).clicked() {
+                                                    self.ui.portrait_active_script = Some(r);
+                                                }
+                                                if ui.small_button("×").clicked() {
+                                                    close_idx = Some(idx);
+                                                }
+                                            }
+                                            if let Some(idx) = close_idx {
+                                                let removed = self.ui.portrait_open_scripts.remove(idx);
+                                                if self.ui.portrait_active_script == Some(removed) {
+                                                    self.ui.portrait_active_script = self.ui.portrait_open_scripts.last().copied();
+                                                }
+                                            }
+                                            if ui.small_button(" + New Script ").clicked() {
+                                                self.ui_action(ctx, "script");
+                                            }
+                                        });
+                                    });
                                 }
                             });
-                        }
-                    }
-                }
-            });
+                            ui.separator();
+
+                            if let Some(tool_tab) = self.ui.portrait_tool_panel {
+                                match tool_tab {
+                                    crate::app::Tab::Toolbox => self.toolbox_ui(ui),
+                                    crate::app::Tab::TerrainEditor => self.terrain_editor_ui(ui),
+                                    _ => {}
+                                }
+                                return;
+                            }
+
+                            if self.ui.portrait_open_scripts.is_empty() {
+                                if let Some(first_ref) = self
+                                    .game
+                                    .doc
+                                    .dom
+                                    .descendants_of(self.game.doc.dom.root_ref())
+                                    .find(|i| matches!(i.class.as_str(), "Script" | "LocalScript" | "ModuleScript"))
+                                    .map(|i| i.referent())
+                                {
+                                    self.ui.portrait_open_scripts.push(first_ref);
+                                    self.ui.portrait_active_script = Some(first_ref);
+                                }
+                            }
+                            if self.ui.portrait_active_script.is_none() {
+                                self.ui.portrait_active_script = self.ui.portrait_open_scripts.first().copied();
+                            }
+                            if let Some(r) = self.ui.portrait_active_script {
+                                self.script_tab_ui(ui, r);
+                            } else {
+                                ui.centered_and_justified(|ui| {
+                                    if ui
+                                        .add_sized(
+                                            [180.0, 40.0],
+                                            egui::Button::new("📜 + Tạo Script Luau mới"),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.ui_action(ctx, "script");
+                                    }
+                                });
+                            }
+                        })
+                });
+            crate::wallpaper::draw_luminous_border_trail(
+                ctx,
+                &ctx.layer_painter(shown.response.layer_id),
+                shown.inner.response.rect,
+                14.0,
+                crate::wallpaper::PASTEL_SKY,
+            );
+        }
 
         // Quick Tools & Plugins Grid Popup (from bottom `+` button)
         if self.ui.portrait_quick_grid_open {
@@ -2381,18 +2514,24 @@ impl Editor {
         }
 
         // Collapsible Dark-Translucent Bottom Pill Dock centered inside the Left Viewport Pane
+        // Auto-collapse when soft keyboard is open; reserve bottom spacer in Code / Output mode so toolbars never sit underneath the Pill Dock.
+        let kb_h = crate::platform::keyboard_height_points(ctx);
         let dock_collapsed_id = egui::Id::new("portrait_pill_dock_collapsed");
-        // In landscape, collapse by default on short phone screens (< 420pt tall) so 3D viewport is unobstructed, or expand on tap
         let mut dock_collapsed = ctx
             .data(|d| d.get_temp::<bool>(dock_collapsed_id))
             .unwrap_or(screen_rect.height() < 430.0);
+        let effective_dock_collapsed = dock_collapsed || kb_h > 40.0;
         let dock_open_t = ctx.animate_bool_with_time(
             egui::Id::new("portrait_pill_dock_slide_t"),
-            !dock_collapsed,
+            !effective_dock_collapsed,
             0.18,
         );
         let prev_exp_drawer = self.ui.portrait_explorer_drawer;
-        self.floating_bottom_pill_dock_ui(ctx, left_pane_rect, safe_bottom, &mut dock_collapsed, dock_open_t);
+        let mut eff_collapsed = effective_dock_collapsed;
+        self.floating_bottom_pill_dock_ui(ctx, left_pane_rect, safe_bottom, &mut eff_collapsed, dock_open_t);
+        if kb_h <= 40.0 {
+            dock_collapsed = eff_collapsed;
+        }
         if self.ui.portrait_explorer_drawer != prev_exp_drawer {
             ctx.data_mut(|d| d.insert_temp(inspector_open_id, self.ui.portrait_explorer_drawer));
         }
@@ -2552,23 +2691,52 @@ impl Editor {
 
                 ctx.data_mut(|d| d.insert_temp(scrub_id, (press_t0, scrub_idx, is_scrubbing)));
 
+                // Determine active tab index (0..=4) and animate a smooth Jelly Pill Glide
+                // that subtly stretches horizontally while moving between tabs and settles into place.
+                let active_tab_idx: usize = if self.ui.portrait_quick_grid_open {
+                    4
+                } else if self.ui.portrait_output_drawer {
+                    3
+                } else if self.ui.portrait_explorer_drawer {
+                    2
+                } else if self.ui.portrait_tab == PortraitTab::Code && self.ui.portrait_tool_panel.is_none() {
+                    1
+                } else {
+                    0
+                };
+                let target_idx = scrub_idx.unwrap_or(active_tab_idx);
+                let target_x = tabs_rect.left() + (target_idx as f32) * item_w + item_w * 0.5;
+                let anim_x = ctx.animate_value_with_time(
+                    egui::Id::new("pill_dock_jelly_x"),
+                    target_x,
+                    0.18,
+                );
+                let velocity_stretch = ((target_x - anim_x).abs() / item_w.max(1.0)).clamp(0.0, 0.55);
+                let pill_accent = items[target_idx.min(4)].2;
+                let jelly_w = (item_w - 4.0) * (1.0 + 0.36 * velocity_stretch + 0.05 * glow_intensity);
+                let jelly_h = tabs_rect.height() * (1.0 - 0.10 * velocity_stretch + 0.04 * glow_intensity);
+                let jelly_rect = Rect::from_center_size(
+                    egui::pos2(anim_x, tabs_rect.center().y),
+                    Vec2::new(jelly_w, jelly_h),
+                );
+                let fill_alpha = (54.0 + 44.0 * glow_intensity) as u8;
+                ui.painter().rect_filled(
+                    jelly_rect,
+                    egui::CornerRadius::same(18),
+                    Color32::from_rgba_unmultiplied(pill_accent.r(), pill_accent.g(), pill_accent.b(), fill_alpha),
+                );
+                ui.painter().rect_stroke(
+                    jelly_rect,
+                    egui::CornerRadius::same(18),
+                    egui::Stroke::new(
+                        1.0 + 0.5 * glow_intensity,
+                        Color32::from_rgba_unmultiplied(255, 255, 255, (52.0 + 48.0 * glow_intensity) as u8),
+                    ),
+                    egui::StrokeKind::Inside,
+                );
+
                 for (idx, (icon, label, accent)) in items.iter().enumerate() {
-                    let is_active = match idx {
-                        0 => {
-                            self.ui.portrait_tab == PortraitTab::Viewport
-                                && self.ui.portrait_tool_panel.is_none()
-                                && !self.ui.portrait_explorer_drawer
-                                && !self.ui.portrait_output_drawer
-                        }
-                        1 => {
-                            self.ui.portrait_tab == PortraitTab::Code
-                                && self.ui.portrait_tool_panel.is_none()
-                        }
-                        2 => self.ui.portrait_explorer_drawer,
-                        3 => self.ui.portrait_output_drawer,
-                        4 => self.ui.portrait_quick_grid_open,
-                        _ => false,
-                    };
+                    let is_active = idx == active_tab_idx;
                     let is_scrub_target = scrub_idx == Some(idx);
                     let highlight = is_active || is_scrub_target;
 
@@ -2576,41 +2744,20 @@ impl Editor {
                         egui::pos2(tabs_rect.left() + idx as f32 * item_w + 2.0, tabs_rect.top()),
                         Vec2::new(item_w - 4.0, tabs_rect.height()),
                     );
-                    let scale = if is_scrub_target {
-                        1.0 + 0.06 * glow_intensity
-                    } else if is_active {
-                        1.02
+                    // Tactile 0.96x press squish when initially pressed, or 1.05x pulse while scrubbing
+                    let scale = if is_scrub_target && !is_scrubbing && press_t0.is_some() {
+                        0.96
+                    } else if is_scrub_target {
+                        1.0 + 0.05 * glow_intensity
                     } else {
                         1.0
                     };
                     let item_r = Rect::from_center_size(base_r.center(), base_r.size() * scale);
 
-                    if highlight {
-                        let fill_alpha = if is_scrub_target {
-                            (58.0 + 42.0 * glow_intensity) as u8
-                        } else {
-                            46
-                        };
-                        ui.painter().rect_filled(
-                            item_r,
-                            egui::CornerRadius::same(18),
-                            Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), fill_alpha),
-                        );
-                        ui.painter().rect_stroke(
-                            item_r,
-                            egui::CornerRadius::same(18),
-                            egui::Stroke::new(
-                                1.0 + 0.6 * glow_intensity,
-                                accent.gamma_multiply(0.65 + 0.35 * glow_intensity),
-                            ),
-                            egui::StrokeKind::Inside,
-                        );
-                    }
-
                     // Icon on top, label below
                     let ic_r = Rect::from_center_size(
                         egui::pos2(item_r.center().x, item_r.top() + 14.0),
-                        Vec2::splat(17.0),
+                        Vec2::splat(17.0 * scale),
                     );
                     let ic_col = if highlight { *accent } else { theme::TEXT.gamma_multiply(0.82) };
                     rustudio_engine::ti::paint(ui.painter(), ic_r, icon, ic_col);
