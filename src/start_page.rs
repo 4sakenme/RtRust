@@ -480,8 +480,8 @@ impl Editor {
             .exact_size(48.0 + if safe_top > 0.0 { safe_top + 4.0 } else { 0.0 })
             .frame(
                 egui::Frame::new()
-                    .fill(Color32::from_rgba_unmultiplied(18, 20, 27, 236))
-                    .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.22)))
+                    .fill(crate::wallpaper::OBSIDIAN_CARD)
+                    .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
                     .inner_margin(egui::Margin {
                         left: top_pad_x,
                         right: top_pad_x,
@@ -509,8 +509,8 @@ impl Editor {
                 .resizable(false)
                 .frame(
                     egui::Frame::new()
-                        .fill(Color32::from_rgba_unmultiplied(16, 18, 25, 238))
-                        .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.25)))
+                        .fill(crate::wallpaper::OBSIDIAN_CARD)
+                        .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
                         .inner_margin(egui::Margin {
                             left: (10.0 + safe_left).round().clamp(8.0, 80.0) as i8,
                             right: 10,
@@ -534,7 +534,7 @@ impl Editor {
             egui::Margin { left: 28, right: 20, top: 20, bottom: 12 }
         };
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::BG).inner_margin(body_margin))
+            .frame(egui::Frame::new().fill(crate::wallpaper::OBSIDIAN_CANVAS).inner_margin(body_margin))
             .show(ui, |ui| {
                 crate::wallpaper::paint_studio_background(&ctx, ui.painter(), ui.max_rect().expand(40.0));
                 self.start_body(ui, &mut todo);
@@ -645,25 +645,27 @@ impl Editor {
                 } else {
                     "Sign in".to_string()
                 };
-                let acc_accent = if signed {
-                    crate::wallpaper::PASTEL_MINT
-                } else {
-                    crate::wallpaper::PASTEL_LAVENDER
-                };
                 let acc_btn = ui
                     .add(
                         egui::Button::new(
                             RichText::new(label)
                                 .size(12.5)
                                 .strong()
-                                .color(if signed { Color32::WHITE } else { Color32::BLACK }),
+                                .color(Color32::WHITE),
                         )
                         .fill(if signed {
-                            Color32::from_rgba_unmultiplied(38, 52, 46, 230)
+                            crate::wallpaper::SLATE_PILL_BG
                         } else {
-                            acc_accent
+                            crate::wallpaper::RUST_ORANGE
                         })
-                        .stroke(Stroke::new(1.0, acc_accent.gamma_multiply(0.7)))
+                        .stroke(Stroke::new(
+                            1.0,
+                            if signed {
+                                crate::wallpaper::LOGO_CYAN.gamma_multiply(0.65)
+                            } else {
+                                crate::wallpaper::RUST_ORANGE_HOVER
+                            },
+                        ))
                         .corner_radius(CornerRadius::same(14))
                         .min_size(Vec2::new(68.0, 30.0)),
                     )
@@ -684,7 +686,7 @@ impl Editor {
     }
 
     fn start_nav(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
-        ui.spacing_mut().item_spacing.y = 4.0;
+        ui.spacing_mut().item_spacing.y = 5.0;
         let w = ui.available_width();
         let big = |ui: &mut egui::Ui, text: &str, fill: Color32, fg: Color32, border: Color32| {
             ui.add_sized(
@@ -697,10 +699,10 @@ impl Editor {
         };
         if big(
             ui,
-            "✨ + New Baseplate",
-            crate::wallpaper::PASTEL_LAVENDER,
-            Color32::from_rgb(16, 18, 26),
-            crate::wallpaper::PASTEL_LAVENDER,
+            "🚀 + New Baseplate",
+            crate::wallpaper::RUST_ORANGE,
+            Color32::WHITE,
+            crate::wallpaper::RUST_ORANGE_HOVER,
         )
         .on_hover_text(format!("A new Baseplate place ({})", crate::studio_ui::shortcut_label("Ctrl+N")))
         .clicked()
@@ -710,9 +712,9 @@ impl Editor {
         if big(
             ui,
             "📂 Open File (.rbxl)…",
-            Color32::from_rgba_unmultiplied(30, 34, 46, 220),
+            crate::wallpaper::SLATE_PILL_BG,
             Color32::WHITE,
-            crate::wallpaper::PASTEL_SKY.gamma_multiply(0.45),
+            crate::wallpaper::SLATE_PILL_BORDER,
         )
         .on_hover_text(crate::studio_ui::shortcut_label("Ctrl+O"))
         .clicked()
@@ -722,9 +724,9 @@ impl Editor {
         if big(
             ui,
             "📁 Open Project Folder…",
-            Color32::from_rgba_unmultiplied(30, 34, 46, 220),
+            crate::wallpaper::SLATE_PILL_BG,
             Color32::WHITE,
-            crate::wallpaper::PASTEL_MINT.gamma_multiply(0.45),
+            crate::wallpaper::SLATE_PILL_BORDER,
         )
         .on_hover_text("A *.project.json folder (files are the truth)")
         .clicked()
@@ -734,16 +736,16 @@ impl Editor {
         if big(
             ui,
             "🎨 Themes & Wallpapers",
-            Color32::from_rgba_unmultiplied(34, 30, 46, 220),
-            crate::wallpaper::PASTEL_PEACH,
-            crate::wallpaper::PASTEL_PEACH.gamma_multiply(0.5),
+            crate::wallpaper::SLATE_PILL_BG,
+            crate::wallpaper::RUST_ORANGE_HOVER,
+            crate::wallpaper::SLATE_PILL_BORDER,
         )
         .clicked()
         {
             crate::wallpaper::toggle_modal(ui.ctx());
         }
         ui.add_space(10.0);
-        ui.label(RichText::new("NAVIGATION").small().strong().color(crate::wallpaper::PASTEL_LAVENDER));
+        ui.label(RichText::new("NAVIGATION").small().strong().color(crate::wallpaper::RUST_ORANGE));
         ui.add_space(4.0);
         let mut entries: Vec<(String, String, bool)> = vec![
             ("templates".into(), "🏠 Home & Templates".into(), false),
@@ -847,22 +849,38 @@ impl Editor {
             .scroll_source(touch_scroll)
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                // Hero Welcome Banner with Pastel Accents & Quick Action Pills
+                // Hero Welcome Banner with RtRust Obsidian Surface, Ember Rim & Cohesive Orange-Red + Dark-Slate Pills
                 let hero_frame = egui::Frame::new()
-                    .fill(Color32::from_rgba_unmultiplied(24, 26, 38, 215))
-                    .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.45)))
+                    .fill(crate::wallpaper::OBSIDIAN_CARD)
+                    .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
                     .corner_radius(CornerRadius::same(16))
                     .inner_margin(egui::Margin::symmetric(16, 14));
                 let hero_shown = hero_frame.show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal_wrapped(|ui| {
                         ui.vertical(|ui| {
-                            ui.label(
-                                RichText::new("✨ Welcome to RtRust Studio")
-                                    .size(19.0)
-                                    .strong()
-                                    .color(crate::wallpaper::PASTEL_LAVENDER),
-                            );
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new("Welcome to RtRust Studio")
+                                        .size(19.0)
+                                        .strong()
+                                        .color(Color32::WHITE),
+                                );
+                                // Subtle Electric Cyan brand badge from logo
+                                egui::Frame::new()
+                                    .fill(crate::wallpaper::LOGO_CYAN.gamma_multiply(0.16))
+                                    .stroke(Stroke::new(1.0, crate::wallpaper::LOGO_CYAN.gamma_multiply(0.55)))
+                                    .corner_radius(CornerRadius::same(10))
+                                    .inner_margin(egui::Margin::symmetric(7, 2))
+                                    .show(ui, |ui| {
+                                        ui.label(
+                                            RichText::new("MOBILE")
+                                                .size(9.5)
+                                                .strong()
+                                                .color(crate::wallpaper::LOGO_CYAN),
+                                        );
+                                    });
+                            });
                             ui.label(
                                 RichText::new("Build, script in Luau, and playtest 3D worlds right on your phone.")
                                     .size(12.5)
@@ -873,8 +891,9 @@ impl Editor {
                             if ui
                                 .add_enabled(
                                     !self.start.busy(),
-                                    egui::Button::new(RichText::new("↻ Refresh").color(crate::wallpaper::PASTEL_SKY))
-                                        .fill(Color32::from_rgba_unmultiplied(32, 36, 48, 220))
+                                    egui::Button::new(RichText::new("↻ Refresh").color(Color32::WHITE))
+                                        .fill(crate::wallpaper::SLATE_PILL_BG)
+                                        .stroke(Stroke::new(1.0, crate::wallpaper::SLATE_PILL_BORDER))
                                         .corner_radius(CornerRadius::same(12)),
                                 )
                                 .clicked()
@@ -886,26 +905,54 @@ impl Editor {
                             }
                         });
                     });
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
-                        for (label, accent, action) in [
-                            ("🚀 + New Baseplate", crate::wallpaper::PASTEL_LAVENDER, 0u8),
-                            ("📂 Open .rbxl File", crate::wallpaper::PASTEL_MINT, 1u8),
-                            ("🎨 Themes & Wallpaper", crate::wallpaper::PASTEL_PEACH, 2u8),
-                            ("⚙ Studio Settings", crate::wallpaper::PASTEL_SKY, 3u8),
+                        // Primary pill: Solid vibrant Rust Orange-Red (#FF5A26) with crisp white text
+                        let new_btn = egui::Button::new(
+                            RichText::new("🚀 + New Baseplate")
+                                .size(12.5)
+                                .strong()
+                                .color(Color32::WHITE),
+                        )
+                        .fill(crate::wallpaper::RUST_ORANGE)
+                        .stroke(Stroke::new(1.0, crate::wallpaper::RUST_ORANGE_HOVER))
+                        .corner_radius(CornerRadius::same(14));
+                        if ui.add(new_btn).clicked() {
+                            todo.push(Do::Template(self.start.default_template()));
+                        }
+
+                        // Secondary action pills: Sleek dark-slate (#222632) with orange-tinted icons & #323848 borders
+                        for (icon, label, action) in [
+                            ("📂", "Open .rbxl File", 1u8),
+                            ("🎨", "Themes & Wallpaper", 2u8),
+                            ("⚙", "Studio Settings", 3u8),
                         ] {
-                            let btn = egui::Button::new(
-                                RichText::new(label)
-                                    .size(12.0)
-                                    .strong()
-                                    .color(Color32::from_rgb(16, 18, 25)),
-                            )
-                            .fill(accent)
-                            .corner_radius(CornerRadius::same(14));
+                            let mut job = egui::text::LayoutJob::default();
+                            job.append(
+                                &format!("{icon} "),
+                                0.0,
+                                egui::TextFormat {
+                                    font_id: egui::FontId::proportional(12.5),
+                                    color: crate::wallpaper::RUST_ORANGE_HOVER,
+                                    ..Default::default()
+                                },
+                            );
+                            job.append(
+                                label,
+                                0.0,
+                                egui::TextFormat {
+                                    font_id: egui::FontId::proportional(12.5),
+                                    color: Color32::WHITE,
+                                    ..Default::default()
+                                },
+                            );
+                            let btn = egui::Button::new(job)
+                                .fill(crate::wallpaper::SLATE_PILL_BG)
+                                .stroke(Stroke::new(1.0, crate::wallpaper::SLATE_PILL_BORDER))
+                                .corner_radius(CornerRadius::same(14));
                             if ui.add(btn).clicked() {
                                 match action {
-                                    0 => todo.push(Do::Template(self.start.default_template())),
                                     1 => todo.push(Do::OpenFile(None)),
                                     2 => crate::wallpaper::toggle_modal(ui.ctx()),
                                     3 => {
@@ -918,12 +965,14 @@ impl Editor {
                         }
                     });
                 });
-                crate::wallpaper::draw_luminous_border_trail(
-                    ui.ctx(),
-                    ui.painter(),
-                    hero_shown.response.rect,
-                    16.0,
-                    crate::wallpaper::PASTEL_LAVENDER,
+                // Subtle top ember accent bar on hero banner
+                let hr = hero_shown.response.rect;
+                ui.painter().line_segment(
+                    [
+                        Pos2::new(hr.min.x + 18.0, hr.min.y + 0.5),
+                        Pos2::new((hr.min.x + 180.0).min(hr.max.x - 18.0), hr.min.y + 0.5),
+                    ],
+                    Stroke::new(1.5, crate::wallpaper::RUST_ORANGE),
                 );
                 ui.add_space(14.0);
                 self.start_home(ui, todo);
@@ -1497,12 +1546,11 @@ fn grid(ui: &mut egui::Ui, n: usize, mut each: impl FnMut(&mut egui::Ui, usize))
 }
 
 /// A card: thumbnail (drawn by `thumb`), title and one dim line, styled with
-/// RtRust's Pastel Accent palette and smooth hover/press scale animation.
+/// RtRust's Obsidian & Rust Orange-Red brand surfaces (`#191C24` card, `#2A2F3D` 1px border,
+/// `#212530` hover surface with `#FF5A26` Rust Orange border highlight) and tactile squish/scale.
 fn card(ui: &mut egui::Ui, title: &str, sub: &str, thumb: impl FnOnce(&egui::Painter, Rect)) -> egui::Response {
     let card_w = ui.ctx().data(|d| d.get_temp::<f32>(egui::Id::new("start_card_w"))).unwrap_or(CARD_W);
     let (base_r, resp) = ui.allocate_exact_size(Vec2::new(card_w, CARD_H), Sense::click());
-    let h = title.bytes().fold(13u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) as usize;
-    let accent = crate::wallpaper::pastel_for_index(h);
     let active = resp.hovered() || resp.is_pointer_button_down_on();
     let pressed = resp.is_pointer_button_down_on();
     let hov_anim = ui.ctx().animate_bool_with_time(resp.id.with("pastel_card_scale"), active, 0.14);
@@ -1513,25 +1561,33 @@ fn card(ui: &mut egui::Ui, title: &str, sub: &str, thumb: impl FnOnce(&egui::Pai
     let p = ui.painter().with_clip_rect(r.expand(2.0));
 
     let fill = if active {
-        Color32::from_rgba_unmultiplied(32, 35, 48, 240)
+        crate::wallpaper::OBSIDIAN_HOVER
     } else {
-        Color32::from_rgba_unmultiplied(22, 24, 34, 224)
+        crate::wallpaper::OBSIDIAN_CARD
     };
     p.rect_filled(r, CornerRadius::same(12), fill);
     let tr = Rect::from_min_size(r.min, Vec2::new(r.width(), THUMB_H * scale));
     thumb(&p.with_clip_rect(tr), tr);
 
-    // Pastel accent pill bar at top of footer
+    // Rust Orange accent bar at top of card footer
     let bar_r = Rect::from_min_size(
         Pos2::new(r.min.x + 10.0, tr.max.y + 4.0),
-        Vec2::new(28.0 + 18.0 * hov_anim, 2.5),
+        Vec2::new(26.0 + 20.0 * hov_anim, 2.5),
     );
-    p.rect_filled(bar_r, CornerRadius::same(2), accent);
+    p.rect_filled(
+        bar_r,
+        CornerRadius::same(2),
+        if active {
+            crate::wallpaper::RUST_ORANGE
+        } else {
+            crate::wallpaper::RUST_ORANGE.gamma_multiply(0.75)
+        },
+    );
 
     let border_col = if active {
-        accent
+        crate::wallpaper::RUST_ORANGE
     } else {
-        accent.gamma_multiply(0.35)
+        crate::wallpaper::OBSIDIAN_BORDER
     };
     p.rect_stroke(
         r,
@@ -1556,7 +1612,11 @@ fn card(ui: &mut egui::Ui, title: &str, sub: &str, thumb: impl FnOnce(&egui::Pai
         egui::Align2::LEFT_CENTER,
         sub_str,
         small,
-        accent.gamma_multiply(0.85),
+        if active {
+            crate::wallpaper::RUST_ORANGE_HOVER
+        } else {
+            theme::TEXT_DIM
+        },
     );
     if active {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);

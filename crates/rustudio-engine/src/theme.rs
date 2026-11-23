@@ -7,21 +7,21 @@
 
 use egui::{Color32, CornerRadius, Stroke};
 
-pub const BG: Color32 = Color32::from_rgb(25, 26, 31);
-pub const PANEL: Color32 = Color32::from_rgb(25, 26, 31);
-pub const PANEL_ALT: Color32 = Color32::from_rgb(44, 45, 51);
-pub const PANEL_DARK: Color32 = Color32::from_rgb(32, 34, 39);
+pub const BG: Color32 = Color32::from_rgb(17, 19, 24);         // #111318 Deep Obsidian Canvas
+pub const PANEL: Color32 = Color32::from_rgb(25, 28, 36);      // #191C24 Elevated Card & Panel
+pub const PANEL_ALT: Color32 = Color32::from_rgb(34, 38, 50);  // #222632 Slate Pill Surface
+pub const PANEL_DARK: Color32 = Color32::from_rgb(20, 23, 30); // #14171E Deep Panel
 /// The menu bar.
-pub const MENU_BAR: Color32 = Color32::from_rgb(39, 41, 48);
+pub const MENU_BAR: Color32 = Color32::from_rgb(25, 28, 36);   // #191C24
 /// The selected ribbon tab / toggled tool.
-pub const ACTIVE_TAB: Color32 = Color32::from_rgb(51, 52, 58);
-pub const DIVIDER: Color32 = Color32::from_rgb(53, 55, 65);
-pub const TEXT: Color32 = Color32::from_rgb(222, 223, 226);
-pub const TEXT_DIM: Color32 = Color32::from_rgb(125, 127, 132);
-pub const ACCENT: Color32 = Color32::from_rgb(51, 95, 255);
-pub const SELECT: Color32 = Color32::from_rgb(25, 153, 255);
-pub const SELECT_BG: Color32 = Color32::from_rgb(38, 62, 120);
-pub const HOVER_BG: Color32 = Color32::from_rgb(44, 45, 51);
+pub const ACTIVE_TAB: Color32 = Color32::from_rgb(45, 34, 32);
+pub const DIVIDER: Color32 = Color32::from_rgb(42, 47, 61);    // #2A2F3D Crisp 1px Border
+pub const TEXT: Color32 = Color32::from_rgb(232, 234, 240);
+pub const TEXT_DIM: Color32 = Color32::from_rgb(138, 143, 156);
+pub const ACCENT: Color32 = Color32::from_rgb(255, 90, 38);    // #FF5A26 Rust Orange-Red
+pub const SELECT: Color32 = Color32::from_rgb(255, 90, 38);    // #FF5A26 Rust Orange-Red
+pub const SELECT_BG: Color32 = Color32::from_rgb(92, 42, 28);
+pub const HOVER_BG: Color32 = Color32::from_rgb(33, 37, 48);   // #212530 Hover Surface
 /// 3D hover outline (Studio's "Hover Over Color").
 pub const HOVER_3D: Color32 = Color32::from_rgb(179, 230, 255);
 pub const WARN: Color32 = Color32::from_rgb(240, 200, 90);

@@ -18,22 +18,49 @@ use serde::{Deserialize, Serialize};
 
 use rustudio_engine::theme;
 
-// ── Curated RtRust Pastel Palette ──────────────────────────────────────────
+// ── Official RtRust Studio Brand Palette (Dark Obsidian + Rust Orange-Red + Electric Cyan) ──
 
-pub const PASTEL_LAVENDER: Color32 = Color32::from_rgb(184, 181, 255); // #B8B5FF
-pub const PASTEL_MINT: Color32 = Color32::from_rgb(168, 230, 207);     // #A8E6CF
-pub const PASTEL_SKY: Color32 = Color32::from_rgb(160, 210, 235);      // #A0D2EB
-pub const PASTEL_PEACH: Color32 = Color32::from_rgb(255, 170, 165);    // #FFAAA5
-pub const PASTEL_ROSE: Color32 = Color32::from_rgb(245, 180, 215);     // #F5B4D7
-pub const PASTEL_GOLD: Color32 = Color32::from_rgb(255, 223, 160);     // #FFDFA0
+/// Deep Obsidian Canvas: `#111318`
+pub const OBSIDIAN_CANVAS: Color32 = Color32::from_rgb(17, 19, 24);
+/// Elevated Card & Header Surface: `#191C24`
+pub const OBSIDIAN_CARD: Color32 = Color32::from_rgb(25, 28, 36);
+/// Crisp 1px Surface Border: `#2A2F3D`
+pub const OBSIDIAN_BORDER: Color32 = Color32::from_rgb(42, 47, 61);
+/// Hover / Active Card Surface: `#212530`
+pub const OBSIDIAN_HOVER: Color32 = Color32::from_rgb(33, 37, 48);
+/// Secondary Slate Action Pill Surface: `#222632`
+pub const SLATE_PILL_BG: Color32 = Color32::from_rgb(34, 38, 50);
+/// Secondary Slate Action Pill Border: `#323848`
+pub const SLATE_PILL_BORDER: Color32 = Color32::from_rgb(50, 56, 72);
+
+/// Primary Brand Accent (Rust Orange-Red): `#FF5A26`
+pub const RUST_ORANGE: Color32 = Color32::from_rgb(255, 90, 38);
+/// Hover Rust Orange: `#FF7244`
+pub const RUST_ORANGE_HOVER: Color32 = Color32::from_rgb(255, 114, 68);
+/// Pressed Rust Orange: `#E04515`
+pub const RUST_ORANGE_PRESSED: Color32 = Color32::from_rgb(224, 69, 21);
+/// Ember Red-Orange Secondary Accent: `#FF4B2B`
+pub const EMBER_RED: Color32 = Color32::from_rgb(255, 75, 43);
+/// Ember Warm Orange: `#FF7A18`
+pub const EMBER_AMBER: Color32 = Color32::from_rgb(255, 122, 24);
+/// Subtle Electric Cyan Highlight from App Logo: `#26C6DA`
+pub const LOGO_CYAN: Color32 = Color32::from_rgb(38, 198, 218);
+
+// Alias existing theme constants to the cohesive RtRust Orange-Red & Electric Cyan brand tokens
+pub const PASTEL_LAVENDER: Color32 = RUST_ORANGE;
+pub const PASTEL_MINT: Color32 = LOGO_CYAN;
+pub const PASTEL_SKY: Color32 = LOGO_CYAN;
+pub const PASTEL_PEACH: Color32 = RUST_ORANGE_HOVER;
+pub const PASTEL_ROSE: Color32 = EMBER_RED;
+pub const PASTEL_GOLD: Color32 = EMBER_AMBER;
 
 pub const PASTEL_ACCENTS: &[Color32] = &[
-    PASTEL_LAVENDER,
-    PASTEL_MINT,
-    PASTEL_SKY,
-    PASTEL_PEACH,
-    PASTEL_ROSE,
-    PASTEL_GOLD,
+    RUST_ORANGE,
+    EMBER_AMBER,
+    LOGO_CYAN,
+    RUST_ORANGE_HOVER,
+    EMBER_RED,
+    RUST_ORANGE,
 ];
 
 #[inline]
@@ -43,12 +70,12 @@ pub fn pastel_for_index(idx: usize) -> Color32 {
 
 /// Curated background color presets for Studio / Start Page and Code Editor.
 pub const STUDIO_BG_PRESETS: &[(&str, [u8; 3], Color32)] = &[
-    ("Midnight Slate (Default)", [20, 22, 29], PASTEL_LAVENDER),
-    ("Pastel Lavender Mist", [28, 26, 42], PASTEL_LAVENDER),
-    ("Mint Sage Night", [20, 32, 30], PASTEL_MINT),
-    ("Sky Nebula", [20, 30, 42], PASTEL_SKY),
-    ("Sunset Peach Dusk", [36, 25, 31], PASTEL_PEACH),
-    ("Deep OLED Pitch", [11, 12, 16], PASTEL_SKY),
+    ("RtRust Dark Orange (Default)", [17, 19, 24], RUST_ORANGE),
+    ("Crimson Rust", [24, 16, 20], Color32::from_rgb(230, 57, 70)),
+    ("Ember Obsidian", [22, 18, 17], EMBER_AMBER),
+    ("Cyber Cyan Slate", [15, 21, 27], LOGO_CYAN),
+    ("Midnight Charcoal", [20, 22, 29], RUST_ORANGE_HOVER),
+    ("Deep OLED Pitch", [10, 11, 14], RUST_ORANGE),
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -65,13 +92,13 @@ pub struct WallpaperConfig {
 impl Default for WallpaperConfig {
     fn default() -> Self {
         Self {
-            studio_bg_rgb: [20, 22, 29],
+            studio_bg_rgb: [17, 19, 24], // #111318 Deep Obsidian Canvas
             studio_image_path: None,
             studio_dim_opacity: 0.45,
-            code_bg_rgb: [22, 24, 31],
+            code_bg_rgb: [17, 19, 24],   // #111318 Deep Obsidian Canvas
             code_image_path: None,
             code_dim_opacity: 0.62,
-            luminous_trails: true,
+            luminous_trails: false,
         }
     }
 }
