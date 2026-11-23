@@ -20,7 +20,7 @@ use rustudio_core::doc;
 use rustudio_core::math::Xform;
 use crate::props_layout::{Category, Frame, Row};
 
-pub(crate) const ROW_H: f32 = if cfg!(target_os = "android") { 30.0 } else { 21.0 };
+pub(crate) const ROW_H: f32 = if cfg!(any(target_os = "android", target_os = "ios")) { 30.0 } else { 21.0 };
 pub(crate) const CAT_H: f32 = 25.0;
 pub(crate) const INDENT: f32 = 25.0;
 pub(crate) const DIVIDER: f32 = 0.48;

@@ -475,6 +475,22 @@ fn window_arg(argv: &[String]) -> Option<(u32, u32)> {
 /// The whole program: parse the command line and run the editor, a tool
 /// command or a harness run (`src/main.rs` calls this).
 pub fn run() -> eframe::Result<()> {
+    #[cfg(target_os = "ios")]
+    {
+        if let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+            let docs = home.join("Documents");
+            let _ = std::fs::create_dir_all(&docs);
+            let _ = std::env::set_current_dir(&docs);
+            unsafe {
+                std::env::set_var("XDG_CONFIG_HOME", home.join(".config"));
+                std::env::set_var("XDG_DATA_HOME", home.join(".local/share"));
+                std::env::set_var("XDG_STATE_HOME", home.join(".local/state"));
+                std::env::set_var("XDG_CACHE_HOME", home.join(".cache"));
+            }
+        }
+        rustudio_core::mobile::set_eco(true);
+        rustudio_core::mobile::set_drawer_mode(true);
+    }
     // `rustudio mcp`: the stdio MCP bridge to the open windows (src/mcp/
     // bridge.rs). No window, nothing else on stdout.
     {

@@ -123,7 +123,7 @@ impl Default for StartPage {
             template_tab: None,
             opening: None,
             opened: None,
-            nav_open: !cfg!(target_os = "android"),
+            nav_open: !cfg!(any(target_os = "android", target_os = "ios")),
         }
     }
 }

@@ -191,7 +191,7 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     // 4. Camera rotation: Right-drag on PC; 1-finger swipe on Mobile (when not dragging part/gizmo)
     let adorn_hot = rustudio_engine::gui::share().adorn_hot;
     let delta = ctx.input(|i| i.pointer.delta());
-    let is_mobile = cfg!(target_os = "android") || rustudio_core::mobile::is_drawer_mode();
+    let is_mobile = cfg!(any(target_os = "android", target_os = "ios")) || rustudio_core::mobile::is_drawer_mode();
     let can_free_drag = free_look
         || (ed.drag.is_none() && ed.marquee.is_none() && ed.part_drag.is_none() && !adorn_hot);
     let want_rotate = if is_mobile {

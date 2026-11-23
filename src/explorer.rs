@@ -16,7 +16,7 @@ use rustudio_core::doc::{DocKind, Document};
 use crate::icons;
 use rustudio_engine::theme;
 
-const ROW_H: f32 = if cfg!(target_os = "android") { 40.0 } else { 24.0 };
+const ROW_H: f32 = if cfg!(any(target_os = "android", target_os = "ios")) { 40.0 } else { 24.0 };
 const INDENT: f32 = 14.0;
 /// Hovering a collapsed row this long while dragging expands it.
 const AUTO_EXPAND_S: f32 = 0.6;
@@ -443,7 +443,7 @@ impl Editor {
         let selected = self.game.doc.selection.contains(&r);
         let expanded = self.explorer.expanded.contains(&r) || self.explorer.forced_open.contains(&r);
 
-        let sense = if cfg!(target_os = "android") { Sense::click() } else { Sense::click_and_drag() };
+        let sense = if cfg!(any(target_os = "android", target_os = "ios")) { Sense::click() } else { Sense::click_and_drag() };
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), sense);
         let painter = ui.painter_at(rect);
         // Drag over this row: above / into / below by the pointer's height.

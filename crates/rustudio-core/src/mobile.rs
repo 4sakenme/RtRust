@@ -48,12 +48,12 @@ pub fn touch_keys() -> [bool; 5] {
 
 /// Eco mode: No Shadows, 0.7x viewport render scale, 30 FPS cap during Play,
 /// and On-Demand rendering (`ControlFlow::Wait`) when idle.
-/// Enabled by default on Android; toggleable from the top toolbar on any platform.
-pub static MOBILE_ECO_MODE: AtomicBool = AtomicBool::new(cfg!(target_os = "android"));
+/// Enabled by default on Android & iOS; toggleable from the top toolbar on any platform.
+pub static MOBILE_ECO_MODE: AtomicBool = AtomicBool::new(cfg!(any(target_os = "android", target_os = "ios")));
 
 /// Whether touch-friendly floating drawers & virtual controls are active.
-/// Enabled by default on Android, and auto-activated on narrow screens or via toggle.
-pub static MOBILE_DRAWER_MODE: AtomicBool = AtomicBool::new(cfg!(target_os = "android"));
+/// Enabled by default on Android & iOS, and auto-activated on narrow screens or via toggle.
+pub static MOBILE_DRAWER_MODE: AtomicBool = AtomicBool::new(cfg!(any(target_os = "android", target_os = "ios")));
 
 #[inline]
 pub fn is_eco() -> bool {

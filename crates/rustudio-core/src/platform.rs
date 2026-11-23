@@ -128,6 +128,13 @@ pub fn fallback_font_files() -> &'static [&'static str] {
         ]
     } else if cfg!(target_os = "macos") {
         &["/System/Library/Fonts/Apple Symbols.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"]
+    } else if cfg!(target_os = "ios") {
+        &[
+            "/System/Library/Fonts/Core/SFUI.ttf",
+            "/System/Library/Fonts/Core/Helvetica.ttc",
+            "/System/Library/Fonts/LanguageSupport/PingFang.ttc",
+            "/System/Library/Fonts/CoreAddition/AppleSymbols.ttf",
+        ]
     } else {
         &[
             "/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf",

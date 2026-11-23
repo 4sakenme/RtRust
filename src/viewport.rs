@@ -730,7 +730,7 @@ impl Editor {
                     && self.start_part_drag(rect, p, ctrl || shift)
                 {
                     // Allow tapping & dragging parts on both PC and Mobile.
-                } else if !cfg!(target_os = "android") && !rustudio_core::mobile::is_drawer_mode() {
+                } else if !cfg!(any(target_os = "android", target_os = "ios")) && !rustudio_core::mobile::is_drawer_mode() {
                     // PC: Left-drag on empty space draws box selection ("bôi đen").
                     // Mobile: No box selection so swiping empty space rotates the camera.
                     self.marquee = Some(p);
