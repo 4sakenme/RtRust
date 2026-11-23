@@ -205,6 +205,12 @@ impl ApplicationHandler<UserEvent> for NativeLoop<'_> {
                 if hz == 0 && self.pace_refresh {
                     hz = self.refresh_hz(event_loop);
                 }
+                if hz == 0
+                    && (cfg!(any(target_os = "ios", target_os = "android"))
+                        || rustudio_core::mobile::is_eco())
+                {
+                    hz = 60;
+                }
                 if hz > 0 {
                     if let Some(last) = self.last_ui_frame() {
                         *when = (*when).max(last + Duration::from_secs_f64(1.0 / hz as f64));
@@ -255,6 +261,13 @@ impl ApplicationHandler<UserEvent> for NativeLoop<'_> {
         };
         if let Some(deadline) = deadline {
             event_loop.set_control_flow(with_plugin_deadline(event_loop.control_flow(), deadline));
+        }
+        if cfg!(any(target_os = "ios", target_os = "android")) {
+            if matches!(event_loop.control_flow(), ControlFlow::Poll) {
+                event_loop.set_control_flow(ControlFlow::WaitUntil(
+                    Instant::now() + Duration::from_millis(16),
+                ));
+            }
         }
     }
 }

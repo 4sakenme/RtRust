@@ -38,38 +38,45 @@ impl Editor {
         let button = self.ui_rects.get("account").copied();
         let screen = ctx.content_rect();
         let pos = match button {
-            Some(r) => egui::pos2((r.max.x - W).max(screen.min.x + 8.0), r.max.y + 6.0),
-            None => egui::pos2(screen.max.x - W - 8.0, screen.min.y + 40.0),
+            Some(r) => egui::pos2(
+                (r.max.x - W).max(screen.min.x + 8.0),
+                (r.max.y + 6.0).min((screen.max.y - 260.0).max(screen.min.y + 36.0)),
+            ),
+            None => egui::pos2((screen.max.x - W - 8.0).max(8.0), screen.min.y + 40.0),
         };
         let frame = egui::Frame::new()
             .fill(theme::PANEL_DARK)
             .stroke(egui::Stroke::new(1.0, theme::DIVIDER))
-            .corner_radius(6.0)
+            .corner_radius(8.0)
             .shadow(egui::epaint::Shadow {
                 offset: [0, 6],
                 blur: 18,
                 spread: 0,
                 color: egui::Color32::from_black_alpha(110),
             });
-        let shown = egui::Popup::new(
-            egui::Id::new("account_popover"), ctx.clone(), pos, egui::LayerId::background(),
-        )
-        .kind(egui::PopupKind::Menu)
-        .align_alternatives(&[])
-        .frame(frame)
-        .show(|ui| {
-            ui.set_width(W);
-            ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
-            self.account_contents(ui);
-        })
-        .expect("account popup is open");
-        // Click outside (not on the button, which toggles) or Esc closes it.
-        let outside = ctx.input(|i| {
-            i.pointer.any_pressed()
-                && i.pointer.interact_pos().is_some_and(|p| {
-                    !shown.response.rect.contains(p) && !button.is_some_and(|b| b.contains(p))
+        let shown = egui::Area::new(egui::Id::new("account_popover_area"))
+            .order(egui::Order::Foreground)
+            .interactable(true)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                frame.show(ui, |ui| {
+                    ui.set_width(W);
+                    ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                    self.account_contents(ui);
                 })
-        });
+            });
+        let popup_rect = shown.inner.response.rect.expand(12.0);
+        // Click outside (not on the button, which toggles) or Esc closes it.
+        // Do not auto-close on outside press while a text field has keyboard focus,
+        // so tapping to dismiss the iOS keyboard or tapping Sign in while the
+        // keyboard is closing never swallows the button tap.
+        let outside = !ctx.egui_wants_keyboard_input()
+            && ctx.input(|i| {
+                i.pointer.any_pressed()
+                    && i.pointer.interact_pos().is_some_and(|p| {
+                        !popup_rect.contains(p) && !button.is_some_and(|b| b.expand(6.0).contains(p))
+                    })
+            });
         let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
         if outside || esc {
             self.game.account.open = false;
@@ -220,23 +227,35 @@ impl Editor {
                     }
                 }
                 ui.add_space(10.0);
-                let mut go = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                let row = egui::vec2(ui.available_width(), 26.0);
+                let mut go = ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    || (field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                let row = egui::vec2(ui.available_width(), 40.0);
                 ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
+                    ui.spacing_mut().item_spacing.x = 8.0;
                     let ready = !a.busy() && !a.cookie_input.trim().is_empty();
                     let label = if a.busy() { "Signing in…" } else { "Sign in" };
-                    go |= ui
-                        .add_enabled(
-                            ready,
-                            egui::Button::new(RichText::new(label).color(egui::Color32::WHITE))
-                                .fill(theme::ACCENT)
-                                .min_size(egui::vec2(76.0, 26.0)),
-                        )
-                        .clicked();
+                    let sign_in_resp = ui.add_enabled(
+                        ready,
+                        egui::Button::new(RichText::new(label).size(13.5).strong().color(egui::Color32::WHITE))
+                            .fill(theme::ACCENT)
+                            .corner_radius(6.0)
+                            .min_size(egui::vec2(110.0, 40.0)),
+                    );
+                    let released_in_btn = ready
+                        && ui.input(|i| {
+                            (i.pointer.any_released() || i.pointer.any_pressed())
+                                && i.pointer
+                                    .interact_pos()
+                                    .is_some_and(|p| sign_in_resp.rect.expand(8.0).contains(p))
+                        });
+                    go |= sign_in_resp.clicked() || released_in_btn;
                     if (signed || !accounts.is_empty() || a.quick.is_some())
                         && ui
-                            .add(egui::Button::new("Cancel").fill(egui::Color32::TRANSPARENT).min_size(egui::vec2(64.0, 26.0)))
+                            .add(
+                                egui::Button::new("Cancel")
+                                    .fill(egui::Color32::TRANSPARENT)
+                                    .min_size(egui::vec2(76.0, 40.0)),
+                            )
                             .clicked()
                     {
                         if let Some(q) = &a.quick {

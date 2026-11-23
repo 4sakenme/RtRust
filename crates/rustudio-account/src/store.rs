@@ -1,5 +1,9 @@
 //! System keyring entries for the signed-in session and saved accounts.
 //! Legacy publishing-key entries remain accessible for older clients.
+//!
+//! On iOS (sideloaded builds without signed `keychain-access-groups` entitlement)
+//! and Android, or whenever the system keyring fails, secrets fall back to a
+//! `0600`-permission file inside the app's private data directory.
 
 use crate::{Error, Result};
 
@@ -8,38 +12,26 @@ const API_KEY_USER: &str = "roblox-open-cloud-api-key";
 /// Left behind by OAuth sign-in before the cookie session; removed on sight.
 const OLD_OAUTH_USER: &str = "roblox-oauth-tokens";
 
+#[cfg(all(not(test), not(any(target_os = "android", target_os = "ios"))))]
 fn entry(user: &str) -> Result<keyring::Entry> {
     keyring::Entry::new(SERVICE, user)
         .map_err(|e| Error(format!("system keyring unavailable: {e}")))
 }
 
-/// The secret stored for `user` under service `rustudio`, if any. Raw
-/// bytes, so Windows (which stores a password as UTF-16) fits twice as much.
-#[cfg(all(not(test), not(target_os = "android")))]
-pub(crate) fn load(user: &str) -> Result<Option<Vec<u8>>> {
-    match entry(user)?.get_secret() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.into()),
+#[cfg(not(test))]
+fn secret_file_path(user: &str) -> std::path::PathBuf {
+    let safe: String = user
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' })
+        .collect();
+    if cfg!(target_os = "ios") {
+        let base = std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Documents");
+        return base.join(format!(".auth_session_{safe}.dat"));
     }
-}
-
-#[cfg(all(not(test), not(target_os = "android")))]
-pub(crate) fn save(user: &str, secret: &[u8]) -> Result<()> {
-    entry(user)?.set_secret(secret)?;
-    Ok(())
-}
-
-#[cfg(all(not(test), not(target_os = "android")))]
-pub(crate) fn delete(user: &str) -> Result<()> {
-    match entry(user)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.into()),
-    }
-}
-
-#[cfg(all(not(test), target_os = "android"))]
-fn android_secret_path(user: &str) -> std::path::PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
         .map(std::path::PathBuf::from)
@@ -49,16 +41,12 @@ fn android_secret_path(user: &str) -> std::path::PathBuf {
                 .map(|h| std::path::PathBuf::from(h).join(".config"))
         })
         .unwrap_or_else(|| std::path::PathBuf::from("."));
-    let safe: String = user
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' })
-        .collect();
     base.join("rustudio").join("secrets").join(format!("{safe}.bin"))
 }
 
-#[cfg(all(not(test), target_os = "android"))]
-pub(crate) fn load(user: &str) -> Result<Option<Vec<u8>>> {
-    let path = android_secret_path(user);
+#[cfg(not(test))]
+fn file_load(user: &str) -> Result<Option<Vec<u8>>> {
+    let path = secret_file_path(user);
     match std::fs::read(&path) {
         Ok(v) => Ok(Some(v)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -66,28 +54,84 @@ pub(crate) fn load(user: &str) -> Result<Option<Vec<u8>>> {
     }
 }
 
-#[cfg(all(not(test), target_os = "android"))]
-pub(crate) fn save(user: &str, secret: &[u8]) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let path = android_secret_path(user);
+#[cfg(not(test))]
+fn file_save(user: &str, secret: &[u8]) -> Result<()> {
+    let path = secret_file_path(user);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| Error(format!("create secret dir {}: {e}", parent.display())))?;
     }
     std::fs::write(&path, secret)
         .map_err(|e| Error(format!("write secret {}: {e}", path.display())))?;
-    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
     Ok(())
 }
 
-#[cfg(all(not(test), target_os = "android"))]
-pub(crate) fn delete(user: &str) -> Result<()> {
-    let path = android_secret_path(user);
+#[cfg(not(test))]
+fn file_delete(user: &str) -> Result<()> {
+    let path = secret_file_path(user);
     match std::fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(Error(format!("remove secret {}: {e}", path.display()))),
     }
+}
+
+/// The secret stored for `user` under service `rustudio`, if any. Raw
+/// bytes, so Windows (which stores a password as UTF-16) fits twice as much.
+#[cfg(all(not(test), not(any(target_os = "android", target_os = "ios"))))]
+pub(crate) fn load(user: &str) -> Result<Option<Vec<u8>>> {
+    if let Ok(e) = entry(user) {
+        match e.get_secret() {
+            Ok(v) => return Ok(Some(v)),
+            Err(keyring::Error::NoEntry) => {
+                if let Ok(Some(v)) = file_load(user) {
+                    return Ok(Some(v));
+                }
+                return Ok(None);
+            }
+            Err(_) => {}
+        }
+    }
+    file_load(user)
+}
+
+#[cfg(all(not(test), not(any(target_os = "android", target_os = "ios"))))]
+pub(crate) fn save(user: &str, secret: &[u8]) -> Result<()> {
+    if let Ok(e) = entry(user) {
+        if e.set_secret(secret).is_ok() {
+            let _ = file_save(user, secret);
+            return Ok(());
+        }
+    }
+    file_save(user, secret)
+}
+
+#[cfg(all(not(test), not(any(target_os = "android", target_os = "ios"))))]
+pub(crate) fn delete(user: &str) -> Result<()> {
+    if let Ok(e) = entry(user) {
+        let _ = e.delete_credential();
+    }
+    file_delete(user)
+}
+
+#[cfg(all(not(test), any(target_os = "android", target_os = "ios")))]
+pub(crate) fn load(user: &str) -> Result<Option<Vec<u8>>> {
+    file_load(user)
+}
+
+#[cfg(all(not(test), any(target_os = "android", target_os = "ios")))]
+pub(crate) fn save(user: &str, secret: &[u8]) -> Result<()> {
+    file_save(user, secret)
+}
+
+#[cfg(all(not(test), any(target_os = "android", target_os = "ios")))]
+pub(crate) fn delete(user: &str) -> Result<()> {
+    file_delete(user)
 }
 
 #[cfg(test)]
@@ -117,42 +161,6 @@ pub(crate) fn delete(user: &str) -> Result<()> {
 
 pub struct PublishKeyStore;
 
-#[cfg(not(target_os = "android"))]
-impl PublishKeyStore {
-    fn entry(user: &str) -> Result<keyring::Entry> {
-        entry(user)
-    }
-
-    pub fn save(key: &str) -> Result<()> {
-        Self::entry(API_KEY_USER)?.set_password(key.trim())?;
-        Ok(())
-    }
-
-    /// The saved publishing key, if any.
-    pub fn load() -> Result<Option<String>> {
-        match Self::entry(API_KEY_USER)?.get_password() {
-            Ok(s) => Ok(Some(s).filter(|k| !k.trim().is_empty())),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    pub fn clear() -> Result<()> {
-        match Self::entry(API_KEY_USER)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    /// Deletes the OAuth tokens an older rustudio saved.
-    pub fn forget_oauth_tokens() {
-        if let Ok(e) = Self::entry(OLD_OAUTH_USER) {
-            let _ = e.delete_credential();
-        }
-    }
-}
-
-#[cfg(target_os = "android")]
 impl PublishKeyStore {
     pub fn save(key: &str) -> Result<()> {
         save(API_KEY_USER, key.trim().as_bytes())
