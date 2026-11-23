@@ -14,7 +14,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 log = "0.4"
 pollster = "0.4"
 
-[target.'cfg(not(target_os = "android"))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 rfd = "0.15"
 
 [dev-dependencies]

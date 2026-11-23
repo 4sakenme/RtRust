@@ -19,7 +19,7 @@ pub struct Dialogs {
     pending: Option<(Want, Receiver<Option<PathBuf>>)>,
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl Dialogs {
     pub fn open(&mut self) {
         let d = rfd::AsyncFileDialog::new()
@@ -72,7 +72,7 @@ impl Dialogs {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 impl Dialogs {
     pub fn open(&mut self) {}
     pub fn save(&mut self, _chrome: bool, _selection: bool) {}
