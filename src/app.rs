@@ -2048,6 +2048,12 @@ impl eframe::App for RustudioApp {
             }
             raw.events = cleaned;
         }
+        if rustudio_core::mobile::is_drawer_mode() || cfg!(any(target_os = "android", target_os = "ios")) {
+            _ctx.options_mut(|o| {
+                o.input_options.max_click_dist = 14.0;
+                o.input_options.max_click_duration = 0.85;
+            });
+        }
         crate::touch_input_bridge::process_raw_input(_ctx, raw);
         if let Some(t) = self.ed.harness.selftest.as_mut() {
             t.inject(raw);

@@ -842,6 +842,7 @@ impl ScrollArea {
             if content_response_option
                 .as_ref()
                 .is_some_and(|response| response.dragged())
+                && ui.input(|i| i.pointer.is_decidedly_dragging())
             {
                 for d in 0..2 {
                     if direction_enabled[d] {

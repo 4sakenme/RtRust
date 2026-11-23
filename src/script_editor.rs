@@ -800,12 +800,12 @@ impl Editor {
             st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(b), egui::text::CCursor::new(a))));
             st.store(ui.ctx(), editor_id);
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         {
-            let kb_h = crate::android_ime::keyboard_height_dp(ui.ctx());
+            let kb_h = crate::platform::keyboard_height_points(ui.ctx());
             if kb_h > 0.0 {
                 let screen = ui.ctx().content_rect();
-                let bar_h = 36.0;
+                let bar_h = 40.0;
                 let y = (screen.bottom() - kb_h - bar_h).max(40.0);
                 egui::Area::new(egui::Id::new("mobile_kb_accessory_bar"))
                     .order(egui::Order::Foreground)
@@ -814,30 +814,53 @@ impl Editor {
                         egui::Frame::new()
                             .fill(theme::PANEL_DARK)
                             .stroke(egui::Stroke::new(1.0, Color32::from_rgb(55, 60, 72)))
-                            .inner_margin(egui::Margin::symmetric(6, 4))
+                            .inner_margin(egui::Margin::symmetric(6, 5))
                             .show(ui, |ui| {
                                 ui.set_min_width(screen.width());
                                 ui.set_max_width(screen.width());
                                 egui::ScrollArea::horizontal().id_salt("kb_bar_scroll").show(ui, |ui| {
                                     ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing = egui::vec2(5.0, 0.0);
                                         if let Some((lbl, ins)) = combined_suggestions.first() {
                                             if ui.button(RichText::new(format!("⇥ {lbl}")).monospace().color(Color32::from_rgb(130, 210, 140))).clicked() {
                                                 accept = Some(ins.clone());
+                                                ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+                                            }
+                                        }
+                                        for (label, dir) in [("◀", "left"), ("▶", "right"), ("▲", "up"), ("▼", "down")] {
+                                            if ui.button(RichText::new(label).monospace().size(13.5).strong()).clicked() {
+                                                ui.ctx().data_mut(|d| {
+                                                    d.insert_temp(egui::Id::new("mobile_cursor_move"), dir.to_string());
+                                                });
+                                                ui.ctx().memory_mut(|m| m.request_focus(editor_id));
                                             }
                                         }
                                         for (label, snip) in [
                                             ("Tab", "    "),
+                                            ("local", "local "),
+                                            ("function", "function "),
+                                            ("end", "end"),
+                                            ("if", "if "),
+                                            ("then", "then"),
+                                            ("else", "else"),
+                                            ("for", "for "),
+                                            ("return", "return "),
                                             ("(", "("),
                                             (")", ")"),
                                             ("\"", "\""),
                                             ("=", " = "),
+                                            ("==", " == "),
+                                            ("~=", " ~= "),
                                             (":", ":"),
-                                            ("local", "local "),
-                                            ("fn", "function "),
-                                            ("end", "end"),
+                                            (".", "."),
+                                            ("..", " .. "),
+                                            ("{}", "{}"),
+                                            ("[]", "[]"),
+                                            ("--", "-- "),
                                         ] {
                                             if ui.button(RichText::new(label).monospace().size(13.0)).clicked() {
                                                 ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("mobile_luau_snippet"), snip.to_string()));
+                                                ui.ctx().memory_mut(|m| m.request_focus(editor_id));
                                             }
                                         }
                                         if ui.button("✓").clicked() {

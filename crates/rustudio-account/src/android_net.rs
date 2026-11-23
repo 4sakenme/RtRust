@@ -25,12 +25,13 @@ pub fn default_agent() -> ureq::Agent {
     build_agent(
         ureq::Agent::config_builder()
             .tls_config(webpki_tls())
+            .max_idle_connections(0)
             .build(),
     )
 }
 
 pub fn build_agent(config: ureq::config::Config) -> ureq::Agent {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         ureq::Agent::with_parts(
             config,
@@ -38,7 +39,7 @@ pub fn build_agent(config: ureq::config::Config) -> ureq::Agent {
             AndroidDnsResolver::default(),
         )
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         config.into()
     }
@@ -60,7 +61,24 @@ impl Resolver for AndroidDnsResolver {
     ) -> Result<ResolvedSocketAddrs, ureq::Error> {
         if let Ok(addrs) = self.inner.resolve(uri, config, timeout) {
             if !addrs.is_empty() {
-                return Ok(addrs);
+                // Sort IPv4 addresses ahead of IPv6 so mobile networks without IPv6
+                // connectivity don't fail TLS handshakes with UnexpectedEof.
+                let mut v4 = Vec::new();
+                let mut v6 = Vec::new();
+                for &addr in addrs.iter() {
+                    if addr.is_ipv4() {
+                        v4.push(addr);
+                    } else {
+                        v6.push(addr);
+                    }
+                }
+                let mut sorted = self.empty();
+                for addr in v4.into_iter().chain(v6).take(16) {
+                    sorted.push(addr);
+                }
+                if !sorted.is_empty() {
+                    return Ok(sorted);
+                }
             }
         }
         let authority = uri.authority().ok_or(ureq::Error::HostNotFound)?;

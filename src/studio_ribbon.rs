@@ -719,14 +719,25 @@ impl Editor {
         }
 
         // 1. Modern Roblox Studio Single Top Bar (File | Home Model Avatar UI ... | Undo Redo Play Perf Account)
+        let (safe_top, safe_bottom, safe_left, safe_right) = crate::platform::get_safe_area_insets();
+        let top_pad = if safe_top > 0.0 { (safe_top + 6.0).round().clamp(0.0, 120.0) as i8 } else { 3 };
+        let side_left = (6.0 + safe_left).round().clamp(0.0, 120.0) as i8;
+        let side_right = (6.0 + safe_right).round().clamp(0.0, 120.0) as i8;
+        let bot_pad = (6.0 + safe_bottom).round().clamp(0.0, 120.0) as i8;
+
         let ribbon_open_id = egui::Id::new("portrait_ribbon_expanded");
         let mut ribbon_open = ctx.data(|d| d.get_temp::<bool>(ribbon_open_id).unwrap_or(true));
         egui::Panel::top("portrait_top_bar")
-            .exact_size(34.0)
+            .exact_size(34.0 + if safe_top > 0.0 { safe_top + 3.0 } else { 0.0 })
             .frame(
                 egui::Frame::new()
                     .fill(theme::MENU_BAR)
-                    .inner_margin(egui::Margin::symmetric(6, 3)),
+                    .inner_margin(egui::Margin {
+                        left: side_left,
+                        right: side_right,
+                        top: top_pad,
+                        bottom: 3,
+                    }),
             )
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
@@ -913,11 +924,16 @@ impl Editor {
 
         // 3. Bottom Navigation Bar (5 large buttons: 3D | Code | Explorer | Output | +)
         egui::Panel::bottom("portrait_bottom_bar")
-            .exact_size(48.0)
+            .exact_size(48.0 + safe_bottom)
             .frame(
                 egui::Frame::new()
                     .fill(theme::PANEL_DARK)
-                    .inner_margin(egui::Margin::symmetric(6, 6)),
+                    .inner_margin(egui::Margin {
+                        left: side_left,
+                        right: side_right,
+                        top: 6,
+                        bottom: bot_pad,
+                    }),
             )
             .show(ui, |ui| {
                 let w = ((ui.available_width() - 24.0) / 5.0).max(48.0);

@@ -3482,9 +3482,9 @@ impl Game {
                     let xy = s.game.last_pointer.map(|p| p.xy).unwrap_or([0.0, 0.0]);
                     (
                         xy,
-                        std::mem::take(&mut s.mouse_delta),
+                        s.mouse_delta,
                         std::mem::take(&mut s.mouse_moved),
-                        std::mem::take(&mut s.wheel),
+                        s.wheel,
                     )
                 }
                 None => ([0.0, 0.0], glam::Vec2::ZERO, false, 0.0),
@@ -3898,14 +3898,17 @@ impl Game {
             let stretch = f32_of(cd.prop(cam, "ViewStretch")).unwrap_or(1.0);
             Some((xf, fov, ortho, stretch))
         });
-        if let Some((xf, fov, ortho, stretch)) = client_cam {
-            let has_pm = self
-                .play
-                .as_ref()
-                .and_then(|s| s.other_doc.as_ref())
-                .is_some_and(doc_has_player_module);
-            let cam_override = rustudio_core::mobile::shift_lock() || rustudio_core::mobile::touch_cam_held();
-            if has_pm && !cam_override {
+        let has_character = self.play.as_ref().is_some_and(|s| s.character.is_some());
+        if has_character {
+            self.cam.ortho = None;
+            self.cam.stretch = 1.0;
+            self.step_fallback_player_cam_and_move();
+        } else {
+            if let Some(s) = self.play.as_mut() {
+                s.mouse_delta = glam::Vec2::ZERO;
+                s.wheel = 0.0;
+            }
+            if let Some((xf, fov, ortho, stretch)) = client_cam {
                 self.cam.ortho = ortho;
                 self.cam.stretch = stretch;
                 let look = -xf.rot.z_axis;
@@ -3917,11 +3920,7 @@ impl Game {
             } else {
                 self.cam.ortho = None;
                 self.cam.stretch = 1.0;
-                self.step_fallback_player_cam_and_move();
             }
-        } else {
-            self.cam.ortho = None;
-            self.cam.stretch = 1.0;
         }
         // RUSTUDIO_FEEL_TRACE: what this frame draws (the view's camera and
         // the character's root as they are when the tick ends), for
@@ -3953,8 +3952,7 @@ impl Game {
         self.shown_front();
     }
 
-    /// Fallback third-person orbit camera + camera-relative movement when Roblox's
-    /// PlayerModule is unavailable.
+    /// Third-person orbit camera + camera-relative movement for Playtest.
     fn step_fallback_player_cam_and_move(&mut self) {
         let touch = rustudio_core::mobile::touch_keys();
         let stick = rustudio_core::mobile::touch_stick();

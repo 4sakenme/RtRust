@@ -169,7 +169,8 @@ pub fn open_path(path: &Path) -> std::io::Result<()> {
 }
 
 /// Returns `(top, bottom, left, right)` safe area insets in logical points so
-/// HUD buttons pad cleanly inside notches, Dynamic Islands, and home bars.
+/// HUD buttons and top/bottom bars pad cleanly inside notches, Dynamic Islands,
+/// and home bars.
 pub fn get_safe_area_insets() -> (f32, f32, f32, f32) {
     #[cfg(target_os = "ios")]
     {
@@ -179,6 +180,25 @@ pub fn get_safe_area_insets() -> (f32, f32, f32, f32) {
     #[cfg(not(target_os = "ios"))]
     {
         (0.0, 0.0, 0.0, 0.0)
+    }
+}
+
+/// Returns the current soft keyboard height in logical points (`dp` / `pt`)
+/// when a text editor is active, so the Luau quick-insert / cursor bar floats
+/// cleanly above the keyboard on both iOS and Android.
+pub fn keyboard_height_points(ctx: &egui::Context) -> f32 {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_ime::keyboard_height_dp(ctx)
+    }
+    #[cfg(target_os = "ios")]
+    {
+        ios_keyboard_height_points(ctx)
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _ = ctx;
+        0.0
     }
 }
 
@@ -265,34 +285,110 @@ fn ios_safe_area_insets() -> (f32, f32, f32, f32) {
         );
     }
 
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
+    unsafe impl Encode for CGPoint {
+        const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+    }
+    unsafe impl Encode for CGSize {
+        const ENCODING: Encoding = Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]);
+    }
+    unsafe impl Encode for CGRect {
+        const ENCODING: Encoding = Encoding::Struct("CGRect", &[CGPoint::ENCODING, CGSize::ENCODING]);
+    }
+
+    let mut top = 0.0_f32;
+    let mut bottom = 0.0_f32;
+    let mut left = 0.0_f32;
+    let mut right = 0.0_f32;
+    let mut screen_w = 375.0_f32;
+    let mut screen_h = 812.0_f32;
+
     unsafe {
-        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
-        if app.is_null() {
-            return (44.0, 21.0, 0.0, 0.0);
-        }
-        let windows: *mut AnyObject = msg_send![app, windows];
-        if windows.is_null() {
-            return (44.0, 21.0, 0.0, 0.0);
-        }
-        let count: usize = msg_send![windows, count];
-        for idx in 0..count {
-            let win: *mut AnyObject = msg_send![windows, objectAtIndex: idx];
-            if win.is_null() {
-                continue;
+        let screen: *mut AnyObject = msg_send![class!(UIScreen), mainScreen];
+        if !screen.is_null() {
+            let bounds: CGRect = msg_send![screen, bounds];
+            if bounds.size.width > 0.0 && bounds.size.height > 0.0 {
+                screen_w = bounds.size.width as f32;
+                screen_h = bounds.size.height as f32;
             }
-            let is_key: bool = msg_send![win, isKeyWindow];
-            if is_key || idx == 0 {
-                let insets: UIEdgeInsets = msg_send![win, safeAreaInsets];
-                return (
-                    (insets.top as f32).max(0.0),
-                    (insets.bottom as f32).max(0.0),
-                    (insets.left as f32).max(0.0),
-                    (insets.right as f32).max(0.0),
-                );
+        }
+
+        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+        if !app.is_null() {
+            let windows: *mut AnyObject = msg_send![app, windows];
+            if !windows.is_null() {
+                let count: usize = msg_send![windows, count];
+                for idx in 0..count {
+                    let win: *mut AnyObject = msg_send![windows, objectAtIndex: idx];
+                    if win.is_null() {
+                        continue;
+                    }
+                    let is_key: bool = msg_send![win, isKeyWindow];
+                    if is_key || idx == 0 {
+                        let insets: UIEdgeInsets = msg_send![win, safeAreaInsets];
+                        top = (insets.top as f32).max(0.0);
+                        bottom = (insets.bottom as f32).max(0.0);
+                        left = (insets.left as f32).max(0.0);
+                        right = (insets.right as f32).max(0.0);
+                        if is_key {
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
-    (44.0, 21.0, 0.0, 0.0)
+
+    // Guarantee hardware notch / Dynamic Island & Home Indicator safe margins on
+    // all-screen iPhones (iPhone X / 11 Pro / 12..16 where max dimension >= 812pt),
+    // even when status bar is hidden.
+    let max_dim = screen_w.max(screen_h);
+    if max_dim >= 800.0 {
+        if screen_h >= screen_w {
+            // Portrait
+            top = top.max(44.0);
+            bottom = bottom.max(34.0);
+        } else {
+            // Landscape
+            left = left.max(44.0);
+            right = right.max(44.0);
+            bottom = bottom.max(21.0);
+        }
+    }
+
+    (top, bottom, left, right)
+}
+
+#[cfg(target_os = "ios")]
+fn ios_keyboard_height_points(ctx: &egui::Context) -> f32 {
+    if !ctx.egui_wants_keyboard_input() {
+        return 0.0;
+    }
+    let screen = ctx.content_rect();
+    if screen.height() >= screen.width() {
+        // iPhone portrait soft keyboard height (including predictions bar)
+        302.0
+    } else {
+        // iPhone landscape soft keyboard height
+        216.0
+    }
 }
 
 #[cfg(target_os = "android")]

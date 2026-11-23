@@ -1061,13 +1061,26 @@ impl Editor {
 
         let mt_id = egui::Id::new("mobile_multitouch_state");
         let mut mt = ui.ctx().data(|d| d.get_temp::<MultiTouchState>(mt_id).unwrap_or_default());
+        let events = ui.ctx().input(|i| i.events.clone());
+        let any_active_input = ui.ctx().input(|i| i.any_touches() || i.pointer.any_down())
+            || events.iter().any(|e| {
+                matches!(
+                    e,
+                    egui::Event::Touch {
+                        phase: egui::TouchPhase::Start | egui::TouchPhase::Move,
+                        ..
+                    }
+                )
+            });
+        if !any_active_input {
+            mt = MultiTouchState::default();
+        }
         let mut touch_events_seen = mt.thumbstick_touch_id.is_some()
             || mt.jump_touch_id.is_some()
             || mt.camera_orbit_touch_id.is_some();
         let mut orbit_delta = egui::Vec2::ZERO;
         let mut pinch_delta = 0.0_f32;
 
-        let events = ui.ctx().input(|i| i.events.clone());
         for ev in &events {
             if let egui::Event::Touch { id, phase, pos, .. } = ev {
                 touch_events_seen = true;
@@ -1102,6 +1115,17 @@ impl Editor {
                             continue;
                         }
                         if mt.jump_touch_id == Some(tid) {
+                            continue;
+                        }
+                        // If a finger started before Playtest or wasn't registered yet, adopt it now
+                        if mt.camera_orbit_touch_id.is_none()
+                            && rect.contains(*pos)
+                            && !stick_zone.contains(*pos)
+                            && !jump_rect.contains(*pos)
+                            && !sl_rect_pre.contains(*pos)
+                        {
+                            mt.camera_orbit_touch_id = Some(tid);
+                            mt.last_camera_touch_pos = *pos;
                             continue;
                         }
                         if let (Some(cam_id), Some((sec_id, sec_pos))) =
@@ -1274,7 +1298,8 @@ impl Editor {
                     && !jump_rect.contains(p)
             });
 
-        let mouse_left_drag_cam = !touch_events_seen
+        let mouse_left_drag_cam = !mt.thumbstick_touch_id.is_some()
+            && !touch_orbit_active
             && !top_bar_hit
             && !sl_hit
             && !stick_down
@@ -1287,7 +1312,8 @@ impl Editor {
         } else if touch_orbit_active {
             orbit_delta
         } else if mouse_left_drag_cam {
-            resp.drag_delta()
+            let d = resp.drag_delta();
+            if d.length() <= 120.0 { d } else { egui::Vec2::ZERO }
         } else {
             egui::Vec2::ZERO
         };

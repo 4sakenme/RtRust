@@ -20,6 +20,9 @@ pub struct EditCamState {
     pub free_look: bool,
     pub joy_vec: Vec2,
     pub joy_touching: bool,
+    pub joy_touch_id: Option<u64>,
+    pub look_touch_id: Option<u64>,
+    pub last_look_pos: Pos2,
     pub up_held: bool,
     pub down_held: bool,
     pub smooth_target: Option<(Vec3, Vec3)>, // (cam.pos, cam.pivot)
@@ -33,6 +36,9 @@ impl Default for EditCamState {
             free_look: false,
             joy_vec: Vec2::ZERO,
             joy_touching: false,
+            joy_touch_id: None,
+            look_touch_id: None,
+            last_look_pos: Pos2::ZERO,
             up_held: false,
             down_held: false,
             smooth_target: None,
@@ -57,14 +63,86 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     let prefs = crate::studio_settings::camera_prefs();
 
     // 1. Virtual Fly Joystick (bottom-left) + Altitude / Focus / Mode (bottom-right)
-    let joy_center = Pos2::new(rect.min.x + 64.0, rect.max.y - 64.0);
+    let ( _safe_top, safe_bottom, safe_left, safe_right) = crate::platform::get_safe_area_insets();
+    let joy_center = Pos2::new(rect.min.x + safe_left + 64.0, rect.max.y - safe_bottom - 64.0);
     let joy_radius = 42.0;
     let joy_hit_rect = Rect::from_center_size(joy_center, Vec2::splat(joy_radius * 2.3));
     let joy_resp = ui.interact(joy_hit_rect, egui::Id::new("edit_cam_fly_joy"), Sense::click_and_drag());
 
-    let mut joy_vec = Vec2::ZERO;
-    let mut joy_touching = false;
-    if joy_resp.dragged() || joy_resp.is_pointer_button_down_on() {
+    let (mut joy_touch_id, mut look_touch_id, mut last_look_pos, prev_joy_vec) = STATE.with(|s| {
+        let b = s.borrow();
+        (b.joy_touch_id, b.look_touch_id, b.last_look_pos, b.joy_vec)
+    });
+    let events = ctx.input(|i| i.events.clone());
+    let any_active = ctx.input(|i| i.any_touches() || i.pointer.any_down())
+        || events.iter().any(|e| {
+            matches!(
+                e,
+                egui::Event::Touch {
+                    phase: egui::TouchPhase::Start | egui::TouchPhase::Move,
+                    ..
+                }
+            )
+        });
+    if !any_active {
+        joy_touch_id = None;
+        look_touch_id = None;
+    }
+
+    let mut joy_vec = if joy_touch_id.is_some() { prev_joy_vec } else { Vec2::ZERO };
+    let mut touch_look_delta = Vec2::ZERO;
+    let right_ctrl_zone = Rect::from_min_max(
+        Pos2::new(rect.max.x - safe_right - 175.0, rect.max.y - safe_bottom - 130.0),
+        Pos2::new(rect.max.x, rect.max.y),
+    );
+    for ev in &events {
+        if let egui::Event::Touch { id, phase, pos, .. } = ev {
+            let tid = id.0;
+            match phase {
+                egui::TouchPhase::Start => {
+                    if !rect.contains(*pos) || right_ctrl_zone.contains(*pos) {
+                        continue;
+                    }
+                    if joy_touch_id.is_none() && joy_hit_rect.contains(*pos) {
+                        joy_touch_id = Some(tid);
+                        let d = *pos - joy_center;
+                        let len = d.length();
+                        let clamped = if len > joy_radius { d * (joy_radius / len) } else { d };
+                        joy_vec = clamped / joy_radius;
+                    } else if look_touch_id.is_none() {
+                        look_touch_id = Some(tid);
+                        last_look_pos = *pos;
+                    }
+                }
+                egui::TouchPhase::Move => {
+                    if joy_touch_id == Some(tid) {
+                        let d = *pos - joy_center;
+                        let len = d.length();
+                        let clamped = if len > joy_radius { d * (joy_radius / len) } else { d };
+                        joy_vec = clamped / joy_radius;
+                    } else if look_touch_id == Some(tid) {
+                        let d = *pos - last_look_pos;
+                        last_look_pos = *pos;
+                        if d.length() <= 120.0 {
+                            touch_look_delta += d;
+                        }
+                    }
+                }
+                egui::TouchPhase::End | egui::TouchPhase::Cancel => {
+                    if joy_touch_id == Some(tid) {
+                        joy_touch_id = None;
+                        joy_vec = Vec2::ZERO;
+                    }
+                    if look_touch_id == Some(tid) {
+                        look_touch_id = None;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut joy_touching = joy_touch_id.is_some();
+    if !joy_touching && look_touch_id.is_none() && (joy_resp.dragged() || joy_resp.is_pointer_button_down_on()) {
         if let Some(p) = ctx.input(|i| i.pointer.interact_pos()) {
             let delta = p - joy_center;
             let len = delta.length();
@@ -188,23 +266,27 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         }
     }
 
-    // 4. Camera rotation: Right-drag on PC; 1-finger swipe on Mobile (when not dragging part/gizmo)
+    // 4. Camera rotation: Right-drag on PC; independent TouchId or 1-finger swipe on Mobile
     let adorn_hot = rustudio_engine::gui::share().adorn_hot;
-    let delta = ctx.input(|i| i.pointer.delta());
     let is_mobile = cfg!(any(target_os = "android", target_os = "ios")) || rustudio_core::mobile::is_drawer_mode();
     let can_free_drag = free_look
         || (ed.drag.is_none() && ed.marquee.is_none() && ed.part_drag.is_none() && !adorn_hot);
-    let want_rotate = if is_mobile {
-        resp.dragged_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Secondary)
+    let (want_rotate, delta) = if look_touch_id.is_some() {
+        (true, touch_look_delta)
+    } else if is_mobile {
+        (
+            !joy_touching && (resp.dragged_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Secondary)),
+            ctx.input(|i| i.pointer.delta()),
+        )
     } else {
-        resp.dragged_by(egui::PointerButton::Secondary)
+        (resp.dragged_by(egui::PointerButton::Secondary), ctx.input(|i| i.pointer.delta()))
     };
     if want_rotate
-        && !joy_touching
         && !up_held
         && !down_held
         && can_free_drag
         && delta != Vec2::ZERO
+        && delta.length() <= 120.0
     {
         match mode {
             EditCamMode::Fly => ed.game.cam.rotate(delta.x, delta.y),
@@ -220,6 +302,9 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         b.free_look = free_look;
         b.joy_vec = joy_vec;
         b.joy_touching = joy_touching;
+        b.joy_touch_id = joy_touch_id;
+        b.look_touch_id = look_touch_id;
+        b.last_look_pos = last_look_pos;
         b.up_held = up_held;
         b.down_held = down_held;
         b.smooth_target = new_smooth;

@@ -51,11 +51,26 @@ fn err(msg: impl Into<String>) -> crate::Error {
 }
 
 fn post(agent: &ureq::Agent, url: &str, body: &serde_json::Value, csrf: Option<&str>) -> Result<ureq::http::Response<ureq::Body>> {
-    let mut req = agent.post(url).header("Content-Type", "application/json").header("Accept", "application/json");
-    if let Some(t) = csrf {
-        req = req.header("x-csrf-token", t);
+    let payload = body.to_string();
+    let mut last_err = None;
+    for _attempt in 0..3 {
+        let mut req = agent
+            .post(url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("Connection", "close");
+        if let Some(t) = csrf {
+            req = req.header("x-csrf-token", t);
+        }
+        match req.send(payload.as_bytes()) {
+            Ok(resp) => return Ok(resp),
+            Err(e) => {
+                last_err = Some(e);
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
     }
-    Ok(req.send(body.to_string().as_bytes())?)
+    Err(last_err.unwrap().into())
 }
 
 /// POSTs `body`, retrying once with the `x-csrf-token` a 403 hands back
@@ -63,9 +78,10 @@ fn post(agent: &ureq::Agent, url: &str, body: &serde_json::Value, csrf: Option<&
 fn call(agent: &ureq::Agent, url: &str, body: &serde_json::Value) -> Result<(u16, String)> {
     let r = post(agent, url, body, None)?;
     let token = r.headers().get("x-csrf-token").and_then(|v| v.to_str().ok()).map(str::to_owned);
+    let (status, text) = read(r);
     match token {
-        Some(t) if r.status().as_u16() == 403 => Ok(read(post(agent, url, body, Some(&t))?)),
-        _ => Ok(read(r)),
+        Some(t) if status == 403 => Ok(read(post(agent, url, body, Some(&t))?)),
+        _ => Ok((status, text)),
     }
 }
 

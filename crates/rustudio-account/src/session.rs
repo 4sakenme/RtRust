@@ -70,8 +70,28 @@ impl std::fmt::Display for Cookie {
 impl Cookie {
     /// From the raw line (with or without the `.ROBLOSECURITY=` prefix).
     pub fn new(raw: &str) -> Option<Cookie> {
-        let v = raw.lines().next()?.trim();
+        let trimmed = raw.trim();
+        let v = if trimmed.contains("_|WARNING:") && trimmed.lines().count() > 1 {
+            // If iOS Notes/Clipboard wrapped a multi-line cookie paste without spaces,
+            // stitch wrapped lines back together unless it's a comment file.
+            let non_comment: Vec<&str> = trimmed
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .collect();
+            if non_comment.len() == 1 {
+                non_comment[0].to_string()
+            } else {
+                non_comment.join("")
+            }
+        } else {
+            trimmed.lines().find(|l| !l.trim().is_empty())?.trim().to_string()
+        };
+        let v = v.trim_matches('"').trim_matches('\'').trim();
+        let v = v.strip_prefix("Cookie:").unwrap_or(v).trim();
         let v = v.strip_prefix(".ROBLOSECURITY=").unwrap_or(v).trim();
+        let v = v.split(';').next().unwrap_or(v).trim();
+        let v = v.trim_matches('"').trim_matches('\'').trim();
         (!v.is_empty()).then(|| Cookie(v.to_string()))
     }
 
@@ -439,9 +459,10 @@ fn session_agent_with_timeout(timeout: Option<std::time::Duration>) -> ureq::Age
             .tls_config(crate::android_net::webpki_tls())
             .http_status_as_error(false)
             .max_redirects(0)
+            .max_idle_connections(0)
             .timeout_global(timeout)
             .user_agent(concat!(
-                "Mozilla/5.0 (X11; Linux x86_64) rustudio/",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) rustudio/",
                 env!("CARGO_PKG_VERSION")
             ))
             .build(),
@@ -548,11 +569,33 @@ impl Session {
     /// accepted; the cookie never appears in the error.
     pub fn validate(cookie: Cookie) -> Result<Session> {
         let agent = session_agent();
-        let r = agent
-            .get(AUTHENTICATED_URL)
-            .header("Cookie", &cookie.header())
-            .call()
-            .map_err(|e| Error(format!("{SIGNED_OUT} (could not reach Roblox: {e})")))?;
+        let mut last_err = None;
+        let mut r_opt = None;
+        for _attempt in 0..3 {
+            match agent
+                .get(AUTHENTICATED_URL)
+                .header("Cookie", &cookie.header())
+                .header("Accept", "application/json")
+                .header("Connection", "close")
+                .call()
+            {
+                Ok(resp) => {
+                    r_opt = Some(resp);
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
+        }
+        let r = match r_opt {
+            Some(resp) => resp,
+            None => {
+                let e = last_err.unwrap();
+                return Err(Error(format!("{SIGNED_OUT} (could not reach Roblox [{AUTHENTICATED_URL}]: {e})")));
+            }
+        };
         let rotated = rotated_cookie(&r);
         let (status, text) = text_of(r)?;
         if status != 200 {
