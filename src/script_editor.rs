@@ -603,9 +603,82 @@ impl Editor {
         if !combined_suggestions.is_empty() {
             egui::ScrollArea::horizontal().id_salt(("ac_scroll", r)).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    for (label, insert) in combined_suggestions.iter().take(12) {
-                        if ui.button(RichText::new(label).monospace().size(13.0)).clicked() {
+                    for (idx, (label, insert)) in combined_suggestions.iter().take(12).enumerate() {
+                        let btn = if idx == 0 {
+                            egui::Button::new(
+                                RichText::new(format!("⇥ {label}"))
+                                    .monospace()
+                                    .size(13.0)
+                                    .color(Color32::from_rgb(140, 225, 150)),
+                            )
+                            .fill(Color32::from_rgb(32, 52, 40))
+                        } else {
+                            egui::Button::new(RichText::new(label).monospace().size(13.0))
+                        };
+                        if ui.add(btn).clicked() {
                             accept = Some(insert.clone());
+                            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+                        }
+                    }
+                });
+            });
+        }
+        // Quick mobile action bar for newline (↵), tab/ghost accept (⇥), and cursor movement
+        // always visible on iOS/Android even when keyboard height is 0.
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            egui::ScrollArea::horizontal().id_salt(("mobile_top_quick_bar", r)).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 5.0;
+                    if ui
+                        .button(
+                            RichText::new("↵ Enter")
+                                .monospace()
+                                .size(13.0)
+                                .strong()
+                                .color(Color32::from_rgb(130, 200, 255)),
+                        )
+                        .on_hover_text("Xuống dòng (Enter)")
+                        .clicked()
+                    {
+                        ui.ctx().data_mut(|d| {
+                            d.insert_temp(egui::Id::new("mobile_luau_newline"), true);
+                        });
+                        ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+                    }
+                    if let Some((lbl, ins)) = combined_suggestions.first() {
+                        if ui
+                            .button(
+                                RichText::new(format!("⇥ Chèn: {lbl}"))
+                                    .monospace()
+                                    .size(13.0)
+                                    .strong()
+                                    .color(Color32::from_rgb(130, 220, 145)),
+                            )
+                            .clicked()
+                        {
+                            accept = Some(ins.clone());
+                            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+                        }
+                    }
+                    for (label, snip) in [
+                        ("Tab", "    "),
+                        ("local", "local "),
+                        ("function", "function "),
+                        ("if", "if "),
+                        ("then", "then"),
+                        ("end", "end"),
+                        ("()", "()"),
+                        ("\"", "\""),
+                        ("=", " = "),
+                        (":", ":"),
+                        (".", "."),
+                    ] {
+                        if ui.button(RichText::new(label).monospace().size(12.5)).clicked() {
+                            ui.ctx().data_mut(|d| {
+                                d.insert_temp(egui::Id::new("mobile_luau_snippet"), snip.to_string());
+                            });
+                            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
                         }
                     }
                 });
@@ -731,7 +804,8 @@ impl Editor {
                         );
                     }
                     // Roblox Studio-style dim ghost autocomplete suffix at cursor.
-                    if resp.has_focus() {
+                    // Tapping the ghost text or pressing Tab / Right Arrow at EOL accepts it!
+                    if resp.has_focus() || pre_cursor_idx.is_some() {
                         if let Some((_, top_insert)) = combined_suggestions.first() {
                             if let Some(st) = egui::TextEdit::load_state(ui.ctx(), editor_id) {
                                 if let Some(cr) = st.cursor.char_range() {
@@ -739,26 +813,65 @@ impl Editor {
                                         let ci = cr.primary.index.0;
                                         let before: String = buf.text.chars().take(ci).collect();
                                         let word_start = before
-                                            .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != ':')
+                                            .rfind(|c: char| !c.is_ascii_alphanumeric() && c != '_')
                                             .map(|i| i + 1)
                                             .unwrap_or(0);
                                         let typed = &before[word_start..];
-                                        if !typed.is_empty() && top_insert.starts_with(typed) && top_insert.len() > typed.len() {
-                                            let suffix = &top_insert[typed.len()..];
+                                        let typed_lower = typed.to_ascii_lowercase();
+                                        let top_lower = top_insert.to_ascii_lowercase();
+                                        let suffix_opt: Option<&str> = if !typed.is_empty()
+                                            && top_lower.starts_with(&typed_lower)
+                                            && top_insert.len() > typed.len()
+                                        {
+                                            Some(&top_insert[typed.len()..])
+                                        } else if typed.is_empty()
+                                            && (before.ends_with('.') || before.ends_with(':'))
+                                        {
+                                            Some(top_insert.as_str())
+                                        } else {
+                                            None
+                                        };
+                                        if let Some(suffix) = suffix_opt {
+                                            let suffix_first_line = suffix.lines().next().unwrap_or(suffix);
                                             let (line_1, col_1) = crate::plugin_host::script_docs::pos_of(&buf.text, ci);
                                             let line_str = buf.text.lines().nth(line_1.saturating_sub(1) as usize).unwrap_or("");
                                             let prefix_on_line: String = line_str.chars().take(col_1.saturating_sub(1) as usize).collect();
                                             let x_off = ui.fonts_mut(|f| {
                                                 f.layout_no_wrap(prefix_on_line, font.clone(), Color32::WHITE).size().x
                                             });
+                                            let ghost_galley = ui.fonts_mut(|f| {
+                                                f.layout_no_wrap(
+                                                    format!("{suffix_first_line} ⇥"),
+                                                    font.clone(),
+                                                    Color32::from_rgba_unmultiplied(165, 175, 195, 145),
+                                                )
+                                            });
                                             let y = resp.rect.top() + (line_1.saturating_sub(1) as f32) * row_h;
-                                            ui.painter().text(
-                                                egui::pos2(resp.rect.left() + x_off, y),
-                                                egui::Align2::LEFT_TOP,
-                                                suffix,
-                                                font.clone(),
-                                                Color32::from_rgba_unmultiplied(180, 185, 200, 115),
+                                            let ghost_pos = egui::pos2(resp.rect.left() + x_off + 2.0, y);
+                                            let ghost_rect = egui::Rect::from_min_size(
+                                                ghost_pos,
+                                                egui::vec2(ghost_galley.size().x.max(48.0), row_h.max(24.0)),
                                             );
+                                            ui.painter().rect_filled(
+                                                ghost_rect.expand2(egui::vec2(3.0, 1.0)),
+                                                3.0,
+                                                Color32::from_rgba_unmultiplied(60, 70, 90, 55),
+                                            );
+                                            ui.painter().galley(
+                                                ghost_pos,
+                                                ghost_galley,
+                                                Color32::from_rgba_unmultiplied(165, 175, 195, 145),
+                                            );
+                                            let tapped_ghost = ui.input(|i| {
+                                                i.pointer.any_released()
+                                                    && i.pointer
+                                                        .interact_pos()
+                                                        .is_some_and(|p| ghost_rect.expand(6.0).contains(p))
+                                            });
+                                            let tab_pressed = ui.input(|i| i.key_pressed(egui::Key::Tab));
+                                            if tapped_ghost || tab_pressed {
+                                                accept = Some(top_insert.clone());
+                                            }
                                         }
                                     }
                                 }
@@ -872,14 +985,68 @@ impl Editor {
                     });
             }
         }
-        if let (Some(insert), Some(end)) = (accept, word_end) {
+        if let Some(insert) = accept {
+            let end = word_end
+                .or(pre_cursor_idx)
+                .unwrap_or_else(|| buf.text.chars().count());
             let chars: Vec<char> = buf.text.chars().collect();
+            let end = end.min(chars.len());
+            // Strip any leading `\t` inserted by a simultaneous Tab key press
+            let mut actual_end = end;
             let mut start = end;
+            if start > 0 && chars[start - 1] == '\t' {
+                start -= 1;
+                actual_end = end;
+            }
             while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
                 start -= 1;
             }
-            buf.text = chars[..start].iter().chain(insert.chars().collect::<Vec<_>>().iter()).chain(chars[end..].iter()).collect();
+            let ins_chars: Vec<char> = insert.chars().collect();
+            let new_cursor = start + ins_chars.len();
+            buf.text = chars[..start]
+                .iter()
+                .chain(ins_chars.iter())
+                .chain(chars[actual_end..].iter())
+                .collect();
+            if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), editor_id) {
+                // Place cursor inside `()` or `("")` if the completion ends with empty parens/quotes
+                let offset_back = if insert.ends_with("(\"\")") {
+                    2
+                } else if insert.ends_with("()") {
+                    1
+                } else {
+                    0
+                };
+                let c = egui::text::CCursor::new(new_cursor.saturating_sub(offset_back));
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::one(c)));
+                st.store(ui.ctx(), editor_id);
+            }
+            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
             buf.completions.clear();
+            buf.edited = Instant::now();
+            changed = true;
+        }
+        if ui
+            .ctx()
+            .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("mobile_luau_newline")))
+            .unwrap_or(false)
+        {
+            let insert_at = word_end
+                .or(pre_cursor_idx)
+                .unwrap_or_else(|| buf.text.chars().count());
+            let mut chars: Vec<char> = buf.text.chars().collect();
+            let pos = insert_at.min(chars.len());
+            chars.insert(pos, '\n');
+            buf.text = chars.into_iter().collect();
+            let new_pos = pos + 1;
+            if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), editor_id) {
+                let c = egui::text::CCursor::new(new_pos);
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::one(c)));
+                st.store(ui.ctx(), editor_id);
+            }
+            let _ = apply_smart_indent(&mut buf.text, new_pos, ui.ctx(), editor_id);
+            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+            buf.edited = Instant::now();
             changed = true;
         }
         if let Some(snippet) = ui.ctx().data_mut(|d| d.remove_temp::<String>(egui::Id::new("mobile_luau_snippet"))) {
@@ -1202,11 +1369,13 @@ fn mobile_luau_suggestions(
         ("function ", "function ()\n  \nend"),
         ("workspace", "workspace"),
     ];
-    std_items
+    let mut matches: Vec<(String, String)> = std_items
         .iter()
         .filter(|(label, _)| label.to_ascii_lowercase().contains(&word))
         .map(|(l, ins)| ((*l).to_string(), (*ins).to_string()))
-        .collect()
+        .collect();
+    matches.sort_by_key(|(label, _)| !label.to_ascii_lowercase().starts_with(&word));
+    matches
 }
 
 fn move_cursor_dir(text: &str, dir: &str, ctx: &egui::Context, editor_id: egui::Id) {

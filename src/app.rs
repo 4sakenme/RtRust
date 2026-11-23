@@ -2021,10 +2021,78 @@ impl eframe::App for RustudioApp {
             }
         }
         // Clean WindowEvent::Ime Preedit/Commit & Backspace preedit flush across all platforms (iOS/Android/Desktop)
+        // Also convert iOS UITextInput newline commits/text ("\n" / "\r") into Key::Enter so multiline code editors
+        // insert newlines and single-line inputs submit properly on iOS soft keyboards.
         {
-            let mut cleaned = Vec::with_capacity(raw.events.len() + 2);
+            let mut cleaned = Vec::with_capacity(raw.events.len() + 4);
             for ev in raw.events.drain(..) {
-                match &ev {
+                match ev {
+                    egui::Event::Ime(egui::ImeEvent::Commit(ref s))
+                        if s == "\n" || s == "\r" || s == "\r\n" =>
+                    {
+                        cleaned.push(egui::Event::Ime(egui::ImeEvent::Preedit {
+                            text: String::new(),
+                            active_range_chars: None,
+                        }));
+                        cleaned.push(egui::Event::Key {
+                            key: egui::Key::Enter,
+                            physical_key: Some(egui::Key::Enter),
+                            pressed: true,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        });
+                        cleaned.push(egui::Event::Key {
+                            key: egui::Key::Enter,
+                            physical_key: Some(egui::Key::Enter),
+                            pressed: false,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        });
+                    }
+                    egui::Event::Text(ref s) if s == "\n" || s == "\r" || s == "\r\n" => {
+                        cleaned.push(egui::Event::Key {
+                            key: egui::Key::Enter,
+                            physical_key: Some(egui::Key::Enter),
+                            pressed: true,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        });
+                        cleaned.push(egui::Event::Key {
+                            key: egui::Key::Enter,
+                            physical_key: Some(egui::Key::Enter),
+                            pressed: false,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        });
+                    }
+                    egui::Event::Ime(egui::ImeEvent::Commit(ref s)) if s.contains('\n') => {
+                        cleaned.push(egui::Event::Ime(egui::ImeEvent::Preedit {
+                            text: String::new(),
+                            active_range_chars: None,
+                        }));
+                        let parts: Vec<&str> = s.split('\n').collect();
+                        for (idx, part) in parts.iter().enumerate() {
+                            if !part.is_empty() {
+                                cleaned.push(egui::Event::Ime(egui::ImeEvent::Commit((*part).to_string())));
+                            }
+                            if idx + 1 < parts.len() {
+                                cleaned.push(egui::Event::Key {
+                                    key: egui::Key::Enter,
+                                    physical_key: Some(egui::Key::Enter),
+                                    pressed: true,
+                                    repeat: false,
+                                    modifiers: egui::Modifiers::NONE,
+                                });
+                                cleaned.push(egui::Event::Key {
+                                    key: egui::Key::Enter,
+                                    physical_key: Some(egui::Key::Enter),
+                                    pressed: false,
+                                    repeat: false,
+                                    modifiers: egui::Modifiers::NONE,
+                                });
+                            }
+                        }
+                    }
                     egui::Event::Ime(egui::ImeEvent::Commit(_)) => {
                         cleaned.push(egui::Event::Ime(egui::ImeEvent::Preedit {
                             text: String::new(),
