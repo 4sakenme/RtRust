@@ -2283,6 +2283,10 @@ impl RustudioApp {
             ed.fps = ed.fps * 0.9 + (1.0 / dt) * 0.1;
         }
         ed.hud = HudStats::default();
+        crate::platform::install_memory_warning_observer();
+        if crate::platform::take_memory_warning() {
+            ed.game.purge_unused_caches();
+        }
         ed.game.poll_assets();
         ed.flush_output_changes();
         self.watchdog.stage("asset polling", "Play tick: scripts/physics");

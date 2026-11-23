@@ -410,6 +410,13 @@ fn pcm_store(id: &str, p: Arc<Pcm>) {
     }
 }
 
+/// Drops all cached decoded PCM audio buffers (e.g. on iOS memory warning).
+pub fn purge_pcm_cache() {
+    if let Ok(mut g) = PCM.lock() {
+        *g = None;
+    }
+}
+
 enum Got {
     Ready(Arc<Pcm>),
     Pending(Load),
@@ -1836,17 +1843,27 @@ fn sound_loads(lua: &Lua) -> mlua::Result<()> {
         let mut m = media(lua)?;
         m.sound_loads.drain().map(|(r, (id, l))| (r, id, l)).collect()
     };
-    for (r, id, l) in items {
-        if pstr(world(lua)?.d(), r, "SoundId") != id {
-            continue;
-        }
-        let got = match l {
-            Some(l) => poll_load(&id, l),
-            None => start_load(&id, false),
-        };
-        finish_sound_load(lua, r, id, got)?;
+    // On iOS, skip pre-decoding audio assets into raw PCM until `.Play()` is called
+    // to stay well under the Jetsam active memory limit on large places.
+    #[cfg(target_os = "ios")]
+    {
+        let _ = items;
+        return Ok(());
     }
-    Ok(())
+    #[cfg(not(target_os = "ios"))]
+    {
+        for (r, id, l) in items {
+            if pstr(world(lua)?.d(), r, "SoundId") != id {
+                continue;
+            }
+            let got = match l {
+                Some(l) => poll_load(&id, l),
+                None => start_load(&id, false),
+            };
+            finish_sound_load(lua, r, id, got)?;
+        }
+        Ok(())
+    }
 }
 
 fn finish_sound_load(lua: &Lua, r: Ref, id: String, got: Got) -> mlua::Result<()> {

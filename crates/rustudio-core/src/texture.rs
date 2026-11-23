@@ -38,19 +38,26 @@ pub fn decode(bytes: &[u8]) -> Result<Rgba, String> {
 
     #[cfg(any(target_os = "ios", target_os = "android"))]
     {
+        #[cfg(target_os = "ios")]
+        let max_dim = if crate::mobile::is_eco() { 256 } else { 512 };
+        #[cfg(target_os = "android")]
         let max_dim = if crate::mobile::is_eco() { 512 } else { 1024 };
         if decoded.width > max_dim || decoded.height > max_dim {
-            if let Some(buf) = image::RgbaImage::from_raw(decoded.width, decoded.height, decoded.pixels.clone()) {
+            let mut decoded = decoded;
+            let raw = std::mem::take(&mut decoded.pixels);
+            if let Some(buf) = image::RgbaImage::from_raw(decoded.width, decoded.height, raw) {
                 let scale = (max_dim as f32 / decoded.width.max(decoded.height) as f32).min(1.0);
                 let nw = ((decoded.width as f32 * scale).round() as u32).max(1);
                 let nh = ((decoded.height as f32 * scale).round() as u32).max(1);
                 let resized = image::imageops::resize(&buf, nw, nh, image::imageops::FilterType::Triangle);
+                drop(buf);
                 return Ok(Rgba {
                     width: nw,
                     height: nh,
                     pixels: resized.into_raw(),
                 });
             }
+            return Ok(decoded);
         }
     }
 

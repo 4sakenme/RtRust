@@ -4239,6 +4239,7 @@ dependencies = [
 name = "rustudio-account"
 version = "0.3.4"
 dependencies = [
+ "apple-native-keyring-store",
  "base64 0.23.1",
  "dirs",
  "flate2",

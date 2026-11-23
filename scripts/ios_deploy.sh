@@ -33,8 +33,8 @@ if ! command -v gh >/dev/null 2>&1; then
   echo "Error: 'gh' CLI not found in PATH." >&2
   exit 1
 fi
-if ! command -v sideloader >/dev/null 2>&1; then
-  echo "Error: 'sideloader' CLI not found in PATH (expected in ~/.local/bin/sideloader)." >&2
+if ! command -v impactor >/dev/null 2>&1; then
+  echo "Error: 'impactor' not found in PATH (expected in ~/.local/bin/impactor)." >&2
   exit 1
 fi
 
@@ -72,9 +72,9 @@ if [[ ! -f "$IPA_PATH" ]]; then
 fi
 ls -lh "$IPA_PATH"
 
-# Step B: Sign & Push to iPhone
-echo "[Step B] Signing and installing ${IPA_PATH} onto iPhone..."
-sideloader install -i "${SIDELOADER_ARGS[@]}" "$IPA_PATH"
+# Step B: Sign & Push to iPhone via PlumeImpactor
+echo "[Step B] Launching PlumeImpactor with ${IPA_PATH}..."
+impactor "${SIDELOADER_ARGS[@]}" "$IPA_PATH"
 
 # Step C: Optional Live Log
 if [[ "$DO_LOG" -eq 1 ]]; then

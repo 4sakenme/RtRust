@@ -533,6 +533,66 @@ fn ios_dismiss_keyboard() {
     }
 }
 
+// ── iOS Memory Warning Observer ─────────────────────────────────────────────
+
+static MEMORY_WARNING_PENDING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Registers an `UIApplicationDidReceiveMemoryWarningNotification` observer on iOS
+/// so the main loop can immediately purge unused asset caches and run Luau GC.
+pub fn install_memory_warning_observer() {
+    #[cfg(target_os = "ios")]
+    {
+        use objc2::declare::ClassBuilder;
+        use objc2::runtime::{AnyClass, AnyObject, Sel};
+        use objc2::{class, msg_send, sel};
+        use objc2_foundation::NSString;
+        use std::sync::Once;
+
+        static REGISTER_OBSERVER: Once = Once::new();
+        REGISTER_OBSERVER.call_once(|| {
+            unsafe extern "C" fn on_memory_warning(
+                _this: *mut AnyObject,
+                _cmd: Sel,
+                _note: *mut AnyObject,
+            ) {
+                MEMORY_WARNING_PENDING.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+
+            unsafe {
+                let cls: *const AnyClass = if let Some(existing) = AnyClass::get(c"RtRustMemoryWarningObserver") {
+                    existing as *const AnyClass
+                } else {
+                    let superclass = class!(NSObject);
+                    let mut builder = ClassBuilder::new(c"RtRustMemoryWarningObserver", superclass)
+                        .expect("RtRustMemoryWarningObserver class builder");
+                    builder.add_method(
+                        sel!(onMemoryWarning:),
+                        on_memory_warning as unsafe extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+                    );
+                    builder.register() as *const AnyClass
+                };
+                let observer: *mut AnyObject = msg_send![cls, alloc];
+                let observer: *mut AnyObject = msg_send![observer, init];
+                let center: *mut AnyObject = msg_send![class!(NSNotificationCenter), defaultCenter];
+                let name = NSString::from_str("UIApplicationDidReceiveMemoryWarningNotification");
+                let _: () = msg_send![
+                    center,
+                    addObserver: observer,
+                    selector: sel!(onMemoryWarning:),
+                    name: &*name,
+                    object: std::ptr::null::<AnyObject>()
+                ];
+            }
+        });
+    }
+}
+
+/// Returns `true` once if iOS emitted `UIApplicationDidReceiveMemoryWarningNotification`.
+pub fn take_memory_warning() -> bool {
+    MEMORY_WARNING_PENDING.swap(false, std::sync::atomic::Ordering::SeqCst)
+}
+
 // ── Cross-Platform Wallpaper Image Picker (iOS / Android / Desktop) ─────────
 
 static PENDING_WALLPAPER_PICK: std::sync::Mutex<Option<(String, PathBuf)>> =

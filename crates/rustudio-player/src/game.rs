@@ -403,7 +403,7 @@ impl Game {
             self.assets.wait_pending(std::time::Duration::from_secs(60));
         }
         let done = self.assets.poll();
-        if self.textures.poll_decoded() {
+        if self.textures.poll_decoded() || self.meshes.poll_budget() {
             self.asset_gen += 1;
         }
         if rustudio_core::load_trace::on() {
@@ -434,6 +434,17 @@ impl Game {
         }
         for (level, text) in self.account.poll() {
             self.push_log(level, text);
+        }
+    }
+
+    /// Purges unused CPU-side asset caches and runs Luau GC (used on iOS memory warnings).
+    pub fn purge_unused_caches(&mut self) {
+        self.assets.purge_memory();
+        self.textures.purge_unused();
+        self.meshes.purge_unused();
+        rustudio_engine::runtime::domains::media::purge_pcm_cache();
+        if let Some(play) = self.play.as_ref() {
+            play.gc_collect();
         }
     }
 

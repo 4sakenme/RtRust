@@ -565,6 +565,16 @@ impl PlaySession {
     pub fn other_doc_id(&self) -> Option<u64> {
         self.other_doc.as_ref().map(|d| d.id)
     }
+
+    /// Runs a full Luau garbage collection cycle on both server and client VMs.
+    pub fn gc_collect(&self) {
+        if let Some(s) = self.server.as_ref() {
+            let _ = s.runtime.lua.gc_collect();
+        }
+        if let Some(c) = self.client.as_ref() {
+            let _ = c.runtime.lua.gc_collect();
+        }
+    }
 }
 
 /// KeyCode names for the keys the play session reports to scripts. `all`

@@ -1,0 +1,8 @@
+com.rtrust.mobile-pngs-0 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/build/generated/res/pngs/debug
+com.rtrust.mobile-resValues-1 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/build/generated/res/resValues/debug
+com.rtrust.mobile-packageDebugResources-2 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.rtrust.mobile-packageDebugResources-3 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.rtrust.mobile-debug-4 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/build/intermediates/merged_res/debug/mergeDebugResources
+com.rtrust.mobile-android-5 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/res
+com.rtrust.mobile-debug-6 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/src/debug/res
+com.rtrust.mobile-main-7 /run/media/kuro/37f860dc-346b-415e-b48c-aea2f338b12f/RtRust/RtRustMobile/android/src/main/res

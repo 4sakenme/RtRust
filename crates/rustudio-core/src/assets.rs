@@ -380,6 +380,8 @@ pub struct AssetStore {
     pending: HashSet<AssetRef>,
     failed: HashMap<AssetRef, String>,
     memory: HashMap<AssetRef, Arc<Vec<u8>>>,
+    memory_lru: std::collections::VecDeque<AssetRef>,
+    memory_bytes: usize,
     tx: Sender<(AssetRef, Result<(), String>)>,
     rx: Receiver<(AssetRef, Result<(), String>)>,
     /// Lines for the Output panel.
@@ -402,6 +404,8 @@ impl Default for AssetStore {
             pending: HashSet::new(),
             failed: HashMap::new(),
             memory: HashMap::new(),
+            memory_lru: std::collections::VecDeque::new(),
+            memory_bytes: 0,
             tx,
             rx,
             messages: Vec::new(),
@@ -1001,9 +1005,54 @@ impl AssetStore {
         if !matches!(&result,Fetch::Pending){track_fetch(&key,&result);}
         result
     }
+    fn touch_memory(&mut self, a: AssetRef) {
+        if let Some(pos) = self.memory_lru.iter().position(|x| *x == a) {
+            self.memory_lru.remove(pos);
+        }
+        self.memory_lru.push_back(a);
+    }
+
+    fn insert_memory(&mut self, a: AssetRef, bytes: Arc<Vec<u8>>) {
+        if let Some(old) = self.memory.remove(&a) {
+            self.memory_bytes = self.memory_bytes.saturating_sub(old.len());
+        }
+        self.memory_bytes += bytes.len();
+        self.memory.insert(a, bytes);
+        self.touch_memory(a);
+        #[cfg(target_os = "ios")]
+        {
+            const MAX_ASSET_MEMORY_BYTES: usize = 160 << 20; // 160 MB LRU cap on iOS
+            while self.memory_bytes > MAX_ASSET_MEMORY_BYTES {
+                let Some(oldest) = self.memory_lru.pop_front() else {
+                    self.memory_bytes = 0;
+                    break;
+                };
+                if let Some(evicted) = self.memory.remove(&oldest) {
+                    self.memory_bytes = self.memory_bytes.saturating_sub(evicted.len());
+                }
+            }
+        }
+    }
+
+    pub fn remove_memory(&mut self, a: &AssetRef) {
+        if let Some(old) = self.memory.remove(a) {
+            self.memory_bytes = self.memory_bytes.saturating_sub(old.len());
+            if let Some(pos) = self.memory_lru.iter().position(|x| x == a) {
+                self.memory_lru.remove(pos);
+            }
+        }
+    }
+
+    pub fn purge_memory(&mut self) {
+        self.memory.clear();
+        self.memory_lru.clear();
+        self.memory_bytes = 0;
+    }
+
     fn fetch_inner(&mut self, a: AssetRef) -> Fetch {
-        if let Some(b) = self.memory.get(&a) {
-            return Fetch::Ready(b.clone());
+        if let Some(b) = self.memory.get(&a).cloned() {
+            self.touch_memory(a);
+            return Fetch::Ready(b);
         }
         // Downloading: its bytes reach the disk cache only when it's done.
         // (Asked first: every part waiting on it asks again each time any
@@ -1014,14 +1063,14 @@ impl AssetStore {
         }
         if let Ok(b) = std::fs::read(cache_path(a)) {
             let b = Arc::new(b);
-            self.memory.insert(a, b.clone());
+            self.insert_memory(a, b.clone());
             return Fetch::Ready(b);
         }
         // The person's own upload's source file; the local store only once
         // Roblox's copy failed (`poll`, `local_store_path`).
         if let Some(b) = ledger_path(a.id).and_then(|p| std::fs::read(p).ok()) {
             let b = Arc::new(b);
-            self.memory.insert(a, b.clone());
+            self.insert_memory(a, b.clone());
             return Fetch::Ready(b);
         }
         if let Some(why) = self.failed.get(&a) {
@@ -1094,7 +1143,7 @@ impl AssetStore {
                         .then(|| local_store_path(a.id).and_then(|p| std::fs::read(p).ok()))
                         .flatten()
                     {
-                        self.memory.insert(a, Arc::new(b));
+                        self.insert_memory(a, Arc::new(b));
                         done.push(a);
                         continue;
                     }
@@ -1234,6 +1283,11 @@ pub type MeshUpload<'a> = dyn FnMut(&[Vec3], &[Vec3], &[Vec2], &[glam::Vec4], &[
 /// (`None`: a new one), so the slot itself stays with the renderer.
 pub type TextureUpload<'a> = dyn FnMut(&Rgba, Option<u32>) -> u32 + 'a;
 
+/// Shared per-frame decode/upload counter on iOS to stagger streaming (max 2 assets/frame).
+static FRAME_ASSET_UPLOADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[cfg(target_os = "ios")]
+const MAX_IOS_ASSETS_PER_FRAME: usize = 2;
+
 /// Loaded meshes by content id (None = failed for good).
 #[derive(Default)]
 pub struct MeshCache {
@@ -1246,6 +1300,8 @@ pub struct MeshCache {
     /// SolidMesh union stores none (its UV array is empty in all 5658 of
     /// a game's solid mesh holders), so there are none to keep.
     uvless: std::collections::HashSet<String>,
+    /// Whether a mesh decode/upload was deferred to the next frame by the streaming cap.
+    deferred: bool,
     /// Messages for the Output panel (one per new failure).
     pub messages: Vec<String>,
 }
@@ -1345,28 +1401,48 @@ impl MeshCache {
                 self.reasons.insert(id.to_string(), format!("not fetched: {why}"));
                 None
             }
-            Fetch::Ready(bytes) => match load_mesh_projected(&bytes) {
-                Ok((pos, nrm, uv, extent, mut colors, planes, center)) => {
-                    // A union with UsePartColor: its own Color, not its children's.
-                    if id.ends_with("#partcolor") {
-                        colors.clear();
-                    }
-                    if uv.iter().all(|t| *t == Vec2::ZERO) {
-                        self.uvless.insert(id.to_string());
-                    }
-                    Some(LoadedMesh {
-                        index: upload(&pos, &nrm, &uv, &colors, &planes),
-                        extent,
-                        center,
-                    })
+            Fetch::Ready(bytes) => {
+                #[cfg(target_os = "ios")]
+                if !sync_decode()
+                    && FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME
+                {
+                    self.deferred = true;
+                    return None;
                 }
-                Err(e) => {
-                    self.messages
-                        .push(format!("Mesh {id} not loaded: {e}; showing a placeholder"));
-                    self.reasons.insert(id.to_string(), format!("not decoded: {e}"));
-                    None
+                #[cfg(target_os = "ios")]
+                FRAME_ASSET_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let out = match load_mesh_projected(&bytes) {
+                    Ok((pos, nrm, uv, extent, mut colors, planes, center)) => {
+                        // A union with UsePartColor: its own Color, not its children's.
+                        if id.ends_with("#partcolor") {
+                            colors.clear();
+                        }
+                        if uv.iter().all(|t| *t == Vec2::ZERO) {
+                            self.uvless.insert(id.to_string());
+                        }
+                        let idx = upload(&pos, &nrm, &uv, &colors, &planes);
+                        drop((pos, nrm, uv, colors, planes));
+                        Some(LoadedMesh {
+                            index: idx,
+                            extent,
+                            center,
+                        })
+                    }
+                    Err(e) => {
+                        self.messages
+                            .push(format!("Mesh {id} not loaded: {e}; showing a placeholder"));
+                        self.reasons.insert(id.to_string(), format!("not decoded: {e}"));
+                        None
+                    }
+                };
+                drop(bytes);
+                if cfg!(any(target_os = "ios", target_os = "android")) {
+                    if let Some(a) = asset_ref(id) {
+                        store.remove_memory(&a);
+                    }
                 }
-            },
+                out
+            }
         };
         self.entries.insert(id.to_string(), loaded);
         bump_mesh_generation();
@@ -1420,6 +1496,18 @@ impl MeshCache {
         self.entries
             .retain(|id, _| asset_ref(id).is_none_or(|a| !done.contains(&a)));
         bump_mesh_generation();
+    }
+
+    /// Returns true if any mesh was deferred by the per-frame streaming cap.
+    pub fn poll_budget(&mut self) -> bool {
+        std::mem::take(&mut self.deferred)
+    }
+
+    /// Purges auxiliary CPU-side mesh metadata on memory warnings.
+    pub fn purge_unused(&mut self) {
+        self.reasons.clear();
+        self.roblox_format.clear();
+        self.entries.retain(|_, v| v.is_some());
     }
 
     /// Loaded (Ok), failed (Err with why), or never asked for (None).
@@ -1581,8 +1669,24 @@ impl TextureCache {
                 }
                 // Small images decode here; bigger ones on the decode
                 // workers (the part waits and is redone on arrival).
-                Fetch::Ready(bytes) if bytes.len() <= 16 * 1024 || sync_decode() => Some(texture::decode(&bytes).map(|i| (i, None, None))),
+                Fetch::Ready(bytes) if bytes.len() <= 16 * 1024 || sync_decode() => {
+                    #[cfg(target_os = "ios")]
+                    if !sync_decode()
+                        && FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME
+                    {
+                        self.deferred = true;
+                        return None;
+                    }
+                    Some(texture::decode(&bytes).map(|i| (i, None, None)))
+                }
                 Fetch::Ready(bytes) => {
+                    #[cfg(target_os = "ios")]
+                    if FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME {
+                        self.deferred = true;
+                        return None;
+                    }
+                    #[cfg(target_os = "ios")]
+                    FRAME_ASSET_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let (tx, _) = self.decode_chan.get_or_insert_with(std::sync::mpsc::channel);
                     texture::decode_async(bytes, tx.clone(), id.to_string());
                     self.decoding.insert(id.to_string());
@@ -1590,8 +1694,12 @@ impl TextureCache {
                 }
             },
         };
+        #[cfg(target_os = "ios")]
+        let ios_over_budget = FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME;
+        #[cfg(not(target_os = "ios"))]
+        let ios_over_budget = false;
         if decoded.is_some()
-            && (self.upload_ms > UPLOAD_BUDGET_MS || self.upload_bytes >= upload_budget_bytes())
+            && (ios_over_budget || self.upload_ms > UPLOAD_BUDGET_MS || self.upload_bytes >= upload_budget_bytes())
             && !sync_decode()
         {
             // Over this frame's budget: upload it next frame.
@@ -1605,6 +1713,8 @@ impl TextureCache {
             None => None,
             Some(result) => match result {
                 Ok((img, mips, _waiting)) => {
+                    #[cfg(target_os = "ios")]
+                    FRAME_ASSET_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let t0 = std::time::Instant::now();
                     // (the chain holds level 0 too; made in add_texture otherwise)
                     self.upload_bytes += mips.as_ref().map_or(img.pixels.len() * 4 / 3, |m| m.len());
@@ -1613,12 +1723,14 @@ impl TextureCache {
                     let t = LoadedTexture { index, width: img.width, height: img.height };
                     if self.pinned.contains(id) {
                         self.pixels.insert(id.to_string(), Arc::new(img));
+                    } else {
+                        drop(img);
                     }
                     // On mobile, drop raw compressed asset bytes from RAM immediately after GPU upload
                     // (they stay cached on disk in Library/Caches/RtRustCache).
                     if cfg!(any(target_os = "ios", target_os = "android")) {
                         if let Some(a) = asset_ref(id) {
-                            store.memory.remove(&a);
+                            store.remove_memory(&a);
                         }
                     }
                     Some(t)
@@ -1692,6 +1804,7 @@ impl TextureCache {
     /// Collects finished background decodes; true when any arrived (the
     /// caller bumps its asset generation so waiting parts are redone).
     pub fn poll_decoded(&mut self) -> bool {
+        FRAME_ASSET_UPLOADS.store(0, std::sync::atomic::Ordering::Relaxed);
         self.decode_frame += 1;
         // Completed results for parts that left the scene must release their
         // Waiting tokens. Otherwise they permanently consume the worker budget.
@@ -1713,6 +1826,14 @@ impl TextureCache {
     /// Decodes still running.
     pub fn decoding(&self) -> bool {
         !self.decoding.is_empty()
+    }
+
+    /// Purges unpinned decoded CPU pixel buffers on memory warnings.
+    pub fn purge_unused(&mut self) {
+        self.decoded.clear();
+        self.loose.clear();
+        self.loose_bytes = 0;
+        self.pixels.retain(|k, _| self.pinned.contains(k));
     }
 
     /// Loaded (Ok), failed (Err with why), or never asked for (None).
