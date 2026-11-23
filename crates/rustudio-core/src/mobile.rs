@@ -125,3 +125,41 @@ pub fn toggle_shift_lock() -> bool {
     set_shift_lock(next);
     next
 }
+
+static PLAY_CAM_DX: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static PLAY_CAM_DY: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static PLAY_CAM_DZOOM: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn atomic_add_f32(cell: &std::sync::atomic::AtomicU32, val: f32) {
+    let mut cur = cell.load(Ordering::Relaxed);
+    loop {
+        let next = (f32::from_bits(cur) + val).to_bits();
+        match cell.compare_exchange_weak(cur, next, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => break,
+            Err(actual) => cur = actual,
+        }
+    }
+}
+
+/// Accumulates camera orbit `(dx, dy)` and zoom `dzoom` directly from the UI
+/// viewport (`src/viewport.rs`) so Playtest camera rotation works reliably
+/// even across background play worker threads.
+pub fn add_play_cam_delta(dx: f32, dy: f32, dzoom: f32) {
+    if dx != 0.0 {
+        atomic_add_f32(&PLAY_CAM_DX, dx);
+    }
+    if dy != 0.0 {
+        atomic_add_f32(&PLAY_CAM_DY, dy);
+    }
+    if dzoom != 0.0 {
+        atomic_add_f32(&PLAY_CAM_DZOOM, dzoom);
+    }
+}
+
+/// Drains accumulated `(dx, dy, dzoom)` for the current Playtest step.
+pub fn take_play_cam_delta() -> (f32, f32, f32) {
+    let dx = f32::from_bits(PLAY_CAM_DX.swap(0, Ordering::Relaxed));
+    let dy = f32::from_bits(PLAY_CAM_DY.swap(0, Ordering::Relaxed));
+    let dz = f32::from_bits(PLAY_CAM_DZOOM.swap(0, Ordering::Relaxed));
+    (dx, dy, dz)
+}

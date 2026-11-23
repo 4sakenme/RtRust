@@ -1012,6 +1012,7 @@ impl Editor {
         let zoom_out_r = top_btn(ui, "mobile_cam_zoom_out", zoom_out_c, false).on_hover_text("Zoom Out");
         painter.text(zoom_out_c, egui::Align2::CENTER_CENTER, "-", egui::FontId::proportional(20.0), Color32::WHITE);
         if zoom_out_r.clicked() {
+            rustudio_core::mobile::add_play_cam_delta(0.0, 0.0, -2.5);
             if let Some(s) = self.game.play.as_mut() {
                 s.wheel -= 2.5;
             }
@@ -1021,6 +1022,7 @@ impl Editor {
         let zoom_in_r = top_btn(ui, "mobile_cam_zoom_in", zoom_in_c, false).on_hover_text("Zoom In");
         painter.text(zoom_in_c, egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(18.0), Color32::WHITE);
         if zoom_in_r.clicked() {
+            rustudio_core::mobile::add_play_cam_delta(0.0, 0.0, 2.5);
             if let Some(s) = self.game.play.as_mut() {
                 s.wheel += 2.5;
             }
@@ -1299,20 +1301,19 @@ impl Editor {
             });
 
         let mouse_left_drag_cam = !mt.thumbstick_touch_id.is_some()
-            && !touch_orbit_active
             && !top_bar_hit
             && !sl_hit
             && !stick_down
             && !jump_hit
-            && resp.dragged_by(egui::PointerButton::Primary);
+            && (resp.dragged_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Secondary));
 
         let drag_cam = rmb_on_viewport || touch_orbit_active || mouse_left_drag_cam;
         let look_delta = if rmb_on_viewport {
             ptr_delta
-        } else if touch_orbit_active {
+        } else if touch_orbit_active && orbit_delta != egui::Vec2::ZERO {
             orbit_delta
         } else if mouse_left_drag_cam {
-            let d = resp.drag_delta();
+            let d = if ptr_delta != egui::Vec2::ZERO { ptr_delta } else { resp.drag_delta() };
             if d.length() <= 120.0 { d } else { egui::Vec2::ZERO }
         } else {
             egui::Vec2::ZERO
@@ -1320,6 +1321,10 @@ impl Editor {
 
         rustudio_core::mobile::set_touch_cam_held(drag_cam);
         if look_delta != egui::Vec2::ZERO || pinch_delta.abs() > 0.01 {
+            rustudio_core::mobile::add_play_cam_delta(look_delta.x, look_delta.y, pinch_delta * 0.04);
+            if look_delta != egui::Vec2::ZERO {
+                self.game.cam.orbit(look_delta.x, look_delta.y);
+            }
             if let Some(s) = self.game.play.as_mut() {
                 s.mouse_delta += glam::Vec2::new(look_delta.x, look_delta.y);
                 if look_delta != egui::Vec2::ZERO {

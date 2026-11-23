@@ -378,13 +378,71 @@ fn ios_safe_area_insets() -> (f32, f32, f32, f32) {
 
 #[cfg(target_os = "ios")]
 fn ios_keyboard_height_points(ctx: &egui::Context) -> f32 {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send, sel, Encode, Encoding};
+
     if !ctx.egui_wants_keyboard_input() {
         return 0.0;
     }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
+    unsafe impl Encode for CGPoint {
+        const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+    }
+    unsafe impl Encode for CGSize {
+        const ENCODING: Encoding = Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]);
+    }
+    unsafe impl Encode for CGRect {
+        const ENCODING: Encoding = Encoding::Struct("CGRect", &[CGPoint::ENCODING, CGSize::ENCODING]);
+    }
+
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+        if !app.is_null() {
+            let windows: *mut AnyObject = msg_send![app, windows];
+            if !windows.is_null() {
+                let count: usize = msg_send![windows, count];
+                for idx in 0..count {
+                    let win: *mut AnyObject = msg_send![windows, objectAtIndex: idx];
+                    if win.is_null() {
+                        continue;
+                    }
+                    let has_guide: bool = msg_send![win, respondsToSelector: sel!(keyboardLayoutGuide)];
+                    if has_guide {
+                        let guide: *mut AnyObject = msg_send![win, keyboardLayoutGuide];
+                        if !guide.is_null() {
+                            let frame: CGRect = msg_send![guide, layoutFrame];
+                            if frame.size.height > 80.0 {
+                                return frame.size.height as f32;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let screen = ctx.content_rect();
     if screen.height() >= screen.width() {
         // iPhone portrait soft keyboard height (including predictions bar)
-        302.0
+        336.0
     } else {
         // iPhone landscape soft keyboard height
         216.0

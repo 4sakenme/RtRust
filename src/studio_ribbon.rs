@@ -1011,8 +1011,16 @@ impl Editor {
                 });
             });
 
-        // 4. Touch Luau Snippet Bar (above Bottom Tab Bar when in Code tab)
+        // 4. Touch Luau Snippet Bar (above Bottom Tab Bar, or lifted above soft keyboard when typing in Code tab)
         if self.ui.portrait_tab == PortraitTab::Code && self.ui.portrait_tool_panel.is_none() {
+            let kb_h = crate::platform::keyboard_height_points(ctx);
+            let kb_spacer = (kb_h - (48.0 + safe_bottom)).max(0.0);
+            if kb_spacer > 1.0 {
+                egui::Panel::bottom("portrait_kb_spacer")
+                    .exact_size(kb_spacer)
+                    .frame(egui::Frame::NONE)
+                    .show(ui, |_ui| {});
+            }
             egui::Panel::bottom("portrait_luau_snippets")
                 .frame(
                     egui::Frame::new()

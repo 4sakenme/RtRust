@@ -3962,22 +3962,42 @@ impl Game {
         let d_key = self.phys.down(egui::Key::D) || touch[3];
         let jump = self.phys.down(egui::Key::Space) || touch[4];
 
+        let (mob_dx, mob_dy, mob_dz) = rustudio_core::mobile::take_play_cam_delta();
         let (root_pos, mouse_delta, wheel_delta, hum_ref) = {
             let Some(s) = self.play.as_mut() else { return };
-            let delta = std::mem::take(&mut s.mouse_delta);
-            let wheel = std::mem::take(&mut s.wheel);
-            let Some(ch) = s.character.as_ref() else { return };
-            let Some(cd) = s.other_doc.as_ref() else { return };
-            let root_pos = s
-                .map
-                .s2c
-                .get(&ch.rig.root)
-                .copied()
-                .and_then(|cr| rustudio_render::scene::xform_of(cd, cr))
-                .map(|xf| xf.pos);
-            let hum = s.map.s2c.get(&ch.humanoid).copied();
+            let raw_delta = std::mem::take(&mut s.mouse_delta);
+            let raw_wheel = std::mem::take(&mut s.wheel);
+            let delta = if mob_dx.abs() > 1e-4 || mob_dy.abs() > 1e-4 {
+                glam::Vec2::new(mob_dx, mob_dy)
+            } else {
+                raw_delta
+            };
+            let wheel = if mob_dz.abs() > 1e-4 { mob_dz } else { raw_wheel };
+            let root_pos = s.character.as_ref().and_then(|ch| {
+                // Support both Client view (`self.doc` or `s.other_doc`) and Server view
+                let from_other = s
+                    .other_doc
+                    .as_ref()
+                    .and_then(|cd| {
+                        let cr = s.map.s2c.get(&ch.rig.root).copied().unwrap_or(ch.rig.root);
+                        rustudio_render::scene::xform_of(cd, cr)
+                    })
+                    .map(|xf| xf.pos);
+                from_other.or_else(|| {
+                    let cr = s.map.s2c.get(&ch.rig.root).copied().unwrap_or(ch.rig.root);
+                    rustudio_render::scene::xform_of(&self.doc, cr).map(|xf| xf.pos)
+                })
+            });
+            let hum = s
+                .character
+                .as_ref()
+                .and_then(|ch| s.map.s2c.get(&ch.humanoid).copied().or(Some(ch.humanoid)));
             (root_pos, delta, wheel, hum)
         };
+
+        if root_pos.is_none() && mouse_delta != glam::Vec2::ZERO {
+            self.cam.orbit(mouse_delta.x, mouse_delta.y);
+        }
 
         if let Some(rp) = root_pos {
             let cur_dist = (self.cam.pos - self.cam.focus).length();
