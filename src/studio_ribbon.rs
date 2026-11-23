@@ -1114,9 +1114,12 @@ impl Editor {
             0.18,
         );
 
-        // Reserve bottom space equal to visible Pill Dock height (`dock_height + safe_bottom + 8.0`)
-        // so the Luau quick-insert bar and Output panel sit cleanly ABOVE the Pill Dock instead of underneath it.
-        if !effective_dock_collapsed || dock_open_t > 0.02 {
+        // Reserve bottom space only when Code / Output / Tool panel is active so that in 3D Workspace mode
+        // the wgpu 3D viewport ALWAYS extends edge-to-edge to `y_max = screen_height` underneath the Pill Dock.
+        let need_bottom_spacer = self.ui.portrait_tab != PortraitTab::Viewport
+            || self.ui.portrait_output_drawer
+            || self.ui.portrait_tool_panel.is_some();
+        if need_bottom_spacer && (!effective_dock_collapsed || dock_open_t > 0.02) {
             egui::Panel::bottom("portrait_bottom_bar_spacer")
                 .exact_size((62.0 + safe_bottom) * dock_open_t.max(0.02))
                 .frame(egui::Frame::NONE)
@@ -1975,7 +1978,7 @@ impl Editor {
                     let pill_label = format!("{} ▾", self.ui.tab.label());
                     let font = egui::FontId::proportional(12.0);
                     let text_w = ui.fonts_mut(|f| f.layout_no_wrap(pill_label.clone(), font.clone(), Color32::WHITE).size().x);
-                    let pill_sz = egui::vec2((text_w + 32.0).max(80.0), 26.0);
+                    let pill_sz = egui::vec2((text_w + 38.0).max(84.0), 26.0);
                     let (pill_rect, pill_resp) = ui.allocate_exact_size(pill_sz, Sense::click());
                     ui.painter().rect_filled(
                         pill_rect,

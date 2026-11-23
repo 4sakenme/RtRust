@@ -84,14 +84,19 @@ pub fn content_dir() -> PathBuf {
     link
 }
 
-/// The asset cache folder: RUSTUDIO_CACHE_DIR, else ~/.cache/rustudio.
+/// The asset cache folder: RUSTUDIO_CACHE_DIR, else `paths::cache()/rustudio`.
 pub fn cache_dir() -> PathBuf {
-    if let Ok(p) = std::env::var("RUSTUDIO_CACHE_DIR") {
+    let dir = if let Ok(p) = std::env::var("RUSTUDIO_CACHE_DIR") {
         if !p.is_empty() {
-            return PathBuf::from(p);
+            PathBuf::from(p)
+        } else {
+            crate::paths::cache().join("rustudio")
         }
-    }
-    crate::paths::cache().join("rustudio")
+    } else {
+        crate::paths::cache().join("rustudio")
+    };
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
 
 /// An optional local asset store: a folder of `<id>` or `<id>.<ext>` files,
@@ -502,6 +507,9 @@ fn fetch_cached(id: u64, local: bool) -> Result<Arc<Vec<u8>>, String> {
     Ok(Arc::new(b))
 }
 
+#[cfg(any(target_os = "ios", target_os = "android"))]
+const MAX_ASSET_DOWNLOADS: usize = 4;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 const MAX_ASSET_DOWNLOADS: usize = 12;
 const ASSET_BACKOFF: [Duration; 4] = [
     Duration::from_secs(1),
@@ -1472,6 +1480,9 @@ pub struct LoadedTexture {
 }
 
 /// Released pixels kept around for the next composite that shares them.
+#[cfg(any(target_os = "ios", target_os = "android"))]
+const LOOSE_PIXELS_BYTES: usize = 16 << 20;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 const LOOSE_PIXELS_BYTES: usize = 64 << 20;
 
 #[derive(Default)]
@@ -1602,6 +1613,13 @@ impl TextureCache {
                     let t = LoadedTexture { index, width: img.width, height: img.height };
                     if self.pinned.contains(id) {
                         self.pixels.insert(id.to_string(), Arc::new(img));
+                    }
+                    // On mobile, drop raw compressed asset bytes from RAM immediately after GPU upload
+                    // (they stay cached on disk in Library/Caches/RtRustCache).
+                    if cfg!(any(target_os = "ios", target_os = "android")) {
+                        if let Some(a) = asset_ref(id) {
+                            store.memory.remove(&a);
+                        }
                     }
                     Some(t)
                 }

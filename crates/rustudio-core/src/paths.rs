@@ -40,33 +40,57 @@ fn xdg(var: &str, fallback: &str) -> PathBuf {
 /// rustudio already put there (the content link, the Studio download) keep
 /// being found.
 pub fn data() -> PathBuf {
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(target_os = "ios")]
+    {
+        let p = home().join("Documents/RtRustData");
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
     return home().join(".local/share");
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    #[cfg(not(all(unix, not(any(target_os = "macos", target_os = "ios")))))]
     return dirs::data_local_dir().unwrap_or_else(home);
 }
 
 /// Settings: `$XDG_CONFIG_HOME` or `~/.config` on Linux.
 pub fn config() -> PathBuf {
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(target_os = "ios")]
+    {
+        let p = home().join("Library/Application Support/RtRust");
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
     return xdg("XDG_CONFIG_HOME", ".config");
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    #[cfg(not(all(unix, not(any(target_os = "macos", target_os = "ios")))))]
     return dirs::config_dir().unwrap_or_else(home);
 }
 
 /// State that outlives a run: `$XDG_STATE_HOME` or `~/.local/state` on Linux.
 pub fn state() -> PathBuf {
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(target_os = "ios")]
+    {
+        let p = home().join("Library/Application Support/RtRust/state");
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
     return xdg("XDG_STATE_HOME", ".local/state");
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    #[cfg(not(all(unix, not(any(target_os = "macos", target_os = "ios")))))]
     return dirs::data_local_dir().unwrap_or_else(home);
 }
 
-/// Caches: `$XDG_CACHE_HOME` or `~/.cache` on Linux.
+/// Caches: `$XDG_CACHE_HOME` or `~/.cache` on Linux, `$HOME/Library/Caches/RtRustCache` on iOS.
 pub fn cache() -> PathBuf {
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(target_os = "ios")]
+    {
+        let p = home().join("Library/Caches/RtRustCache");
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
     return xdg("XDG_CACHE_HOME", ".cache");
-    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    #[cfg(not(all(unix, not(any(target_os = "macos", target_os = "ios")))))]
     return dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
 }
 

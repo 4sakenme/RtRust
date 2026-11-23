@@ -332,6 +332,11 @@ impl PluginManager {
     /// one after another on one thread (as Studio does; a burst of parallel
     /// requests gets HTTP 429 from asset delivery).
     pub fn fetch_all(&mut self, client: Option<SharedClient>, ids: Vec<u64>) {
+        // Desktop Studio cloud plugins (`cloud_*`) are skipped on iOS/Android to avoid unnecessary downloads and OOM.
+        if cfg!(any(target_os = "ios", target_os = "android")) {
+            let _ = (client, ids);
+            return;
+        }
         let Some(client) = client else { return };
         let metas: Vec<InstalledMeta> = ids
             .iter()

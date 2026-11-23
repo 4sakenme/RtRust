@@ -16,11 +16,13 @@ pub struct Rgba {
 pub const SKIPPED_PREFIX: &str = "texture: skipped non-image";
 
 /// Decodes PNG, JPEG or DDS bytes, detected by magic number.
+/// On mobile (`iOS` / `Android`), automatically downscales decoded textures exceeding
+/// `1024x1024` (or `512x512` when `Eco` mode is active) to prevent Jetsam OOM crashes.
 pub fn decode(bytes: &[u8]) -> Result<Rgba, String> {
     if bytes.starts_with(b"version ") || bytes.trim_ascii_start().starts_with(b"<") {
         return Err(format!("{SKIPPED_PREFIX} asset"));
     }
-    if bytes.starts_with(b"\x89PNG") {
+    let decoded = if bytes.starts_with(b"\x89PNG") {
         decode_with_image(bytes, image::ImageFormat::Png)
     } else if bytes.starts_with(&[0xFF, 0xD8]) {
         decode_with_image(bytes, image::ImageFormat::Jpeg)
@@ -32,7 +34,27 @@ pub fn decode(bytes: &[u8]) -> Result<Rgba, String> {
             "texture: unrecognised format (first bytes: {})",
             head.join(" ")
         ))
+    }?;
+
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        let max_dim = if crate::mobile::is_eco() { 512 } else { 1024 };
+        if decoded.width > max_dim || decoded.height > max_dim {
+            if let Some(buf) = image::RgbaImage::from_raw(decoded.width, decoded.height, decoded.pixels.clone()) {
+                let scale = (max_dim as f32 / decoded.width.max(decoded.height) as f32).min(1.0);
+                let nw = ((decoded.width as f32 * scale).round() as u32).max(1);
+                let nh = ((decoded.height as f32 * scale).round() as u32).max(1);
+                let resized = image::imageops::resize(&buf, nw, nh, image::imageops::FilterType::Triangle);
+                return Ok(Rgba {
+                    width: nw,
+                    height: nh,
+                    pixels: resized.into_raw(),
+                });
+            }
+        }
     }
+
+    Ok(decoded)
 }
 
 /// Generates a default 128x128 transparent Roblox smiley `content/textures/face.png`
@@ -636,6 +658,9 @@ pub type Decoded = Result<(Rgba, Option<Vec<u8>>, Option<Waiting>), String>;
 /// load's hundreds of images (each with its mip chain, ~10 MB at 1024²)
 /// otherwise all sat in memory at once.
 static WAITING_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[cfg(any(target_os = "ios", target_os = "android"))]
+const WAITING_LIMIT: usize = 64 << 20;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 const WAITING_LIMIT: usize = 192 << 20;
 
 /// A decoded image's share of WAITING_BYTES, given back when it is dropped
