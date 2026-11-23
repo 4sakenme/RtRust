@@ -471,8 +471,7 @@ impl Editor {
             }
             Some(1) => {
                 if let Some(dir) = self.file_sync.att.as_ref().map(|a| a.st.root.clone()) {
-                    let opener = if cfg!(windows) { "explorer" } else if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-                    let _ = std::process::Command::new(opener).arg(dir).spawn();
+                    let _ = crate::platform::open_path(&dir);
                 }
             }
             Some(2) => self.file_sync_detach(false),

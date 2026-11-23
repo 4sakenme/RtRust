@@ -42,6 +42,7 @@ pub mod file_dialog;
 pub mod hypr;
 pub mod studio_settings;
 pub mod font_manager;
+pub mod platform;
 pub mod touch_input_bridge;
 pub mod mcp_assistant;
 pub mod edit_camera;

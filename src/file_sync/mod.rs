@@ -932,10 +932,9 @@ impl Editor {
         });
         let seen: HashSet<PathBuf> = opened.into_iter().collect();
         for f in seen {
-            let opener = if cfg!(windows) { "explorer" } else if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
             let rel = self.file_sync.att.as_ref().map(|a| a.rel(&f));
-            match std::process::Command::new(opener).arg(&f).spawn() {
-                Ok(_) => self.file_sync_log(LogLevel::Verbose, "opened in the default editor", rel),
+            match crate::platform::open_path(&f) {
+                Ok(()) => self.file_sync_log(LogLevel::Verbose, "opened in the default editor", rel),
                 Err(e) => self.file_sync_log(LogLevel::Error, format!("couldn't open {}: {e}", f.display()), rel),
             };
         }

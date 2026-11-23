@@ -119,10 +119,12 @@ const HIDDEN_AFTER: Duration = Duration::from_millis(250);
 
 impl ApplicationHandler<UserEvent> for NativeLoop<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        crate::platform::on_app_resumed();
         self.eframe.resumed(event_loop);
     }
 
     fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        crate::platform::on_app_paused();
         self.root_window = None;
         self.wheel_received = None;
         self.last_wheel = None;

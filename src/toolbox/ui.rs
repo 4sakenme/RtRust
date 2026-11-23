@@ -112,12 +112,7 @@ pub fn lane_cards(w: f32) -> (usize, f32) {
 }
 
 pub fn open_url(url: &str) {
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(url).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    crate::platform::open_url(url);
 }
 
 /// Popups drawn in the panel's dark style (Areas take the context's

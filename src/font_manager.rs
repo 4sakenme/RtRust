@@ -251,7 +251,7 @@ pub fn init_on_startup(ctx: &egui::Context) {
         } else {
             st.initialized = true;
             load_config_into(&mut st);
-            st.active_code.is_some() || st.active_ui.is_some()
+            true
         }
     } else {
         false
@@ -290,6 +290,21 @@ pub fn apply_fonts(ctx: &egui::Context) {
     };
 
     let mut fonts = egui::FontDefinitions::default();
+    let bundled_key = "rtrust_vietnamese_fallback".to_owned();
+    fonts.font_data.insert(
+        bundled_key.clone(),
+        std::sync::Arc::new(egui::FontData::from_static(crate::platform::BUNDLED_VIETNAMESE_FONT)),
+    );
+    fonts
+        .families
+        .entry(egui::FontFamily::Proportional)
+        .or_default()
+        .push(bundled_key.clone());
+    fonts
+        .families
+        .entry(egui::FontFamily::Monospace)
+        .or_default()
+        .push(bundled_key);
     let dir = fonts_dir();
 
     if let Some(ref file) = ui_file {

@@ -977,7 +977,16 @@ impl Editor {
         let tex_sl_on = hud_tex("shift_lock_on", include_bytes!("../assets/ui/shift_lock_on.png"));
         let uv_full = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
 
-        let menu_c = egui::pos2(rect.left() + 28.0, rect.top() + 26.0);
+        let (safe_top, safe_bottom, safe_left, safe_right) = crate::platform::get_safe_area_insets();
+        let safe_rect = Rect::from_min_max(
+            egui::pos2(rect.left() + safe_left, rect.top() + safe_top),
+            egui::pos2(
+                (rect.right() - safe_right).max(rect.left() + safe_left + 1.0),
+                (rect.bottom() - safe_bottom).max(rect.top() + safe_top + 1.0),
+            ),
+        );
+
+        let menu_c = egui::pos2(safe_rect.left() + 28.0, safe_rect.top() + 26.0);
         let menu_r = top_btn(ui, "mobile_roblox_menu_btn", menu_c, menu_open).on_hover_text("Roblox Menu (Esc)");
         if let Some(t) = &tex_menu {
             painter.image(t.id(), Rect::from_center_size(menu_c, Vec2::splat(20.0)), uv_full, Color32::WHITE);
@@ -988,7 +997,7 @@ impl Editor {
             }
         }
 
-        let chat_c = egui::pos2(rect.left() + 72.0, rect.top() + 26.0);
+        let chat_c = egui::pos2(safe_rect.left() + 72.0, safe_rect.top() + 26.0);
         let chat_r = top_btn(ui, "mobile_roblox_chat_btn", chat_c, chat_open).on_hover_text("Chat (/)");
         if let Some(t) = &tex_chat {
             painter.image(t.id(), Rect::from_center_size(chat_c, Vec2::splat(20.0)), uv_full, Color32::WHITE);
@@ -999,7 +1008,7 @@ impl Editor {
             }
         }
 
-        let zoom_out_c = egui::pos2(rect.right() - 28.0, rect.top() + 26.0);
+        let zoom_out_c = egui::pos2(safe_rect.right() - 28.0, safe_rect.top() + 26.0);
         let zoom_out_r = top_btn(ui, "mobile_cam_zoom_out", zoom_out_c, false).on_hover_text("Zoom Out");
         painter.text(zoom_out_c, egui::Align2::CENTER_CENTER, "-", egui::FontId::proportional(20.0), Color32::WHITE);
         if zoom_out_r.clicked() {
@@ -1008,7 +1017,7 @@ impl Editor {
             }
         }
 
-        let zoom_in_c = egui::pos2(rect.right() - 72.0, rect.top() + 26.0);
+        let zoom_in_c = egui::pos2(safe_rect.right() - 72.0, safe_rect.top() + 26.0);
         let zoom_in_r = top_btn(ui, "mobile_cam_zoom_in", zoom_in_c, false).on_hover_text("Zoom In");
         painter.text(zoom_in_c, egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(18.0), Color32::WHITE);
         if zoom_in_r.clicked() {
@@ -1035,13 +1044,13 @@ impl Editor {
         }
 
         let stick_radius = 52.0;
-        let default_stick_center = egui::pos2(rect.left() + 86.0, rect.bottom() - 86.0);
+        let default_stick_center = egui::pos2(safe_rect.left() + 86.0, safe_rect.bottom() - 86.0);
         let stick_zone = Rect::from_min_max(
             egui::pos2(rect.left(), rect.top() + rect.height() * 0.45),
             egui::pos2(rect.left() + rect.width() * 0.45, rect.bottom()),
         );
         let jump_radius = 40.0;
-        let jump_center = egui::pos2(rect.right() - 78.0, rect.bottom() - 78.0);
+        let jump_center = egui::pos2(safe_rect.right() - 78.0, safe_rect.bottom() - 78.0);
         let jump_rect = Rect::from_center_size(jump_center, egui::vec2(jump_radius * 2.2, jump_radius * 2.2));
 
         let mt_id = egui::Id::new("mobile_multitouch_state");
