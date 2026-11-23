@@ -46,7 +46,7 @@ pub mod touch_input_bridge;
 pub mod mcp_assistant;
 pub mod edit_camera;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[allow(dead_code)]
 pub(crate) mod rfd {
     use std::path::{Path, PathBuf};
