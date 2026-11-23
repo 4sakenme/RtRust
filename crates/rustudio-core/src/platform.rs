@@ -119,7 +119,14 @@ fn trash_item(path: &Path) -> Result<Option<std::path::PathBuf>, String> {
 /// System fonts for the symbols and scripts rustudio's own fonts lack, in
 /// the order to try them.
 pub fn fallback_font_files() -> &'static [&'static str] {
-    if cfg!(target_os = "macos") {
+    if cfg!(target_os = "android") {
+        &[
+            "/system/fonts/Roboto-Regular.ttf",
+            "/system/fonts/NotoSans-Regular.ttf",
+            "/system/fonts/DroidSans.ttf",
+            "/system/fonts/NotoSansSymbols-Regular-Subsetted.ttf",
+        ]
+    } else if cfg!(target_os = "macos") {
         &["/System/Library/Fonts/Apple Symbols.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"]
     } else {
         &[

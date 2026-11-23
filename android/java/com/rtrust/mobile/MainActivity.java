@@ -91,6 +91,10 @@ public class MainActivity extends NativeActivity {
         imeInput.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_MULTIPLE && event.getCharacters() != null) {
+                    sendChars(event.getCharacters());
+                    return true;
+                }
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == KeyEvent.KEYCODE_DEL && imeInput.getText().length() == 0) {
                         nativeOnImeKey(1, 0);

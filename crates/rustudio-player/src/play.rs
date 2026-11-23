@@ -2490,10 +2490,14 @@ impl Game {
         if let Some(cd) = s.other_doc.as_ref() {
             if let Some(u) = cd.find_child(cd.dom.root_ref(), "UserInputService") {
                 let inst = cd.dom.get_by_ref(u);
-                s.mouse_behavior = match inst.and_then(|i| i.properties.get(&ustr("MouseBehavior")))
-                {
-                    Some(Variant::Enum(e)) => e.to_u32(),
-                    _ => 0,
+                s.mouse_behavior = if rustudio_core::mobile::shift_lock() {
+                    1
+                } else {
+                    match inst.and_then(|i| i.properties.get(&ustr("MouseBehavior")))
+                    {
+                        Some(Variant::Enum(e)) => e.to_u32(),
+                        _ => 0,
+                    }
                 };
                 s.mouse_icon = !matches!(
                     inst.and_then(|i| i.properties.get(&ustr("MouseIconEnabled"))),
@@ -2531,7 +2535,8 @@ impl Game {
                     Value::UserData(ud) => ud.borrow::<LEnumItem>().ok().map(|e| e.name.clone()),
                     _ => None,
                 });
-            s.camera_relative = rot.as_deref() == Some("CameraRelative");
+            let pm_cam_rel = rot.as_deref() == Some("CameraRelative");
+            s.camera_relative = pm_cam_rel || rustudio_core::mobile::shift_lock();
         }
     }
 
@@ -3899,7 +3904,8 @@ impl Game {
                 .as_ref()
                 .and_then(|s| s.other_doc.as_ref())
                 .is_some_and(doc_has_player_module);
-            if has_pm {
+            let cam_override = rustudio_core::mobile::shift_lock() || rustudio_core::mobile::touch_cam_held();
+            if has_pm && !cam_override {
                 self.cam.ortho = ortho;
                 self.cam.stretch = stretch;
                 let look = -xf.rot.z_axis;
@@ -3947,19 +3953,21 @@ impl Game {
         self.shown_front();
     }
 
-    /// Fallback third-person camera + character movement when Roblox's PlayerModule
-    /// is unavailable (e.g. offline/DNS failure before Studio content downloads).
+    /// Fallback third-person orbit camera + camera-relative movement when Roblox's
+    /// PlayerModule is unavailable.
     fn step_fallback_player_cam_and_move(&mut self) {
         let touch = rustudio_core::mobile::touch_keys();
+        let stick = rustudio_core::mobile::touch_stick();
         let w = self.phys.down(egui::Key::W) || touch[0];
         let a = self.phys.down(egui::Key::A) || touch[1];
         let s_key = self.phys.down(egui::Key::S) || touch[2];
         let d_key = self.phys.down(egui::Key::D) || touch[3];
         let jump = self.phys.down(egui::Key::Space) || touch[4];
 
-        let (root_pos, mouse_delta, hum_ref) = {
+        let (root_pos, mouse_delta, wheel_delta, hum_ref) = {
             let Some(s) = self.play.as_mut() else { return };
             let delta = std::mem::take(&mut s.mouse_delta);
+            let wheel = std::mem::take(&mut s.wheel);
             let Some(ch) = s.character.as_ref() else { return };
             let Some(cd) = s.other_doc.as_ref() else { return };
             let root_pos = s
@@ -3970,30 +3978,93 @@ impl Game {
                 .and_then(|cr| rustudio_render::scene::xform_of(cd, cr))
                 .map(|xf| xf.pos);
             let hum = s.map.s2c.get(&ch.humanoid).copied();
-            (root_pos, delta, hum)
+            (root_pos, delta, wheel, hum)
         };
 
         if let Some(rp) = root_pos {
-            let target = rp + Vec3::new(0.0, 1.5, 0.0);
-            let cur_offset = self.cam.pos - self.cam.focus;
-            let dist = cur_offset.length();
-            let offset = if !cur_offset.is_finite() || !(8.0..=20.0).contains(&dist) {
-                Vec3::new(0.0, 4.2, 11.8)
+            let cur_dist = (self.cam.pos - self.cam.focus).length();
+            let mut cam_dist = if cur_dist.is_finite() && (3.0..=30.0).contains(&cur_dist) {
+                cur_dist
             } else {
-                cur_offset
+                12.5
             };
-            self.cam.focus = target;
-            self.cam.pos = target + offset;
-            if mouse_delta != glam::Vec2::ZERO {
-                self.cam.orbit(mouse_delta.x, mouse_delta.y);
+            if wheel_delta.abs() > 1e-4 {
+                cam_dist = (cam_dist - wheel_delta * 0.8).clamp(3.0, 30.0);
+            }
+
+            let sens = 0.006;
+            let yaw = self.cam.yaw - mouse_delta.x * sens;
+            let pitch = (self.cam.pitch - mouse_delta.y * sens).clamp(-1.35, 1.35);
+
+            let right_xz = Vec3::new(yaw.cos(), 0.0, -yaw.sin()).normalize();
+            let shoulder = if rustudio_core::mobile::shift_lock() {
+                right_xz * 1.75
+            } else {
+                Vec3::ZERO
+            };
+            let pivot = rp + Vec3::new(0.0, 1.5, 0.0) + shoulder;
+
+            let forward_dir = Vec3::new(
+                -yaw.sin() * pitch.cos(),
+                pitch.sin(),
+                -yaw.cos() * pitch.cos(),
+            )
+            .normalize();
+            let camera_position = pivot - forward_dir * cam_dist;
+
+            self.cam.basis = None;
+            self.cam.yaw = yaw;
+            self.cam.pitch = pitch;
+            self.cam.focus = pivot;
+            self.cam.pos = camera_position;
+
+            // Keep CurrentCamera.CFrame synced so hum_face_camera() and scripts see the orbited camera
+            if let Some(s) = self.play.as_mut() {
+                if let Some(cd) = s.other_doc.as_mut() {
+                    if let Some(ws) = cd.workspace() {
+                        let cam_ref = match cd.prop(ws, "CurrentCamera") {
+                            Some(Variant::Ref(r)) if cd.exists(r) => Some(r),
+                            _ => cd.find_child(ws, "Camera"),
+                        };
+                        if let Some(cr) = cam_ref {
+                            let back = (camera_position - pivot).normalize_or(Vec3::Z);
+                            let right = Vec3::Y.cross(back).normalize_or(Vec3::X);
+                            let up = back.cross(right).normalize_or(Vec3::Y);
+                            if let Some(inst) = cd.dom.get_by_ref_mut(cr) {
+                                inst.properties.insert(
+                                    rbx_dom_weak::ustr("CFrame"),
+                                    Variant::CFrame(rbx_dom_weak::types::CFrame::new(
+                                        rbx_dom_weak::types::Vector3::new(camera_position.x, camera_position.y, camera_position.z),
+                                        rbx_dom_weak::types::Matrix3::new(
+                                            rbx_dom_weak::types::Vector3::new(right.x, up.x, back.x),
+                                            rbx_dom_weak::types::Vector3::new(right.y, up.y, back.y),
+                                            rbx_dom_weak::types::Vector3::new(right.z, up.z, back.z),
+                                        ),
+                                    )),
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        let fwd = Vec3::new(self.cam.forward().x, 0.0, self.cam.forward().z).normalize_or_zero();
-        let right = fwd.cross(Vec3::Y).normalize_or_zero();
-        let move_f = (if w { 1.0 } else { 0.0 }) - (if s_key { 1.0 } else { 0.0 });
-        let move_r = (if d_key { 1.0 } else { 0.0 }) - (if a { 1.0 } else { 0.0 });
-        let move_dir = (fwd * move_f + right * move_r).normalize_or_zero();
+        let cam_forward_xz = Vec3::new(self.cam.forward().x, 0.0, self.cam.forward().z).normalize_or_zero();
+        let cam_right_xz = Vec3::new(self.cam.right().x, 0.0, self.cam.right().z).normalize_or_zero();
+        let (stick_x, stick_y) = if stick.0.abs() > 0.001 || stick.1.abs() > 0.001 {
+            stick
+        } else {
+            let move_f = (if w { 1.0 } else { 0.0 }) - (if s_key { 1.0 } else { 0.0 });
+            let move_r = (if d_key { 1.0 } else { 0.0 }) - (if a { 1.0 } else { 0.0 });
+            (move_r, move_f)
+        };
+        let mut move_dir = cam_forward_xz * stick_y + cam_right_xz * stick_x;
+        let len = move_dir.length();
+        if len > 1.0 {
+            move_dir /= len;
+        } else if len * len <= 0.001 {
+            move_dir = Vec3::ZERO;
+        }
 
         if let (Some(s), Some(h)) = (self.play.as_mut(), hum_ref) {
             if let Some(cd) = s.other_doc.as_mut() {

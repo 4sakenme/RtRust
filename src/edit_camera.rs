@@ -188,11 +188,18 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         }
     }
 
-    // 4. Direct 1-finger touch look/orbit anywhere (free-drag without circular bounds)
+    // 4. Camera rotation: Right-drag on PC; 1-finger swipe on Mobile (when not dragging part/gizmo)
     let adorn_hot = rustudio_engine::gui::share().adorn_hot;
     let delta = ctx.input(|i| i.pointer.delta());
-    let can_free_drag = free_look || (ed.drag.is_none() && ed.marquee.is_none() && !adorn_hot && ed.hover.is_none());
-    if resp.dragged_by(egui::PointerButton::Primary)
+    let is_mobile = cfg!(target_os = "android") || rustudio_core::mobile::is_drawer_mode();
+    let can_free_drag = free_look
+        || (ed.drag.is_none() && ed.marquee.is_none() && ed.part_drag.is_none() && !adorn_hot);
+    let want_rotate = if is_mobile {
+        resp.dragged_by(egui::PointerButton::Primary) || resp.dragged_by(egui::PointerButton::Secondary)
+    } else {
+        resp.dragged_by(egui::PointerButton::Secondary)
+    };
+    if want_rotate
         && !joy_touching
         && !up_held
         && !down_held

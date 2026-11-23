@@ -1,9 +1,28 @@
 //! Mobile Eco Guard & touch-layout runtime flags shared across rustudio crates.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::time::Duration;
 
 static TOUCH_KEYS: AtomicU8 = AtomicU8::new(0);
+static TOUCH_STICK: AtomicU64 = AtomicU64::new(0);
+
+#[inline]
+pub fn set_touch_stick(x: f32, y: f32) {
+    let packed = ((x.to_bits() as u64) << 32) | (y.to_bits() as u64);
+    TOUCH_STICK.store(packed, Ordering::Relaxed);
+}
+
+#[inline]
+pub fn touch_stick() -> (f32, f32) {
+    let packed = TOUCH_STICK.load(Ordering::Relaxed);
+    let x = f32::from_bits((packed >> 32) as u32);
+    let y = f32::from_bits(packed as u32);
+    if x.is_finite() && y.is_finite() {
+        (x, y)
+    } else {
+        (0.0, 0.0)
+    }
+}
 
 #[inline]
 pub fn set_touch_keys(keys: [bool; 5]) {
@@ -78,6 +97,7 @@ pub fn play_frame_interval() -> Duration {
 }
 
 pub static TOUCH_CAM_HELD: AtomicBool = AtomicBool::new(false);
+pub static SHIFT_LOCK: AtomicBool = AtomicBool::new(false);
 
 #[inline]
 pub fn set_touch_cam_held(held: bool) {
@@ -87,4 +107,21 @@ pub fn set_touch_cam_held(held: bool) {
 #[inline]
 pub fn touch_cam_held() -> bool {
     TOUCH_CAM_HELD.load(Ordering::Relaxed)
+}
+
+#[inline]
+pub fn shift_lock() -> bool {
+    SHIFT_LOCK.load(Ordering::Relaxed)
+}
+
+#[inline]
+pub fn set_shift_lock(enabled: bool) {
+    SHIFT_LOCK.store(enabled, Ordering::Relaxed);
+}
+
+#[inline]
+pub fn toggle_shift_lock() -> bool {
+    let next = !shift_lock();
+    set_shift_lock(next);
+    next
 }

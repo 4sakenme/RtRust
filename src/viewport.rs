@@ -319,6 +319,11 @@ impl Editor {
     }
 
     fn handle_at(&self, handles: &[(Handle, Vec<Pos2>)], p: Pos2) -> Option<Handle> {
+        let hit_px = if rustudio_core::mobile::is_drawer_mode() {
+            mech::GIZMO_HIT_PX * 1.4
+        } else {
+            mech::GIZMO_HIT_PX
+        };
         let mut best: Option<(f32, Handle)> = None;
         for (h, pts) in handles {
             let d = match h.tool {
@@ -328,7 +333,7 @@ impl Editor {
                     .map(|w| dist_to_segment(p, w[0], w[1]))
                     .fold(f32::MAX, f32::min),
             };
-            if d < mech::GIZMO_HIT_PX && best.is_none_or(|(bd, _)| d < bd) {
+            if d < hit_px && best.is_none_or(|(bd, _)| d < bd) {
                 best = Some((d, *h));
             }
         }
@@ -724,8 +729,10 @@ impl Editor {
                 } else if matches!(self.tool, Tool::Select | Tool::Move | Tool::Scale | Tool::Rotate | Tool::Transform)
                     && self.start_part_drag(rect, p, ctrl || shift)
                 {
-                    // Studio: pressing on a part and dragging moves it (src/part_drag.rs).
-                } else if !rustudio_core::mobile::is_drawer_mode() {
+                    // Allow tapping & dragging parts on both PC and Mobile.
+                } else if !cfg!(target_os = "android") && !rustudio_core::mobile::is_drawer_mode() {
+                    // PC: Left-drag on empty space draws box selection ("bôi đen").
+                    // Mobile: No box selection so swiping empty space rotates the camera.
                     self.marquee = Some(p);
                     self.marquee_base = if ctrl || shift { self.game.doc.selection.clone() } else { Vec::new() };
                 }
@@ -915,7 +922,9 @@ impl Editor {
             self.toolbox_viewport_drop(ui, rect, &resp);
             crate::edit_camera::ui_and_step(self, ui, rect, &resp, dt);
             rustudio_core::mobile::set_touch_keys([false; 5]);
+            rustudio_core::mobile::set_touch_stick(0.0, 0.0);
             rustudio_core::mobile::set_touch_cam_held(false);
+            rustudio_core::mobile::set_shift_lock(false);
             ui.ctx().data_mut(|d| {
                 d.remove::<[bool; 5]>(egui::Id::new("mobile_touch_keys"));
             });
@@ -950,12 +959,29 @@ impl Editor {
             resp
         };
 
+        let hud_tex = |name: &str, bytes: &[u8]| -> Option<egui::TextureHandle> {
+            let id = egui::Id::new(("mobile_hud_tex", name));
+            if let Some(h) = ui.ctx().data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+                return Some(h);
+            }
+            let img = image::load_from_memory(bytes).ok()?.to_rgba8();
+            let size = [img.width() as usize, img.height() as usize];
+            let ci = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
+            let h = ui.ctx().load_texture(format!("hud_{name}"), ci, egui::TextureOptions::LINEAR);
+            ui.ctx().data_mut(|d| d.insert_temp(id, h.clone()));
+            Some(h)
+        };
+        let tex_menu = hud_tex("roblox_menu", include_bytes!("../assets/ui/roblox_menu.png"));
+        let tex_chat = hud_tex("roblox_chat", include_bytes!("../assets/ui/roblox_chat.png"));
+        let tex_sl_off = hud_tex("shift_lock_off", include_bytes!("../assets/ui/shift_lock_off.png"));
+        let tex_sl_on = hud_tex("shift_lock_on", include_bytes!("../assets/ui/shift_lock_on.png"));
+        let uv_full = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+
         let menu_c = egui::pos2(rect.left() + 28.0, rect.top() + 26.0);
         let menu_r = top_btn(ui, "mobile_roblox_menu_btn", menu_c, menu_open).on_hover_text("Roblox Menu (Esc)");
-        // Draw classic tilted Roblox square icon
-        let rbx_sq = Rect::from_center_size(menu_c, Vec2::splat(14.0));
-        painter.rect_stroke(rbx_sq, 2.0, Stroke::new(2.2, Color32::WHITE), egui::StrokeKind::Middle);
-        painter.rect_filled(Rect::from_center_size(menu_c, Vec2::splat(4.5)), 0.5, Color32::WHITE);
+        if let Some(t) = &tex_menu {
+            painter.image(t.id(), Rect::from_center_size(menu_c, Vec2::splat(20.0)), uv_full, Color32::WHITE);
+        }
         if menu_r.clicked() {
             if let Some(s) = self.game.play.as_mut() {
                 s.game.menu_open = !s.game.menu_open;
@@ -964,7 +990,9 @@ impl Editor {
 
         let chat_c = egui::pos2(rect.left() + 72.0, rect.top() + 26.0);
         let chat_r = top_btn(ui, "mobile_roblox_chat_btn", chat_c, chat_open).on_hover_text("Chat (/)");
-        rustudio_engine::ti::paint(&painter, Rect::from_center_size(chat_c, Vec2::splat(18.0)), "message-circle", Color32::WHITE);
+        if let Some(t) = &tex_chat {
+            painter.image(t.id(), Rect::from_center_size(chat_c, Vec2::splat(20.0)), uv_full, Color32::WHITE);
+        }
         if chat_r.clicked() {
             if let Some(s) = self.game.play.as_mut() {
                 s.game.chat_open = !s.game.chat_open;
@@ -998,25 +1026,104 @@ impl Editor {
             || zoom_in_r.is_pointer_button_down_on()
             || zoom_in_r.clicked();
 
-        // 1. Virtual Thumbstick (bottom-left)
-        let stick_radius = 52.0;
-        let stick_center = egui::pos2(rect.left() + 86.0, rect.bottom() - 86.0);
-        let stick_rect = Rect::from_center_size(stick_center, egui::vec2(stick_radius * 2.4, stick_radius * 2.4));
-        let stick_resp = ui.interact(stick_rect, egui::Id::new("mobile_thumbstick"), egui::Sense::click_and_drag());
+        // 1. Dynamic Thumbstick + Jump + Multi-Touch Orbit / Pinch Zoom (tracked by TouchId)
+        #[derive(Clone, Default)]
+        struct MultiTouchState {
+            stick_touch: Option<(egui::TouchId, Pos2, Pos2)>, // (id, origin, current)
+            jump_touch: Option<egui::TouchId>,
+            orbit_touches: Vec<(egui::TouchId, Pos2)>,
+        }
 
-        let mut offset = egui::Vec2::ZERO;
-        let stick_down = stick_resp.is_pointer_button_down_on() || stick_resp.dragged();
-        if stick_down {
-            if let Some(pos) = stick_resp.interact_pointer_pos() {
-                let d = pos - stick_center;
-                let len = d.length();
-                offset = if len > stick_radius {
-                    d * (stick_radius / len)
-                } else {
-                    d
-                };
+        let stick_radius = 52.0;
+        let default_stick_center = egui::pos2(rect.left() + 86.0, rect.bottom() - 86.0);
+        let stick_zone = Rect::from_min_max(
+            egui::pos2(rect.left(), rect.top() + rect.height() * 0.45),
+            egui::pos2(rect.left() + rect.width() * 0.45, rect.bottom()),
+        );
+        let jump_radius = 40.0;
+        let jump_center = egui::pos2(rect.right() - 78.0, rect.bottom() - 78.0);
+        let jump_rect = Rect::from_center_size(jump_center, egui::vec2(jump_radius * 2.2, jump_radius * 2.2));
+
+        let mt_id = egui::Id::new("mobile_multitouch_state");
+        let mut mt = ui.ctx().data(|d| d.get_temp::<MultiTouchState>(mt_id).unwrap_or_default());
+        let mut touch_events_seen = false;
+        let mut orbit_delta = egui::Vec2::ZERO;
+        let mut pinch_delta = 0.0_f32;
+
+        let events = ui.ctx().input(|i| i.events.clone());
+        for ev in &events {
+            if let egui::Event::Touch { id, phase, pos, .. } = ev {
+                touch_events_seen = true;
+                match phase {
+                    egui::TouchPhase::Start => {
+                        if !rect.contains(*pos) || menu_r.rect.contains(*pos) || chat_r.rect.contains(*pos) || zoom_out_r.rect.contains(*pos) || zoom_in_r.rect.contains(*pos) {
+                            continue;
+                        }
+                        if mt.stick_touch.is_none() && stick_zone.contains(*pos) {
+                            mt.stick_touch = Some((*id, *pos, *pos));
+                        } else if mt.jump_touch.is_none() && jump_rect.contains(*pos) {
+                            mt.jump_touch = Some(*id);
+                        } else if !mt.orbit_touches.iter().any(|(tid, _)| tid == id) {
+                            mt.orbit_touches.push((*id, *pos));
+                        }
+                    }
+                    egui::TouchPhase::Move => {
+                        if let Some((tid, _, cur)) = mt.stick_touch.as_mut() {
+                            if tid == id {
+                                *cur = *pos;
+                                continue;
+                            }
+                        }
+                        if mt.jump_touch == Some(*id) {
+                            continue;
+                        }
+                        if mt.orbit_touches.len() >= 2 {
+                            let prev_d = mt.orbit_touches[0].1.distance(mt.orbit_touches[1].1);
+                            if let Some(entry) = mt.orbit_touches.iter_mut().find(|(tid, _)| tid == id) {
+                                entry.1 = *pos;
+                            }
+                            let new_d = mt.orbit_touches[0].1.distance(mt.orbit_touches[1].1);
+                            pinch_delta += new_d - prev_d;
+                        } else if let Some(entry) = mt.orbit_touches.iter_mut().find(|(tid, _)| tid == id) {
+                            orbit_delta += *pos - entry.1;
+                            entry.1 = *pos;
+                        }
+                    }
+                    egui::TouchPhase::End | egui::TouchPhase::Cancel => {
+                        if mt.stick_touch.is_some_and(|(tid, _, _)| tid == *id) {
+                            mt.stick_touch = None;
+                        }
+                        if mt.jump_touch == Some(*id) {
+                            mt.jump_touch = None;
+                        }
+                        mt.orbit_touches.retain(|(tid, _)| tid != id);
+                    }
+                }
             }
         }
+        ui.ctx().data_mut(|d| d.insert_temp(mt_id, mt.clone()));
+
+        // Desktop mouse fallback when no multi-touch fingers are active
+        let stick_rect = Rect::from_center_size(default_stick_center, egui::vec2(stick_radius * 2.4, stick_radius * 2.4));
+        let stick_resp = ui.interact(stick_rect, egui::Id::new("mobile_thumbstick"), egui::Sense::click_and_drag());
+        let jump_resp = ui.interact(jump_rect, egui::Id::new("mobile_jump_btn"), egui::Sense::click_and_drag());
+
+        let (stick_center, offset, stick_down) = if let Some((_, origin, cur)) = mt.stick_touch {
+            let d = cur - origin;
+            let len = d.length();
+            let clamped = if len > stick_radius { d * (stick_radius / len) } else { d };
+            (origin, clamped, true)
+        } else if !touch_events_seen && (stick_resp.is_pointer_button_down_on() || stick_resp.dragged()) {
+            let mut clamped = egui::Vec2::ZERO;
+            if let Some(pos) = stick_resp.interact_pointer_pos() {
+                let d = pos - default_stick_center;
+                let len = d.length();
+                clamped = if len > stick_radius { d * (stick_radius / len) } else { d };
+            }
+            (default_stick_center, clamped, true)
+        } else {
+            (default_stick_center, egui::Vec2::ZERO, false)
+        };
 
         painter.circle_filled(stick_center, stick_radius, Color32::from_rgba_unmultiplied(20, 24, 32, 110));
         painter.circle_stroke(
@@ -1030,19 +1137,15 @@ impl Editor {
             Color32::from_rgba_unmultiplied(235, 240, 255, 185),
         );
 
-        let dead = 12.0;
-        let w = offset.y < -dead;
-        let s = offset.y > dead;
-        let a = offset.x < -dead;
-        let d_key = offset.x > dead;
+        let stick_x = (offset.x / stick_radius).clamp(-1.0, 1.0);
+        let stick_y = (-offset.y / stick_radius).clamp(-1.0, 1.0);
+        let dead = 0.22;
+        let w = stick_y > dead;
+        let s = stick_y < -dead;
+        let a = stick_x < -dead;
+        let d_key = stick_x > dead;
 
-        // 2. Jump button (bottom-right)
-        let jump_radius = 40.0;
-        let jump_center = egui::pos2(rect.right() - 78.0, rect.bottom() - 78.0);
-        let jump_rect = Rect::from_center_size(jump_center, egui::vec2(jump_radius * 2.2, jump_radius * 2.2));
-        let jump_resp = ui.interact(jump_rect, egui::Id::new("mobile_jump_btn"), egui::Sense::click_and_drag());
-        let jump = jump_resp.is_pointer_button_down_on();
-
+        let jump = mt.jump_touch.is_some() || (!touch_events_seen && jump_resp.is_pointer_button_down_on());
         let jump_fill = if jump {
             Color32::from_rgba_unmultiplied(90, 200, 130, 190)
         } else {
@@ -1062,28 +1165,107 @@ impl Editor {
             Color32::WHITE,
         );
 
-        // 3. Roblox-mobile-style free-drag camera rotation anywhere on the viewport
-        let drag_cam = !top_bar_hit
+        // Shift Lock toggle button (above Jump on right) + PC Shift key toggle
+        let sl_center = egui::pos2(jump_center.x, jump_center.y - 76.0);
+        let sl_rect = Rect::from_center_size(sl_center, Vec2::splat(42.0));
+        let sl_resp = ui.interact(sl_rect, egui::Id::new("mobile_shift_lock_btn"), egui::Sense::click());
+        let prev_shift_id = egui::Id::new("pc_prev_shift_down");
+        let shift_down_now = !ui.ctx().egui_wants_keyboard_input()
+            && ui.ctx().input(|i| i.modifiers.shift);
+        let prev_shift_down = ui.ctx().data(|d| d.get_temp::<bool>(prev_shift_id).unwrap_or(false));
+        ui.ctx().data_mut(|d| d.insert_temp(prev_shift_id, shift_down_now));
+        if sl_resp.clicked() || (shift_down_now && !prev_shift_down) {
+            rustudio_core::mobile::toggle_shift_lock();
+        }
+        let sl_on = rustudio_core::mobile::shift_lock();
+        let sl_fill = if sl_on {
+            Color32::from_rgba_unmultiplied(30, 58, 108, 215)
+        } else {
+            Color32::from_rgba_unmultiplied(18, 20, 26, 175)
+        };
+        let sl_stroke = if sl_on {
+            Color32::from_rgb(59, 130, 246)
+        } else {
+            Color32::from_rgba_unmultiplied(255, 255, 255, 110)
+        };
+        painter.rect_filled(sl_rect, 10.0, sl_fill);
+        painter.rect_stroke(sl_rect, 10.0, Stroke::new(1.5, sl_stroke), egui::StrokeKind::Middle);
+        if let Some(t) = if sl_on { &tex_sl_on } else { &tex_sl_off } {
+            painter.image(t.id(), Rect::from_center_size(sl_center, Vec2::splat(26.0)), uv_full, Color32::WHITE);
+        }
+
+        // Subtle centered crosshair dot/reticle while Shift Lock is active
+        if sl_on {
+            let c = rect.center();
+            painter.circle_filled(c, 3.0, Color32::from_rgba_unmultiplied(255, 255, 255, 225));
+            painter.circle_stroke(c, 5.5, Stroke::new(1.2, Color32::from_rgba_unmultiplied(59, 130, 246, 200)));
+        }
+
+        // 3. Camera Orbit: PC Right-Click anywhere on viewport + Touch Orbit / Left-Drag fallback
+        let sl_hit = sl_resp.is_pointer_button_down_on() || sl_resp.clicked();
+        let jump_hit = jump || jump_resp.is_pointer_button_down_on();
+        let touch_orbit_active = !mt.orbit_touches.is_empty();
+
+        let (rmb_down, ptr_pos, ptr_delta) = ui.ctx().input(|i| {
+            (
+                i.pointer.button_down(egui::PointerButton::Secondary),
+                i.pointer.interact_pos(),
+                i.pointer.delta(),
+            )
+        });
+        let rmb_on_viewport = rmb_down
+            && ptr_pos.is_some_and(|p| {
+                rect.contains(p)
+                    && !menu_r.rect.contains(p)
+                    && !chat_r.rect.contains(p)
+                    && !zoom_out_r.rect.contains(p)
+                    && !zoom_in_r.rect.contains(p)
+                    && !sl_rect.contains(p)
+                    && !jump_rect.contains(p)
+            });
+
+        let mouse_left_drag_cam = !touch_events_seen
+            && !top_bar_hit
+            && !sl_hit
             && !stick_down
-            && !jump
+            && !jump_hit
             && resp.dragged_by(egui::PointerButton::Primary);
-        let look_delta = if drag_cam { resp.drag_delta() } else { egui::Vec2::ZERO };
+
+        let drag_cam = rmb_on_viewport || touch_orbit_active || mouse_left_drag_cam;
+        let look_delta = if rmb_on_viewport {
+            ptr_delta
+        } else if touch_orbit_active {
+            orbit_delta
+        } else if mouse_left_drag_cam {
+            resp.drag_delta()
+        } else {
+            egui::Vec2::ZERO
+        };
 
         rustudio_core::mobile::set_touch_cam_held(drag_cam);
-        if look_delta != egui::Vec2::ZERO {
+        if look_delta != egui::Vec2::ZERO || pinch_delta.abs() > 0.01 {
             if let Some(s) = self.game.play.as_mut() {
                 s.mouse_delta += glam::Vec2::new(look_delta.x, look_delta.y);
-                s.mouse_moved = true;
+                if look_delta != egui::Vec2::ZERO {
+                    s.mouse_moved = true;
+                }
+                if pinch_delta.abs() > 0.01 {
+                    s.wheel += pinch_delta * 0.04;
+                }
                 s.game.last_activity = s.time;
             }
             ui.ctx().request_repaint();
         }
 
+        rustudio_core::mobile::set_touch_stick(
+            if stick_down { stick_x } else { 0.0 },
+            if stick_down { stick_y } else { 0.0 },
+        );
         rustudio_core::mobile::set_touch_keys([w, a, s, d_key, jump]);
         ui.ctx().data_mut(|data| {
             data.insert_temp(egui::Id::new("mobile_touch_keys"), [w, a, s, d_key, jump]);
         });
-        top_bar_hit || stick_down || jump || drag_cam
+        top_bar_hit || sl_hit || stick_down || jump_hit
     }
 
     pub(crate) fn draw_box(

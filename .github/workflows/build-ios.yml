@@ -1,0 +1,85 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - mobile
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (aarch64-apple-ios)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-arm64
+
+      - name: Build release binary for iOS (arm64)
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+        run: cargo build --release --target aarch64-apple-ios --bin rustudio
+
+      - name: Bundle RtRustMobile.app & create unsigned IPA
+        run: |
+          rm -rf Payload RtRustMobile-unsigned.ipa
+          mkdir -p Payload/RtRustMobile.app
+          cp target/aarch64-apple-ios/release/rustudio Payload/RtRustMobile.app/RtRustMobile
+          chmod +x Payload/RtRustMobile.app/RtRustMobile
+          if [ -d assets ]; then
+            cp -R assets Payload/RtRustMobile.app/assets
+          fi
+          cat > Payload/RtRustMobile.app/Info.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key>
+            <string>en</string>
+            <key>CFBundleExecutable</key>
+            <string>RtRustMobile</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.rtrust.mobile</string>
+            <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
+            <key>CFBundleName</key>
+            <string>RtRustMobile</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.3.4</string>
+            <key>CFBundleVersion</key>
+            <string>4</string>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
+            <key>MinimumOSVersion</key>
+            <string>15.0</string>
+            <key>UIRequiredDeviceCapabilities</key>
+            <array>
+              <string>arm64</string>
+            </array>
+            <key>UISupportedInterfaceOrientations</key>
+            <array>
+              <string>UIInterfaceOrientationPortrait</string>
+              <string>UIInterfaceOrientationLandscapeLeft</string>
+              <string>UIInterfaceOrientationLandscapeRight</string>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+          zip -r -q RtRustMobile-unsigned.ipa Payload
+          ls -lh RtRustMobile-unsigned.ipa
+
+      - name: Upload RtRustMobile-unsigned.ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: RtRustMobile-unsigned-ipa
+          path: RtRustMobile-unsigned.ipa
