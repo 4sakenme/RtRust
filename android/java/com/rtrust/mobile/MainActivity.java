@@ -14,6 +14,8 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputConnectionWrapper;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -30,6 +32,7 @@ public class MainActivity extends NativeActivity {
     private EditText imeInput;
     private String lastText = "";
     private boolean updatingText = false;
+    private boolean isSyncingFromRust = false;
     private int lastKbHeight = -1;
 
     @Override
@@ -38,7 +41,25 @@ public class MainActivity extends NativeActivity {
         nativeInitActivity(this);
         hideSystemUI();
 
-        imeInput = new EditText(this);
+        imeInput = new EditText(this) {
+            @Override
+            public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
+                InputConnection ic = super.onCreateInputConnection(outAttrs);
+                if (ic == null) return null;
+                return new InputConnectionWrapper(ic, true) {
+                    @Override
+                    public boolean deleteSurroundingText(int beforeLength, int afterLength) {
+                        if (beforeLength > 0 && getText().length() == 0) {
+                            for (int i = 0; i < beforeLength; i++) {
+                                nativeOnImeKey(1, 0);
+                            }
+                            return true;
+                        }
+                        return super.deleteSurroundingText(beforeLength, afterLength);
+                    }
+                };
+            }
+        };
         imeInput.setBackgroundColor(Color.TRANSPARENT);
         imeInput.setTextColor(Color.TRANSPARENT);
         imeInput.setCursorVisible(false);
@@ -60,7 +81,7 @@ public class MainActivity extends NativeActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                if (updatingText) return;
+                if (updatingText || isSyncingFromRust) return;
                 String next = s.toString();
                 int common = 0;
                 int minLen = Math.min(lastText.length(), next.length());
@@ -77,11 +98,17 @@ public class MainActivity extends NativeActivity {
                 if (common < next.length()) {
                     sendChars(next.substring(common));
                 }
-                if (BaseInputConnection.getComposingSpanStart(s) < 0 && s.length() > 0) {
+                if ((BaseInputConnection.getComposingSpanStart(s) < 0 && s.length() > 0)
+                        || (removed > 0 && next.isEmpty())) {
                     updatingText = true;
+                    BaseInputConnection.removeComposingSpans(s);
                     s.clear();
                     lastText = "";
                     updatingText = false;
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) {
+                        imm.restartInput(imeInput);
+                    }
                 } else {
                     lastText = next;
                 }
@@ -147,6 +174,31 @@ public class MainActivity extends NativeActivity {
                 nativeOnImeKey(0, cp);
             }
         }
+    }
+
+    @SuppressWarnings("unused")
+    public void syncImeText(final String text, final int cursor) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (imeInput == null) return;
+                String safe = (text != null) ? text : "";
+                isSyncingFromRust = true;
+                Editable ed = imeInput.getText();
+                if (ed != null) {
+                    BaseInputConnection.removeComposingSpans(ed);
+                }
+                imeInput.setText(safe);
+                int sel = Math.max(0, Math.min(cursor, safe.length()));
+                imeInput.setSelection(sel);
+                lastText = safe;
+                isSyncingFromRust = false;
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.restartInput(imeInput);
+                }
+            }
+        });
     }
 
     @SuppressWarnings("unused")

@@ -37,6 +37,9 @@ jobs:
           if [ -d assets ]; then
             cp -R assets Payload/RtRustMobile.app/assets
           fi
+          if [ -d ios/icons ]; then
+            cp ios/icons/AppIcon*.png Payload/RtRustMobile.app/
+          fi
           cat > Payload/RtRustMobile.app/Info.plist <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -44,6 +47,8 @@ jobs:
           <dict>
             <key>CFBundleDevelopmentRegion</key>
             <string>en</string>
+            <key>CFBundleDisplayName</key>
+            <string>RtRustMobile</string>
             <key>CFBundleExecutable</key>
             <string>RtRustMobile</string>
             <key>CFBundleIdentifier</key>
@@ -58,10 +63,39 @@ jobs:
             <string>0.3.4</string>
             <key>CFBundleVersion</key>
             <string>4</string>
+            <key>CFBundleIcons</key>
+            <dict>
+              <key>CFBundlePrimaryIcon</key>
+              <dict>
+                <key>CFBundleIconFiles</key>
+                <array>
+                  <string>AppIcon60x60</string>
+                </array>
+                <key>UIPrerenderedIcon</key>
+                <true/>
+              </dict>
+            </dict>
+            <key>CFBundleIcons~ipad</key>
+            <dict>
+              <key>CFBundlePrimaryIcon</key>
+              <dict>
+                <key>CFBundleIconFiles</key>
+                <array>
+                  <string>AppIcon60x60</string>
+                  <string>AppIcon76x76</string>
+                </array>
+                <key>UIPrerenderedIcon</key>
+                <true/>
+              </dict>
+            </dict>
             <key>LSRequiresIPhoneOS</key>
             <true/>
             <key>MinimumOSVersion</key>
             <string>15.0</string>
+            <key>UIFileSharingEnabled</key>
+            <true/>
+            <key>LSSupportsOpeningDocumentsInPlace</key>
+            <true/>
             <key>UIRequiredDeviceCapabilities</key>
             <array>
               <string>arm64</string>

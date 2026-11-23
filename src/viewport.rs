@@ -1035,12 +1035,16 @@ impl Editor {
             || zoom_in_r.is_pointer_button_down_on()
             || zoom_in_r.clicked();
 
-        // 1. Dynamic Thumbstick + Jump + Multi-Touch Orbit / Pinch Zoom (tracked by TouchId)
+        // 1. Dynamic Thumbstick + Jump + Multi-Touch Orbit / Pinch Zoom (tracked independently by u64 TouchId)
         #[derive(Clone, Default)]
         struct MultiTouchState {
-            stick_touch: Option<(egui::TouchId, Pos2, Pos2)>, // (id, origin, current)
-            jump_touch: Option<egui::TouchId>,
-            orbit_touches: Vec<(egui::TouchId, Pos2)>,
+            thumbstick_touch_id: Option<u64>,
+            thumbstick_origin: Pos2,
+            thumbstick_current: Pos2,
+            jump_touch_id: Option<u64>,
+            camera_orbit_touch_id: Option<u64>,
+            last_camera_touch_pos: Pos2,
+            secondary_orbit_touch: Option<(u64, Pos2)>,
         }
 
         let stick_radius = 52.0;
@@ -1052,10 +1056,14 @@ impl Editor {
         let jump_radius = 40.0;
         let jump_center = egui::pos2(safe_rect.right() - 78.0, safe_rect.bottom() - 78.0);
         let jump_rect = Rect::from_center_size(jump_center, egui::vec2(jump_radius * 2.2, jump_radius * 2.2));
+        let sl_center_pre = egui::pos2(jump_center.x, jump_center.y - 76.0);
+        let sl_rect_pre = Rect::from_center_size(sl_center_pre, Vec2::splat(42.0));
 
         let mt_id = egui::Id::new("mobile_multitouch_state");
         let mut mt = ui.ctx().data(|d| d.get_temp::<MultiTouchState>(mt_id).unwrap_or_default());
-        let mut touch_events_seen = false;
+        let mut touch_events_seen = mt.thumbstick_touch_id.is_some()
+            || mt.jump_touch_id.is_some()
+            || mt.camera_orbit_touch_id.is_some();
         let mut orbit_delta = egui::Vec2::ZERO;
         let mut pinch_delta = 0.0_f32;
 
@@ -1063,49 +1071,82 @@ impl Editor {
         for ev in &events {
             if let egui::Event::Touch { id, phase, pos, .. } = ev {
                 touch_events_seen = true;
+                let tid = id.0;
                 match phase {
                     egui::TouchPhase::Start => {
-                        if !rect.contains(*pos) || menu_r.rect.contains(*pos) || chat_r.rect.contains(*pos) || zoom_out_r.rect.contains(*pos) || zoom_in_r.rect.contains(*pos) {
+                        if !rect.contains(*pos)
+                            || menu_r.rect.contains(*pos)
+                            || chat_r.rect.contains(*pos)
+                            || zoom_out_r.rect.contains(*pos)
+                            || zoom_in_r.rect.contains(*pos)
+                            || sl_rect_pre.contains(*pos)
+                        {
                             continue;
                         }
-                        if mt.stick_touch.is_none() && stick_zone.contains(*pos) {
-                            mt.stick_touch = Some((*id, *pos, *pos));
-                        } else if mt.jump_touch.is_none() && jump_rect.contains(*pos) {
-                            mt.jump_touch = Some(*id);
-                        } else if !mt.orbit_touches.iter().any(|(tid, _)| tid == id) {
-                            mt.orbit_touches.push((*id, *pos));
+                        if mt.thumbstick_touch_id.is_none() && stick_zone.contains(*pos) {
+                            mt.thumbstick_touch_id = Some(tid);
+                            mt.thumbstick_origin = *pos;
+                            mt.thumbstick_current = *pos;
+                        } else if mt.jump_touch_id.is_none() && jump_rect.contains(*pos) {
+                            mt.jump_touch_id = Some(tid);
+                        } else if mt.camera_orbit_touch_id.is_none() {
+                            mt.camera_orbit_touch_id = Some(tid);
+                            mt.last_camera_touch_pos = *pos;
+                        } else if mt.secondary_orbit_touch.is_none() && mt.camera_orbit_touch_id != Some(tid) {
+                            mt.secondary_orbit_touch = Some((tid, *pos));
                         }
                     }
                     egui::TouchPhase::Move => {
-                        if let Some((tid, _, cur)) = mt.stick_touch.as_mut() {
-                            if tid == id {
-                                *cur = *pos;
-                                continue;
-                            }
-                        }
-                        if mt.jump_touch == Some(*id) {
+                        if mt.thumbstick_touch_id == Some(tid) {
+                            mt.thumbstick_current = *pos;
                             continue;
                         }
-                        if mt.orbit_touches.len() >= 2 {
-                            let prev_d = mt.orbit_touches[0].1.distance(mt.orbit_touches[1].1);
-                            if let Some(entry) = mt.orbit_touches.iter_mut().find(|(tid, _)| tid == id) {
-                                entry.1 = *pos;
+                        if mt.jump_touch_id == Some(tid) {
+                            continue;
+                        }
+                        if let (Some(cam_id), Some((sec_id, sec_pos))) =
+                            (mt.camera_orbit_touch_id, mt.secondary_orbit_touch)
+                        {
+                            if tid == cam_id || tid == sec_id {
+                                let prev_d = mt.last_camera_touch_pos.distance(sec_pos);
+                                if tid == cam_id {
+                                    mt.last_camera_touch_pos = *pos;
+                                } else {
+                                    mt.secondary_orbit_touch = Some((sec_id, *pos));
+                                }
+                                let new_sec = mt.secondary_orbit_touch.map(|(_, p)| p).unwrap_or(sec_pos);
+                                let new_d = mt.last_camera_touch_pos.distance(new_sec);
+                                let pd = new_d - prev_d;
+                                if pd.abs() < 120.0 {
+                                    pinch_delta += pd;
+                                }
                             }
-                            let new_d = mt.orbit_touches[0].1.distance(mt.orbit_touches[1].1);
-                            pinch_delta += new_d - prev_d;
-                        } else if let Some(entry) = mt.orbit_touches.iter_mut().find(|(tid, _)| tid == id) {
-                            orbit_delta += *pos - entry.1;
-                            entry.1 = *pos;
+                        } else if mt.camera_orbit_touch_id == Some(tid) {
+                            let delta = *pos - mt.last_camera_touch_pos;
+                            mt.last_camera_touch_pos = *pos;
+                            // Safety clamp: ignore synthetic multi-touch coordinate jumps > 120pt
+                            if delta.length() <= 120.0 {
+                                orbit_delta += delta;
+                            }
                         }
                     }
                     egui::TouchPhase::End | egui::TouchPhase::Cancel => {
-                        if mt.stick_touch.is_some_and(|(tid, _, _)| tid == *id) {
-                            mt.stick_touch = None;
+                        if mt.thumbstick_touch_id == Some(tid) {
+                            mt.thumbstick_touch_id = None;
                         }
-                        if mt.jump_touch == Some(*id) {
-                            mt.jump_touch = None;
+                        if mt.jump_touch_id == Some(tid) {
+                            mt.jump_touch_id = None;
                         }
-                        mt.orbit_touches.retain(|(tid, _)| tid != id);
+                        if mt.camera_orbit_touch_id == Some(tid) {
+                            if let Some((sec_id, sec_pos)) = mt.secondary_orbit_touch.take() {
+                                mt.camera_orbit_touch_id = Some(sec_id);
+                                mt.last_camera_touch_pos = sec_pos;
+                            } else {
+                                mt.camera_orbit_touch_id = None;
+                            }
+                        } else if mt.secondary_orbit_touch.is_some_and(|(sid, _)| sid == tid) {
+                            mt.secondary_orbit_touch = None;
+                        }
                     }
                 }
             }
@@ -1117,11 +1158,11 @@ impl Editor {
         let stick_resp = ui.interact(stick_rect, egui::Id::new("mobile_thumbstick"), egui::Sense::click_and_drag());
         let jump_resp = ui.interact(jump_rect, egui::Id::new("mobile_jump_btn"), egui::Sense::click_and_drag());
 
-        let (stick_center, offset, stick_down) = if let Some((_, origin, cur)) = mt.stick_touch {
-            let d = cur - origin;
+        let (stick_center, offset, stick_down) = if mt.thumbstick_touch_id.is_some() {
+            let d = mt.thumbstick_current - mt.thumbstick_origin;
             let len = d.length();
             let clamped = if len > stick_radius { d * (stick_radius / len) } else { d };
-            (origin, clamped, true)
+            (mt.thumbstick_origin, clamped, true)
         } else if !touch_events_seen && (stick_resp.is_pointer_button_down_on() || stick_resp.dragged()) {
             let mut clamped = egui::Vec2::ZERO;
             if let Some(pos) = stick_resp.interact_pointer_pos() {
@@ -1154,7 +1195,7 @@ impl Editor {
         let a = stick_x < -dead;
         let d_key = stick_x > dead;
 
-        let jump = mt.jump_touch.is_some() || (!touch_events_seen && jump_resp.is_pointer_button_down_on());
+        let jump = mt.jump_touch_id.is_some() || (!touch_events_seen && jump_resp.is_pointer_button_down_on());
         let jump_fill = if jump {
             Color32::from_rgba_unmultiplied(90, 200, 130, 190)
         } else {
@@ -1213,7 +1254,7 @@ impl Editor {
         // 3. Camera Orbit: PC Right-Click anywhere on viewport + Touch Orbit / Left-Drag fallback
         let sl_hit = sl_resp.is_pointer_button_down_on() || sl_resp.clicked();
         let jump_hit = jump || jump_resp.is_pointer_button_down_on();
-        let touch_orbit_active = !mt.orbit_touches.is_empty();
+        let touch_orbit_active = mt.camera_orbit_touch_id.is_some();
 
         let (rmb_down, ptr_pos, ptr_delta) = ui.ctx().input(|i| {
             (

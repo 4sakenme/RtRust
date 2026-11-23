@@ -1345,6 +1345,33 @@ pub mod android_ime {
         call_set_soft_input(wanted);
     }
 
+    /// Two-way sync from Rust to Android `EditText` with echo guard (`isSyncingFromRust = true`)
+    /// so Backspace/Delete or widget focus switches flush any stale IME composing span.
+    pub fn sync_ime_text(text: &str, cursor: i32) {
+        let Some(activity) = ACTIVITY.get() else {
+            return;
+        };
+        let ctx = ndk_context::android_context();
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) };
+        let _ = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+            let j_text = env.new_string(text)?;
+            env.call_method(
+                activity.as_obj(),
+                jni::jni_str!("syncImeText"),
+                jni::jni_sig!("(Ljava/lang/String;I)V"),
+                &[
+                    jni::objects::JValue::Object(&j_text),
+                    jni::objects::JValue::Int(cursor),
+                ],
+            )?;
+            Ok(())
+        });
+    }
+
+    pub fn reset_ime_composing() {
+        sync_ime_text("", 0);
+    }
+
     fn call_set_soft_input(wanted: bool) {
         let Some(activity) = ACTIVITY.get() else {
             return;
@@ -1384,6 +1411,10 @@ pub mod android_ime {
                 }
                 1 => {
                     flush_text(&mut text_buf, &mut raw.events);
+                    raw.events.push(egui::Event::Ime(egui::ImeEvent::Preedit {
+                        text: String::new(),
+                        active_range_chars: None,
+                    }));
                     raw.events.push(egui::Event::Key {
                         key: egui::Key::Backspace,
                         physical_key: Some(egui::Key::Backspace),

@@ -1998,6 +1998,55 @@ impl eframe::App for RustudioApp {
             });
             crate::android_ime::sync_soft_keyboard(_ctx.egui_wants_keyboard_input(), tapped);
             crate::android_ime::drain_ime_events(raw);
+            let backspace_pressed = raw.events.iter().any(|e| {
+                matches!(
+                    e,
+                    egui::Event::Key {
+                        key: egui::Key::Backspace | egui::Key::Delete,
+                        pressed: true,
+                        ..
+                    }
+                )
+            });
+            let cur_focus = _ctx.memory(|m| m.focused());
+            let prev_focus_id = egui::Id::new("android_ime_prev_focus");
+            let prev_focus = _ctx.data(|d| d.get_temp::<Option<egui::Id>>(prev_focus_id)).flatten();
+            if cur_focus != prev_focus {
+                _ctx.data_mut(|d| d.insert_temp(prev_focus_id, cur_focus));
+                if cur_focus.is_some() {
+                    crate::android_ime::reset_ime_composing();
+                }
+            } else if backspace_pressed {
+                crate::android_ime::reset_ime_composing();
+            }
+        }
+        // Clean WindowEvent::Ime Preedit/Commit & Backspace preedit flush across all platforms (iOS/Android/Desktop)
+        {
+            let mut cleaned = Vec::with_capacity(raw.events.len() + 2);
+            for ev in raw.events.drain(..) {
+                match &ev {
+                    egui::Event::Ime(egui::ImeEvent::Commit(_)) => {
+                        cleaned.push(egui::Event::Ime(egui::ImeEvent::Preedit {
+                            text: String::new(),
+                            active_range_chars: None,
+                        }));
+                        cleaned.push(ev);
+                    }
+                    egui::Event::Key {
+                        key: egui::Key::Backspace | egui::Key::Delete,
+                        pressed: true,
+                        ..
+                    } => {
+                        cleaned.push(egui::Event::Ime(egui::ImeEvent::Preedit {
+                            text: String::new(),
+                            active_range_chars: None,
+                        }));
+                        cleaned.push(ev);
+                    }
+                    _ => cleaned.push(ev),
+                }
+            }
+            raw.events = cleaned;
         }
         crate::touch_input_bridge::process_raw_input(_ctx, raw);
         if let Some(t) = self.ed.harness.selftest.as_mut() {

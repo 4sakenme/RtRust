@@ -23,6 +23,8 @@ pub fn on_app_paused() {
 /// Called from `ApplicationHandler::resumed` when iOS/Android foregrounds the app.
 pub fn on_app_resumed() {
     APP_PAUSED.store(false, Ordering::Release);
+    #[cfg(target_os = "ios")]
+    enable_ios_multitouch();
     log::info!("[lifecycle] app resumed");
 }
 
@@ -171,11 +173,54 @@ pub fn open_path(path: &Path) -> std::io::Result<()> {
 pub fn get_safe_area_insets() -> (f32, f32, f32, f32) {
     #[cfg(target_os = "ios")]
     {
+        enable_ios_multitouch();
         ios_safe_area_insets()
     }
     #[cfg(not(target_os = "ios"))]
     {
         (0.0, 0.0, 0.0, 0.0)
+    }
+}
+
+/// Ensures every `UIWindow` and `UIView` in the active iOS view hierarchy has
+/// `multipleTouchEnabled = YES` so simultaneous thumbstick + camera orbit + jump
+/// touches are delivered independently without dropping the second finger.
+#[cfg(target_os = "ios")]
+pub fn enable_ios_multitouch() {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+
+    unsafe fn enable_view_tree(view: *mut AnyObject) {
+        if view.is_null() {
+            return;
+        }
+        let _: () = msg_send![view, setMultipleTouchEnabled: true];
+        let subviews: *mut AnyObject = msg_send![view, subviews];
+        if !subviews.is_null() {
+            let count: usize = msg_send![subviews, count];
+            for i in 0..count {
+                let child: *mut AnyObject = msg_send![subviews, objectAtIndex: i];
+                enable_view_tree(child);
+            }
+        }
+    }
+
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(UIApplication), sharedApplication];
+        if app.is_null() {
+            return;
+        }
+        let windows: *mut AnyObject = msg_send![app, windows];
+        if windows.is_null() {
+            return;
+        }
+        let count: usize = msg_send![windows, count];
+        for idx in 0..count {
+            let win: *mut AnyObject = msg_send![windows, objectAtIndex: idx];
+            if !win.is_null() {
+                enable_view_tree(win);
+            }
+        }
     }
 }
 
@@ -253,14 +298,11 @@ fn ios_safe_area_insets() -> (f32, f32, f32, f32) {
 #[cfg(target_os = "android")]
 fn android_open_url(url: &str) {
     let ctx = ndk_context::android_context();
-    let vm_ptr = ctx.vm().cast::<jni::sys::JavaVM>();
-    let activity_ptr = ctx.context().cast::<jni::sys::jobject>();
-    if vm_ptr.is_null() || activity_ptr.is_null() {
+    if ctx.vm().is_null() || ctx.context().is_null() {
         return;
     }
-    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(vm_ptr) }) else {
-        return;
-    };
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) };
+    let activity_ptr: jni::sys::jobject = ctx.context().cast();
     let _ = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
         let activity = unsafe { jni::objects::JObject::from_raw(env, activity_ptr) };
         let j_url = env.new_string(url)?;

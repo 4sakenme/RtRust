@@ -44,6 +44,7 @@ struct QueuedKey {
 
 pub struct TouchBridge {
     slots: [TouchSlot; MAX_TOUCHES],
+    primary_touch_id: Option<TouchId>,
     primary_down: bool,
     secondary_down: bool,
     middle_down: bool,
@@ -68,6 +69,7 @@ impl Default for TouchBridge {
         };
         Self {
             slots: [empty; MAX_TOUCHES],
+            primary_touch_id: None,
             primary_down: false,
             secondary_down: false,
             middle_down: false,
@@ -252,13 +254,16 @@ impl TouchBridge {
         let mut i = 0;
         while i < raw.events.len() {
             if let egui::Event::Touch { id, phase, pos, .. } = raw.events[i] {
-                raw.events.remove(i);
+                // Keep `egui::Event::Touch` intact in `raw.events` so `viewport.rs`
+                // can track each finger independently by `TouchId` (`u64`) without
+                // losing multi-touch events!
+                i += 1;
                 match phase {
                     TouchPhase::Start => {
                         let prev_count = self.active_count();
                         self.alloc_slot(id, pos, now);
-                        let new_count = self.active_count();
-                        if new_count == 1 && prev_count == 0 {
+                        if prev_count == 0 || self.primary_touch_id.is_none() {
+                            self.primary_touch_id = Some(id);
                             self.long_press_fired = false;
                             self.two_finger_active = false;
                             push_synth(egui::Event::PointerMoved(pos));
@@ -270,47 +275,16 @@ impl TouchBridge {
                             });
                             self.primary_down = true;
                             ctx.request_repaint_after(LONG_PRESS_DURATION);
-                        } else if new_count >= 2 && !self.two_finger_active {
-                            self.two_finger_active = true;
-                            self.long_press_fired = false;
-                            if self.primary_down {
-                                push_synth(egui::Event::PointerButton {
-                                    pos,
-                                    button: PointerButton::Primary,
-                                    pressed: false,
-                                    modifiers: mods,
-                                });
-                                self.primary_down = false;
-                            }
-                            if self.secondary_down {
-                                push_synth(egui::Event::PointerButton {
-                                    pos,
-                                    button: PointerButton::Secondary,
-                                    pressed: false,
-                                    modifiers: mods,
-                                });
-                                self.secondary_down = false;
-                            }
-                            if let Some((a, b)) = self.first_two() {
-                                let mid = egui::pos2((a.pos.x + b.pos.x) * 0.5, (a.pos.y + b.pos.y) * 0.5);
-                                push_synth(egui::Event::PointerMoved(mid));
-                                push_synth(egui::Event::PointerButton {
-                                    pos: mid,
-                                    button: PointerButton::Middle,
-                                    pressed: true,
-                                    modifiers: mods,
-                                });
-                                self.middle_down = true;
-                            }
                         }
                     }
                     TouchPhase::Move => {
                         if let Some(idx) = self.find_slot(id) {
                             self.slots[idx].pos = pos;
                         }
-                        let count = self.active_count();
-                        if count == 1 && !self.two_finger_active {
-                            if !self.long_press_fired
+                        if self.primary_touch_id == Some(id) {
+                            let count = self.active_count();
+                            if count == 1
+                                && !self.long_press_fired
                                 && now.duration_since(self.first_active().map_or(now, |s| s.start_time))
                                     >= LONG_PRESS_DURATION
                                 && self
@@ -338,59 +312,30 @@ impl TouchBridge {
                             } else {
                                 push_synth(egui::Event::PointerMoved(pos));
                             }
-                        } else if count >= 2 {
-                            if let Some((a, b)) = self.first_two() {
-                                let mid = egui::pos2((a.pos.x + b.pos.x) * 0.5, (a.pos.y + b.pos.y) * 0.5);
-                                let prev_mid = egui::pos2(
-                                    (a.prev_pos.x + b.prev_pos.x) * 0.5,
-                                    (a.prev_pos.y + b.prev_pos.y) * 0.5,
-                                );
-                                let delta_mid = mid - prev_mid;
-                                let dist = a.pos.distance(b.pos);
-                                let prev_dist = a.prev_pos.distance(b.prev_pos);
-                                let delta_dist = dist - prev_dist;
-
-                                push_synth(egui::Event::PointerMoved(mid));
-                                if delta_mid.length_sq() > 0.04 {
-                                    push_synth(egui::Event::MouseWheel {
-                                        unit: egui::MouseWheelUnit::Point,
-                                        delta: delta_mid,
-                                        phase: TouchPhase::Move,
-                                        modifiers: mods,
-                                    });
-                                }
-                                if delta_dist.abs() > 0.5 {
-                                    push_synth(egui::Event::MouseWheel {
-                                        unit: egui::MouseWheelUnit::Point,
-                                        delta: egui::vec2(0.0, delta_dist * 1.6),
-                                        phase: TouchPhase::Move,
-                                        modifiers: Modifiers::NONE,
-                                    });
-                                }
-                            }
                         }
                     }
                     TouchPhase::End | TouchPhase::Cancel => {
                         if let Some(idx) = self.find_slot(id) {
                             self.slots[idx].active = false;
                         }
-                        let remaining = self.active_count();
-                        if remaining == 0 {
+                        if self.primary_touch_id == Some(id) {
                             let mut tmp = Vec::new();
                             self.release_all_buttons(pos, mods, &mut tmp);
                             for ev in tmp {
                                 push_synth(ev);
                             }
+                            self.primary_touch_id = self.first_active().map(|s| s.id);
                             self.long_press_fired = false;
                             self.two_finger_active = false;
-                        } else if remaining < 2 && self.middle_down {
-                            push_synth(egui::Event::PointerButton {
-                                pos,
-                                button: PointerButton::Middle,
-                                pressed: false,
-                                modifiers: mods,
-                            });
-                            self.middle_down = false;
+                        } else if self.active_count() == 0 {
+                            let mut tmp = Vec::new();
+                            self.release_all_buttons(pos, mods, &mut tmp);
+                            for ev in tmp {
+                                push_synth(ev);
+                            }
+                            self.primary_touch_id = None;
+                            self.long_press_fired = false;
+                            self.two_finger_active = false;
                         }
                     }
                 }
