@@ -1817,14 +1817,14 @@ impl Editor {
                 ui.horizontal_centered(|ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
 
-                    // File menu pill
+                    // File menu pill (Stitch Rust-Orange #FF5A26)
                     let file_btn = egui::Button::new(
                         egui::RichText::new("File")
                             .size(12.5)
                             .color(Color32::WHITE)
                             .strong(),
                     )
-                    .fill(theme::SELECT)
+                    .fill(crate::wallpaper::RUST_ORANGE)
                     .corner_radius(6.0)
                     .min_size(Vec2::new(42.0, 26.0));
                     let file_resp = ui.add(file_btn);
@@ -1858,10 +1858,10 @@ impl Editor {
                         egui::RichText::new("🌐 3D Viewport")
                             .size(12.0)
                             .strong()
-                            .color(if is_pure_3d { Color32::BLACK } else { Color32::WHITE }),
+                            .color(Color32::WHITE),
                     )
                     .fill(if is_pure_3d {
-                        crate::wallpaper::PASTEL_LAVENDER
+                        Color32::from_rgb(33, 112, 228)
                     } else {
                         Color32::from_rgba_unmultiplied(32, 36, 48, 220)
                     })
@@ -1940,7 +1940,7 @@ impl Editor {
                         let active = self.tool == tool;
                         let (r, resp) = ui.allocate_exact_size(Vec2::new(52.0, 28.0), Sense::click());
                         let fill = if active {
-                            theme::SELECT.gamma_multiply(0.85)
+                            Color32::from_rgb(33, 112, 228)
                         } else if resp.hovered() {
                             theme::HOVER_BG
                         } else {
@@ -3419,12 +3419,56 @@ impl Editor {
             }
         }
 
-        // 5. Central Code Editor (no 3D viewport!)
+        // 5. Central Code Editor (no 3D viewport!) + Luau Quick-Symbol Bar (Stitch iPhone/Android IDE)
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(Color32::from_rgb(13, 15, 21)).inner_margin(egui::Margin::same(8)))
             .show(ui, |ui| {
                 if let Some(r) = self.ui.portrait_active_script {
-                    self.script_tab_ui(ui, r);
+                    let body_h = (ui.available_height() - 36.0).max(120.0);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width(), body_h),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            self.script_tab_ui(ui, r);
+                        },
+                    );
+                    ui.add_space(4.0);
+                    egui::ScrollArea::horizontal()
+                        .id_salt("luau_quick_symbols_scroll")
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 5.0;
+                                for (label, snippet) in [
+                                    ("Tab", "    "),
+                                    ("local", "local "),
+                                    ("function", "function "),
+                                    ("end", "end"),
+                                    ("()", "()"),
+                                    ("{}", "{}"),
+                                    ("=", " = "),
+                                    ("\"\"", "\"\""),
+                                ] {
+                                    if ui
+                                        .add(
+                                            egui::Button::new(
+                                                egui::RichText::new(label)
+                                                    .monospace()
+                                                    .size(11.5)
+                                                    .color(Color32::WHITE),
+                                            )
+                                            .fill(Color32::from_rgb(32, 36, 48))
+                                            .corner_radius(6.0)
+                                            .min_size(Vec2::new(38.0, 26.0)),
+                                        )
+                                        .clicked()
+                                    {
+                                        ctx.input_mut(|i| {
+                                            i.events.push(egui::Event::Text(snippet.to_string()));
+                                        });
+                                    }
+                                }
+                            });
+                        });
                 } else {
                     ui.centered_and_justified(|ui| {
                         ui.vertical_centered(|ui| {

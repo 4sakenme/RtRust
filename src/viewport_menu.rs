@@ -50,38 +50,42 @@ impl Editor {
             let mut lp_act: Option<&'static str> = None;
             let shown = egui::Area::new(egui::Id::new("vp_part_lp_popover"))
                 .order(egui::Order::Foreground)
-                .fixed_pos(pop_pos + egui::vec2(8.0, -40.0))
+                .fixed_pos(pop_pos + egui::vec2(-160.0, -54.0))
                 .show(&ctx, |ui| {
                     egui::Frame::new()
-                        .fill(egui::Color32::from_rgba_unmultiplied(22, 25, 34, 245))
+                        .fill(egui::Color32::from_rgba_unmultiplied(18, 21, 28, 245))
                         .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 42)))
-                        .corner_radius(egui::CornerRadius::same(12))
-                        .inner_margin(egui::Margin::same(8))
+                        .corner_radius(egui::CornerRadius::same(14))
+                        .inner_margin(egui::Margin::symmetric(8, 6))
                         .show(ui, |ui| {
-                            ui.set_min_width(168.0);
-                            ui.spacing_mut().item_spacing.y = 4.0;
-                            ui.label(egui::RichText::new("Part Actions").size(11.0).strong().color(crate::wallpaper::LOGO_CYAN));
-                            for (label, cmd, col) in [
-                                ("📋 Duplicate (Clone)", "duplicate", crate::wallpaper::RUST_ORANGE),
-                                ("📄 Copy", "copy", egui::Color32::from_rgb(38, 44, 58)),
-                                ("📥 Paste", "paste", egui::Color32::from_rgb(38, 44, 58)),
-                                ("🔍 Focus", "focus", egui::Color32::from_rgb(38, 44, 58)),
-                                ("📦 Group", "group", egui::Color32::from_rgb(38, 44, 58)),
-                                ("🗑 Delete", "delete", egui::Color32::from_rgb(155, 44, 44)),
-                            ] {
-                                if ui
-                                    .add_sized(
-                                        [164.0, 32.0],
-                                        egui::Button::new(egui::RichText::new(label).size(12.0).strong().color(egui::Color32::WHITE))
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 5.0;
+                                for (label, cmd, col) in [
+                                    ("Clone", "duplicate", egui::Color32::from_rgb(33, 112, 228)),
+                                    ("Delete", "delete", egui::Color32::from_rgb(205, 48, 48)),
+                                    ("Focus", "focus", egui::Color32::from_rgb(38, 44, 58)),
+                                    ("Group", "group", egui::Color32::from_rgb(38, 44, 58)),
+                                    ("Copy", "copy", egui::Color32::from_rgb(38, 44, 58)),
+                                ] {
+                                    if ui
+                                        .add_sized(
+                                            [60.0, 30.0],
+                                            egui::Button::new(
+                                                egui::RichText::new(label)
+                                                    .size(12.0)
+                                                    .strong()
+                                                    .color(egui::Color32::WHITE),
+                                            )
                                             .fill(col)
                                             .corner_radius(8.0),
-                                    )
-                                    .clicked()
-                                {
-                                    lp_act = Some(cmd);
-                                    close = true;
+                                        )
+                                        .clicked()
+                                    {
+                                        lp_act = Some(cmd);
+                                        close = true;
+                                    }
                                 }
-                            }
+                            });
                         });
                 });
             let clicked_out = ctx.input(|i| {

@@ -45,6 +45,13 @@ pub const EMBER_RED: Color32 = Color32::from_rgb(255, 75, 43);
 pub const EMBER_AMBER: Color32 = Color32::from_rgb(255, 122, 24);
 /// Subtle Electric Cyan Highlight from App Logo: `#26C6DA`
 pub const LOGO_CYAN: Color32 = Color32::from_rgb(38, 198, 218);
+/// Stitch Design System Secondary Studio Blue: `#2170E4` / `#0058BE`
+pub const STUDIO_BLUE: Color32 = Color32::from_rgb(33, 112, 228);
+pub const STUDIO_BLUE_DARK: Color32 = Color32::from_rgb(0, 88, 190);
+/// Stitch Design System Primary Container: `#CE4900`
+pub const RUST_CONTAINER: Color32 = Color32::from_rgb(206, 73, 0);
+/// Stitch Design System Play Green: `#22C55E`
+pub const PLAY_GREEN: Color32 = Color32::from_rgb(34, 197, 94);
 
 // Alias existing theme constants to the cohesive RtRust Orange-Red & Electric Cyan brand tokens
 pub const PASTEL_LAVENDER: Color32 = RUST_ORANGE;
