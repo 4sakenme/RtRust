@@ -2725,6 +2725,7 @@ impl Editor {
                 )
                 .show(ctx, |ui| {
                     let inner_w = ui.available_width().max(200.0);
+                    let panel_h = ui.available_height().max(200.0);
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 3.0;
                         if ui
@@ -2793,7 +2794,7 @@ impl Editor {
                         });
                     });
                     ui.separator();
-                    let body_h = (ui.available_height() - 4.0).max(100.0);
+                    let body_h = (panel_h - 38.0).max(140.0);
                     if active_insp_tab == 2 {
                         let split = self.ui.portrait_drawer_split.clamp(0.25, 0.75);
                         let top_h = (body_h * split).max(60.0);
@@ -2849,13 +2850,13 @@ impl Editor {
                 )
                 .show(ui, |ui| {
                     ui.set_clip_rect(ui.max_rect());
+                    let panel_h = ui.available_height().max(200.0);
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
                         // Left vertical resize drag handle
                         let handle_w = 12.0;
-                        let avail_h = ui.available_height().max(140.0);
                         let (handle_rect, handle_resp) = ui.allocate_exact_size(
-                            egui::vec2(handle_w, avail_h),
+                            egui::vec2(handle_w, panel_h),
                             egui::Sense::drag(),
                         );
                         if handle_resp.hovered() || handle_resp.dragged() {
@@ -2889,6 +2890,7 @@ impl Editor {
                         ui.vertical(|ui| {
                             let inner_w = (ui.available_width() - 4.0).max(160.0);
                             ui.set_max_width(inner_w);
+                            ui.set_min_height(panel_h);
 
                             // Unified Top Segmented Tab Switcher: [ Explorer | Props | Split ]
                             ui.horizontal(|ui| {
@@ -2966,7 +2968,7 @@ impl Editor {
                             });
                             ui.separator();
 
-                            let body_h = (ui.available_height() - 4.0).max(100.0);
+                            let body_h = (panel_h - 38.0).max(140.0);
                             if active_insp_tab == 2 {
                                 let split = self.ui.portrait_drawer_split.clamp(0.25, 0.75);
                                 let top_h = (body_h * split).max(60.0);
@@ -3102,7 +3104,7 @@ impl Editor {
 
         // Unobtrusive bottom-right FPS readout inside 3D Viewport (matching Mobile Studio v2.0)
         if self.ui.portrait_tab == PortraitTab::Viewport && self.ui.portrait_tool_panel.is_none() {
-            let fps_pos = egui::pos2(left_pane_rect.right() - 62.0, left_pane_rect.bottom() - safe_bottom - 20.0);
+            let fps_pos = egui::pos2(left_pane_rect.right() - 56.0, left_pane_rect.top() + 8.0);
             egui::Area::new(egui::Id::new("vp_streaming_telemetry_badge"))
                 .order(egui::Order::Foreground)
                 .interactable(false)
