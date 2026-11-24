@@ -2705,17 +2705,23 @@ impl Editor {
                     }
                 });
         } else if inspector_open && inspector_floating {
-            let win_w = target_insp_w;
-            let win_h = (screen_rect.height() * 0.68).clamp(220.0, 480.0);
+            let float_size_id = egui::Id::new("landscape_floating_inspector_size");
+            let max_float_h = (screen_rect.height() - 40.0).max(220.0);
+            let default_float_size = Vec2::new(
+                target_insp_w,
+                (screen_rect.height() * 0.68).clamp(220.0, 480.0),
+            );
+            let mut float_size = ctx
+                .data(|d| d.get_temp::<Vec2>(float_size_id).unwrap_or(default_float_size));
+            float_size.x = float_size.x.clamp(240.0, max_insp_w);
+            float_size.y = float_size.y.clamp(200.0, max_float_h);
             if let Some(shown) = egui::Window::new("Inspector")
                 .id(egui::Id::new("landscape_floating_inspector_win"))
                 .title_bar(false)
-                .resizable(true)
+                .resizable(false)
                 .movable(true)
-                .default_pos(egui::pos2(screen_rect.right() - win_w - safe_right - 16.0, screen_rect.top() + 94.0))
-                .default_size(egui::vec2(win_w, win_h))
-                .min_size(egui::vec2(240.0, 200.0))
-                .max_size(egui::vec2(max_insp_w, screen_rect.height() - 40.0))
+                .default_pos(egui::pos2(screen_rect.right() - float_size.x - safe_right - 16.0, screen_rect.top() + 94.0))
+                .fixed_size(float_size)
                 .frame(
                     egui::Frame::window(&ctx.global_style())
                         .fill(Color32::from_rgb(20, 23, 29))
@@ -2724,8 +2730,11 @@ impl Editor {
                         .inner_margin(egui::Margin::same(6)),
                 )
                 .show(ctx, |ui| {
-                    let inner_w = ui.available_width().max(200.0);
-                    let panel_h = ui.available_height().max(200.0);
+                    let inner_w = (float_size.x - 12.0).max(200.0);
+                    let panel_h = (float_size.y - 12.0).max(180.0);
+                    ui.set_clip_rect(ui.max_rect());
+                    ui.set_min_size(egui::vec2(inner_w, panel_h));
+                    ui.set_max_size(egui::vec2(inner_w, panel_h));
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 3.0;
                         if ui
@@ -2826,6 +2835,40 @@ impl Editor {
                             },
                         );
                     }
+                    // Explicit bottom-right corner resize grip (never auto-expands on content changes)
+                    let grip_rect = Rect::from_min_size(
+                        egui::pos2(ui.max_rect().right() - 16.0, ui.max_rect().bottom() - 16.0),
+                        Vec2::splat(16.0),
+                    );
+                    let grip_resp = ui.interact(
+                        grip_rect,
+                        egui::Id::new("landscape_floating_inspector_resize_grip"),
+                        egui::Sense::drag(),
+                    );
+                    if grip_resp.hovered() || grip_resp.dragged() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+                    }
+                    if grip_resp.dragged() {
+                        let d = grip_resp.drag_delta();
+                        let updated = Vec2::new(
+                            (float_size.x + d.x).clamp(240.0, max_insp_w),
+                            (float_size.y + d.y).clamp(200.0, max_float_h),
+                        );
+                        ctx.data_mut(|data| data.insert_temp(float_size_id, updated));
+                    }
+                    let grip_col = if grip_resp.dragged() || grip_resp.hovered() {
+                        crate::wallpaper::RUST_ORANGE
+                    } else {
+                        Color32::from_rgba_unmultiplied(160, 168, 185, 130)
+                    };
+                    ui.painter().line_segment(
+                        [egui::pos2(grip_rect.right() - 11.0, grip_rect.bottom() - 3.0), egui::pos2(grip_rect.right() - 3.0, grip_rect.bottom() - 11.0)],
+                        egui::Stroke::new(1.5, grip_col),
+                    );
+                    ui.painter().line_segment(
+                        [egui::pos2(grip_rect.right() - 6.0, grip_rect.bottom() - 3.0), egui::pos2(grip_rect.right() - 3.0, grip_rect.bottom() - 6.0)],
+                        egui::Stroke::new(1.5, grip_col),
+                    );
                 })
             {
                 ctx.data_mut(|d| d.insert_temp(explorer_rect_id, Some(shown.response.rect)));
