@@ -699,7 +699,7 @@ impl Editor {
         let wrap = ui.ctx().data(|d| d.get_temp::<bool>(wrap_id))
             .unwrap_or_else(|| crate::studio_settings::flag("Studio", "Text Wrapping", false));
         let editor_bg_rect = ui.available_rect_before_wrap();
-        crate::wallpaper::paint_code_background(ui.ctx(), ui.painter(), editor_bg_rect);
+        ui.painter().rect_filled(editor_bg_rect, 0.0, crate::wallpaper::OBSIDIAN_CANVAS);
         let error_line = buf.error.as_ref().map(|e| e.0);
         let mut changed = false;
         let prev_text = buf.text.clone();

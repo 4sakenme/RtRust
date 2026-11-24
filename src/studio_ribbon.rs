@@ -1118,29 +1118,106 @@ impl Editor {
                 });
             });
 
-        // 3. Collapsible Dark-Translucent Bottom Pill Dock (`Workspace | Code | Explorer | Output | +`)
-        //    with Press-to-Glow, Jelly Pill Glide & Horizontal Finger Scrubbing.
-        //    Auto-collapse the Pill Dock while the soft keyboard is open so the Luau toolbar sits cleanly above the keyboard.
+        // 3. Flat Full-Width Bottom Tab Bar (`Workspace | Code | Explorer | Output | + Tools`) BEFORE CentralPanel
         let kb_h = crate::platform::keyboard_height_points(ctx);
-        let dock_collapsed_id = egui::Id::new("portrait_pill_dock_collapsed");
-        let mut dock_collapsed = ctx.data(|d| d.get_temp::<bool>(dock_collapsed_id).unwrap_or(false));
-        let effective_dock_collapsed = dock_collapsed || kb_h > 40.0;
-        let dock_open_t = ctx.animate_bool_with_time(
-            egui::Id::new("portrait_pill_dock_slide_t"),
-            !effective_dock_collapsed,
-            0.18,
-        );
+        if kb_h <= 40.0 {
+            let bar_h = 48.0 + safe_bottom;
+            egui::Panel::bottom("portrait_flat_bottom_bar")
+                .exact_size(bar_h)
+                .frame(
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(18, 20, 27))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(36, 40, 52)))
+                        .inner_margin(egui::Margin {
+                            left: 6,
+                            right: 6,
+                            top: 4,
+                            bottom: (4.0 + safe_bottom).round().clamp(4.0, 64.0) as i8,
+                        }),
+                )
+                .show(ui, |ui| {
+                    let item_w = ((ui.available_width() - 24.0) / 5.0).max(52.0);
+                    ui.horizontal_centered(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        let is_ws = self.ui.portrait_tab == PortraitTab::Viewport
+                            && !self.ui.portrait_explorer_drawer
+                            && !self.ui.portrait_output_drawer
+                            && self.ui.portrait_tool_panel.is_none();
+                        let is_code = self.ui.portrait_tab == PortraitTab::Code;
+                        let is_exp = self.ui.portrait_explorer_drawer;
+                        let is_out = self.ui.portrait_output_drawer;
 
-        // Reserve bottom space only when Code / Output / Tool panel is active so that in 3D Workspace mode
-        // the wgpu 3D viewport ALWAYS extends edge-to-edge to `y_max = screen_height` underneath the Pill Dock.
-        let need_bottom_spacer = self.ui.portrait_tab != PortraitTab::Viewport
-            || self.ui.portrait_output_drawer
-            || self.ui.portrait_tool_panel.is_some();
-        if need_bottom_spacer && (!effective_dock_collapsed || dock_open_t > 0.02) {
-            egui::Panel::bottom("portrait_bottom_bar_spacer")
-                .exact_size((62.0 + safe_bottom) * dock_open_t.max(0.02))
-                .frame(egui::Frame::NONE)
-                .show(ui, |_ui| {});
+                        for (idx, icon_lbl, label, active) in [
+                            (0u8, "🌐", "Workspace", is_ws),
+                            (1, "</>", "Code", is_code),
+                            (2, "☰", "Explorer", is_exp),
+                            (3, "📟", "Output", is_out),
+                        ] {
+                            let bg = if active {
+                                if idx == 0 {
+                                    crate::wallpaper::RUST_ORANGE
+                                } else {
+                                    crate::wallpaper::STUDIO_BLUE
+                                }
+                            } else {
+                                Color32::TRANSPARENT
+                            };
+                            let fg = if active { Color32::WHITE } else { theme::TEXT_DIM };
+                            if ui
+                                .add_sized(
+                                    [item_w, 38.0],
+                                    egui::Button::new(
+                                        egui::RichText::new(format!("{icon_lbl}\n{label}"))
+                                            .size(10.5)
+                                            .color(fg)
+                                            .strong(),
+                                    )
+                                    .fill(bg)
+                                    .corner_radius(8.0),
+                                )
+                                .clicked()
+                            {
+                                match idx {
+                                    0 => {
+                                        self.ui.portrait_tab = PortraitTab::Viewport;
+                                        self.ui.portrait_tool_panel = None;
+                                        self.ui.portrait_explorer_drawer = false;
+                                        self.ui.portrait_output_drawer = false;
+                                    }
+                                    1 => {
+                                        self.ui.portrait_tab = PortraitTab::Code;
+                                        self.ui.portrait_tool_panel = None;
+                                    }
+                                    2 => {
+                                        self.ui.portrait_explorer_drawer = !self.ui.portrait_explorer_drawer;
+                                    }
+                                    3 => {
+                                        self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+
+                        // Square #FF5A26 `+ Tools` button on far right
+                        if ui
+                            .add_sized(
+                                [item_w, 38.0],
+                                egui::Button::new(
+                                    egui::RichText::new("+\nTools")
+                                        .size(10.5)
+                                        .color(Color32::WHITE)
+                                        .strong(),
+                                )
+                                .fill(crate::wallpaper::RUST_ORANGE)
+                                .corner_radius(8.0),
+                            )
+                            .clicked()
+                        {
+                            self.ui.portrait_quick_grid_open = !self.ui.portrait_quick_grid_open;
+                        }
+                    });
+                });
         }
 
         // 4. Touch Luau Snippet Bar (above Bottom Pill Dock, or lifted above soft keyboard when typing in Code tab)
@@ -1340,7 +1417,7 @@ impl Editor {
             .show(ui, |ui| {
                 content_rect = ui.max_rect();
                 if self.ui.portrait_tab == PortraitTab::Code || self.ui.portrait_tool_panel.is_some() {
-                    crate::wallpaper::paint_studio_background(ctx, ui.painter(), content_rect);
+                    ui.painter().rect_filled(content_rect, 0.0, crate::wallpaper::OBSIDIAN_CANVAS);
                 }
                 if let Some(tool_tab) = self.ui.portrait_tool_panel {
                     ui.horizontal(|ui| {
@@ -1714,108 +1791,6 @@ impl Editor {
                     }
                 });
         }
-
-        // 9. Flat Full-Width Bottom Tab Bar (`Workspace | Code | Explorer | Output | + Tools`) above safe_area_bottom
-        if kb_h <= 40.0 {
-            let bar_h = 48.0 + safe_bottom;
-            egui::Panel::bottom("portrait_flat_bottom_bar")
-                .exact_size(bar_h)
-                .frame(
-                    egui::Frame::new()
-                        .fill(Color32::from_rgb(18, 20, 27))
-                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(36, 40, 52)))
-                        .inner_margin(egui::Margin {
-                            left: 6,
-                            right: 6,
-                            top: 4,
-                            bottom: (4.0 + safe_bottom).round().clamp(4.0, 64.0) as i8,
-                        }),
-                )
-                .show(ui, |ui| {
-                    let item_w = ((ui.available_width() - 24.0) / 5.0).max(52.0);
-                    ui.horizontal_centered(|ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
-                        let is_ws = self.ui.portrait_tab == PortraitTab::Viewport
-                            && !self.ui.portrait_explorer_drawer
-                            && !self.ui.portrait_output_drawer
-                            && self.ui.portrait_tool_panel.is_none();
-                        let is_code = self.ui.portrait_tab == PortraitTab::Code;
-                        let is_exp = self.ui.portrait_explorer_drawer;
-                        let is_out = self.ui.portrait_output_drawer;
-
-                        for (idx, icon_lbl, label, active) in [
-                            (0u8, "🌐", "Workspace", is_ws),
-                            (1, "</>", "Code", is_code),
-                            (2, "☰", "Explorer", is_exp),
-                            (3, "📟", "Output", is_out),
-                        ] {
-                            let bg = if active {
-                                if idx == 0 {
-                                    crate::wallpaper::RUST_ORANGE
-                                } else {
-                                    crate::wallpaper::STUDIO_BLUE
-                                }
-                            } else {
-                                Color32::TRANSPARENT
-                            };
-                            let fg = if active { Color32::WHITE } else { theme::TEXT_DIM };
-                            if ui
-                                .add_sized(
-                                    [item_w, 38.0],
-                                    egui::Button::new(
-                                        egui::RichText::new(format!("{icon_lbl}\n{label}"))
-                                            .size(10.5)
-                                            .color(fg)
-                                            .strong(),
-                                    )
-                                    .fill(bg)
-                                    .corner_radius(8.0),
-                                )
-                                .clicked()
-                            {
-                                match idx {
-                                    0 => {
-                                        self.ui.portrait_tab = PortraitTab::Viewport;
-                                        self.ui.portrait_tool_panel = None;
-                                        self.ui.portrait_explorer_drawer = false;
-                                        self.ui.portrait_output_drawer = false;
-                                    }
-                                    1 => {
-                                        self.ui.portrait_tab = PortraitTab::Code;
-                                        self.ui.portrait_tool_panel = None;
-                                    }
-                                    2 => {
-                                        self.ui.portrait_explorer_drawer = !self.ui.portrait_explorer_drawer;
-                                    }
-                                    3 => {
-                                        self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-
-                        // Square #FF5A26 `+ Tools` button on far right
-                        if ui
-                            .add_sized(
-                                [item_w, 38.0],
-                                egui::Button::new(
-                                    egui::RichText::new("+\nTools")
-                                        .size(10.5)
-                                        .color(Color32::WHITE)
-                                        .strong(),
-                                )
-                                .fill(crate::wallpaper::RUST_ORANGE)
-                                .corner_radius(8.0),
-                            )
-                            .clicked()
-                        {
-                            self.ui.portrait_quick_grid_open = !self.ui.portrait_quick_grid_open;
-                        }
-                    });
-                });
-        }
-        let _ = (dock_collapsed, dock_collapsed_id, effective_dock_collapsed, dock_open_t);
 
         Self::hardware_perf_popup_ui(ctx);
         crate::mcp_assistant::ui(self, ctx);
@@ -2457,6 +2432,52 @@ impl Editor {
                 });
         }
 
+        // 2b. Flat Full-Width Bottom Status Bar BEFORE CentralPanel
+        let kb_h = crate::platform::keyboard_height_points(ctx);
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("pill_dock_cam_lift"), 0.0_f32));
+        if kb_h <= 40.0 {
+            egui::Panel::bottom("landscape_flat_status_bar")
+                .exact_size(24.0 + safe_bottom * 0.5)
+                .frame(
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(16, 18, 25))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 38, 50)))
+                        .inner_margin(egui::Margin {
+                            left: side_left,
+                            right: side_right,
+                            top: 2,
+                            bottom: (2.0 + safe_bottom * 0.35).round().clamp(2.0, 32.0) as i8,
+                        }),
+                )
+                .show(ui, |ui| {
+                    ui.horizontal_centered(|ui| {
+                        ui.label(
+                            egui::RichText::new(concat!("Output  rustudio ", env!("CARGO_PKG_VERSION"), " ready · 931 classes"))
+                                .size(11.0)
+                                .color(theme::TEXT_DIM),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let tag = if cfg!(target_os = "ios") {
+                                "iPhone Safe-Area Active"
+                            } else {
+                                "Android Vulkan"
+                            };
+                            ui.label(egui::RichText::new(tag).size(10.5).color(theme::TEXT_DIM));
+                            if ui.small_button("Output").clicked() {
+                                self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
+                            }
+                            if ui.small_button("Code").clicked() {
+                                self.ui.portrait_tab = if self.ui.portrait_tab == PortraitTab::Code {
+                                    PortraitTab::Viewport
+                                } else {
+                                    PortraitTab::Code
+                                };
+                            }
+                        });
+                    });
+                });
+        }
+
         // 3. Left Main 3D Viewport (~74% width, full height below top bar)
         //    ALWAYS rendered as the base layer so the 3D scene never turns into a blank black screen!
         let mut left_pane_rect = screen_rect;
@@ -2489,7 +2510,7 @@ impl Editor {
                         .show(ui, |ui| {
                             ui.set_min_size(card_rect.size() - Vec2::splat(20.0));
                             ui.set_max_size(card_rect.size() - Vec2::splat(20.0));
-                            crate::wallpaper::paint_studio_background(ctx, ui.painter(), ui.max_rect());
+                            ui.painter().rect_filled(ui.max_rect(), 0.0, crate::wallpaper::OBSIDIAN_CANVAS);
 
                             // Top navigation bar with `← Back to 3D` pill button + open script tabs
                             ui.horizontal(|ui| {
@@ -2658,52 +2679,6 @@ impl Editor {
             if !open {
                 self.ui.portrait_quick_grid_open = false;
             }
-        }
-
-        // 4. Flat Full-Width Bottom Status Bar (replaces old floating pill overlay so thumbstick never overlaps)
-        let kb_h = crate::platform::keyboard_height_points(ctx);
-        ctx.data_mut(|d| d.insert_temp(egui::Id::new("pill_dock_cam_lift"), 0.0_f32));
-        if kb_h <= 40.0 {
-            egui::Panel::bottom("landscape_flat_status_bar")
-                .exact_size(24.0 + safe_bottom * 0.5)
-                .frame(
-                    egui::Frame::new()
-                        .fill(Color32::from_rgb(16, 18, 25))
-                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(34, 38, 50)))
-                        .inner_margin(egui::Margin {
-                            left: side_left,
-                            right: side_right,
-                            top: 2,
-                            bottom: (2.0 + safe_bottom * 0.35).round().clamp(2.0, 32.0) as i8,
-                        }),
-                )
-                .show(ui, |ui| {
-                    ui.horizontal_centered(|ui| {
-                        ui.label(
-                            egui::RichText::new(concat!("Output  rustudio ", env!("CARGO_PKG_VERSION"), " ready · 931 classes"))
-                                .size(11.0)
-                                .color(theme::TEXT_DIM),
-                        );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let tag = if cfg!(target_os = "ios") {
-                                "iPhone Safe-Area Active"
-                            } else {
-                                "Android Vulkan"
-                            };
-                            ui.label(egui::RichText::new(tag).size(10.5).color(theme::TEXT_DIM));
-                            if ui.small_button("Output").clicked() {
-                                self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
-                            }
-                            if ui.small_button("Code").clicked() {
-                                self.ui.portrait_tab = if self.ui.portrait_tab == PortraitTab::Code {
-                                    PortraitTab::Viewport
-                                } else {
-                                    PortraitTab::Code
-                                };
-                            }
-                        });
-                    });
-                });
         }
 
         Self::hardware_perf_popup_ui(ctx);
