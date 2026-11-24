@@ -476,6 +476,13 @@ pub fn performance_choice(key: &str) -> usize {
 /// The selected choice's saved id for a Performance row ("50", "low", "off"),
 /// so code reads the value it means rather than an index into the list.
 pub fn performance_value(key: &str) -> &'static str {
+    if crate::mobile::is_playtest_eco_active() {
+        match key {
+            "shadows" | "ssao" | "bloom" | "grass" => return "off",
+            "detail" => return "low",
+            _ => {}
+        }
+    }
     let o = opt(key);
     let OptKind::Choice(items) = o.kind else { return "" };
     items.get(performance_choice(key)).map_or("", |(id, _)| *id)

@@ -2286,7 +2286,17 @@ impl RustudioApp {
         }
         ed.hud = HudStats::default();
         crate::platform::install_memory_warning_observer();
-        if crate::platform::take_memory_warning() {
+        let playtest_eco = ed.game.play.is_some() && rustudio_core::mobile::is_eco();
+        rustudio_core::mobile::set_playtest_eco_active(playtest_eco);
+        let mut need_purge = crate::platform::take_memory_warning();
+        if ed.game.play.is_some() && (ed.game.frame_no % 60 == 0) {
+            let rss = crate::platform::process_resident_bytes();
+            let threshold = (rustudio_core::mobile::playtest_ram_budget_bytes() * 80) / 100;
+            if rss > 0 && rss >= threshold {
+                need_purge = true;
+            }
+        }
+        if need_purge {
             ed.game.purge_unused_caches();
         }
         ed.game.poll_assets();

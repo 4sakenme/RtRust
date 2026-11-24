@@ -156,6 +156,59 @@ pub fn add_play_cam_delta(dx: f32, dy: f32, dzoom: f32) {
     }
 }
 
+/// Whether Playtest Eco profile is currently active (mobile Eco + Playtest running).
+/// Directly overrides engine lighting/shadows/post-processing to prevent mobile OOM & lag.
+pub static PLAYTEST_ECO_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Whether Portrait mode auto-scales in-game ScreenGuis (`PlayerGui`/`StarterGui`)
+/// to a 16:9 landscape reference container so UIs never squish vertically.
+pub static GUI_AUTO_LANDSCAPE: AtomicBool = AtomicBool::new(true);
+
+/// Total physical device RAM in bytes (queried at startup via NSProcessInfo / /proc/meminfo).
+static DEVICE_RAM_BYTES: AtomicU64 = AtomicU64::new(4 * 1024 * 1024 * 1024);
+
+#[inline]
+pub fn is_playtest_eco_active() -> bool {
+    PLAYTEST_ECO_ACTIVE.load(Ordering::Relaxed)
+}
+
+#[inline]
+pub fn set_playtest_eco_active(active: bool) {
+    PLAYTEST_ECO_ACTIVE.store(active, Ordering::Relaxed);
+}
+
+#[inline]
+pub fn gui_auto_landscape() -> bool {
+    GUI_AUTO_LANDSCAPE.load(Ordering::Relaxed)
+}
+
+#[inline]
+pub fn toggle_gui_auto_landscape() -> bool {
+    let next = !gui_auto_landscape();
+    GUI_AUTO_LANDSCAPE.store(next, Ordering::Relaxed);
+    next
+}
+
+#[inline]
+pub fn set_device_ram_bytes(bytes: u64) {
+    if bytes > 0 {
+        DEVICE_RAM_BYTES.store(bytes, Ordering::Relaxed);
+    }
+}
+
+/// Hard Playtest memory ceiling: 50% of physical device RAM, clamped safely below
+/// iOS's 2098 MB Jetsam limit (e.g., ~1024 MB on 4 GB devices like iPhone 11 Pro).
+#[inline]
+pub fn playtest_ram_budget_bytes() -> u64 {
+    let total = DEVICE_RAM_BYTES.load(Ordering::Relaxed);
+    let half = total / 2;
+    if total <= 4 * 1024 * 1024 * 1024 {
+        half.clamp(512 * 1024 * 1024, 1024 * 1024 * 1024)
+    } else {
+        half.clamp(1024 * 1024 * 1024, 1536 * 1024 * 1024)
+    }
+}
+
 /// Drains accumulated `(dx, dy, dzoom)` for the current Playtest step.
 pub fn take_play_cam_delta() -> (f32, f32, f32) {
     let dx = f32::from_bits(PLAY_CAM_DX.swap(0, Ordering::Relaxed));

@@ -779,19 +779,32 @@ impl Gui {
                 }
                 match class.as_str() {
                     "ScreenGui" => {
+                        // In Portrait orientation (`height > width`), evaluate ScreenGuis in a
+                        // centered 16:9 Landscape-Reference container when Auto-Landscape is enabled
+                        // so in-game PlayerGui/StarterGui elements keep exact horizontal proportions.
+                        let gui_rect = if rect.height() > rect.width()
+                            && rustudio_core::mobile::gui_auto_landscape()
+                        {
+                            let gw = rect.width();
+                            let gh = (gw * 9.0 / 16.0).min(rect.height());
+                            Rect::from_center_size(rect.center(), egui::vec2(gw, gh))
+                        } else {
+                            rect
+                        };
+                        let scale_y = (gui_rect.height() / rect.height().max(1.0)).clamp(0.25, 1.0);
                         // ScreenInsets None / DeviceSafeInsets (IgnoreGuiInset, which
                         // doc.rs derives from it both ways): the whole view.
                         let ignore = matches!(enum_u32(d.prop(g, "ScreenInsets")), Some(0) | Some(1));
-                        let inset = if ignore { 0.0 } else { mech::GUI_TOP_INSET };
+                        let inset = if ignore { 0.0 } else { mech::GUI_TOP_INSET * scale_y };
                         roots.push(Root {
                             on_top: true,
                             light: 1.0,
                             order: 1_000_000 + num(d, g, "DisplayOrder", 0.0) as i64,
                             dist: 0.0,
                             gui: g,
-                            target: Target::Screen(Pos2::new(rect.left(), rect.top() + inset)),
-                            canvas: [rect.width(), rect.height() - inset],
-                            abs_offset: [0.0, inset - mech::GUI_TOP_INSET],
+                            target: Target::Screen(Pos2::new(gui_rect.left(), gui_rect.top() + inset)),
+                            canvas: [gui_rect.width(), (gui_rect.height() - inset).max(1.0)],
+                            abs_offset: [0.0, inset - mech::GUI_TOP_INSET * scale_y],
                         });
                         // BillboardGuis / SurfaceGuis kept in a ScreenGui (the
                         // proximity prompts' ProximityPrompts gui) draw at
@@ -1690,7 +1703,17 @@ impl Gui {
         // InputBegan, MouseButton1Click before MouseButton1Up, Activated's
         // click count is 0.
         let plugin = self.input_inset.is_some();
-        let gui_xy = |p: Pos2| (p.x - rect.left(), p.y - rect.top() - inset);
+        let input_rect = if !plugin
+            && rect.height() > rect.width()
+            && rustudio_core::mobile::gui_auto_landscape()
+        {
+            let gw = rect.width();
+            let gh = (gw * 9.0 / 16.0).min(rect.height());
+            Rect::from_center_size(rect.center(), egui::vec2(gw, gh))
+        } else {
+            rect
+        };
+        let gui_xy = |p: Pos2| (p.x - input_rect.left(), p.y - input_rect.top() - inset);
         let now: HashSet<Ref> = under.iter().map(|h| h.r).collect();
         let moved = ctx.input(|i| i.pointer.delta() != egui::Vec2::ZERO);
         if let Some(p) = pointer {

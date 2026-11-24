@@ -87,6 +87,7 @@ pub struct StartPage {
     autosave_checked: bool,
     autosave_dismissed: bool,
     autosave_latest: Option<(PathBuf, String, u64)>,
+    portrait_active_tab: u8,
 }
 
 impl StartPage {
@@ -130,6 +131,7 @@ impl Default for StartPage {
             autosave_checked: false,
             autosave_dismissed: false,
             autosave_latest: None,
+            portrait_active_tab: 0,
         }
     }
 }
@@ -537,8 +539,7 @@ impl Editor {
         // Portrait (`narrow` / `height > width`): NO left sidebar; render fixed 4-tab bottom bar instead.
         if narrow {
             let bar_h = 50.0 + safe_bottom;
-            let active_tab_id = egui::Id::new("start_portrait_bottom_tab");
-            let mut active_tab = ctx.data(|d| d.get_temp::<u8>(active_tab_id).unwrap_or(0));
+            let mut active_tab = self.start.portrait_active_tab.min(3);
             egui::Panel::bottom("start_portrait_bottom_bar")
                 .exact_size(bar_h)
                 .frame(
@@ -553,9 +554,31 @@ impl Editor {
                         }),
                 )
                 .show(ui, |ui| {
-                    let w = ((ui.available_width() - 18.0) / 4.0).max(58.0);
+                    let w = ((ui.available_width() - 12.0) / 4.0).max(58.0);
                     ui.horizontal_centered(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
+                        // Smooth gliding active indicator (`dock-glow-pill`, 260ms)
+                        let glide_idx = ctx.animate_value_with_time(
+                            egui::Id::new("start_portrait_dock_glide_idx"),
+                            active_tab as f32,
+                            0.26,
+                        );
+                        let row_origin = ui.cursor().min;
+                        let pill_rect = Rect::from_min_size(
+                            Pos2::new(row_origin.x + glide_idx * (w + 4.0), row_origin.y),
+                            Vec2::new(w, 40.0),
+                        );
+                        ui.painter().rect_filled(
+                            pill_rect,
+                            CornerRadius::same(8),
+                            crate::wallpaper::RUST_ORANGE.gamma_multiply(0.18),
+                        );
+                        ui.painter().rect_stroke(
+                            pill_rect,
+                            CornerRadius::same(8),
+                            Stroke::new(1.0, crate::wallpaper::RUST_ORANGE.gamma_multiply(0.55)),
+                            egui::StrokeKind::Inside,
+                        );
                         for (idx, icon_name, label, jump_key) in [
                             (0u8, "home", "Home", "home"),
                             (1, "clock", "Recent", "files"),
@@ -572,7 +595,7 @@ impl Editor {
                                 Vec2::new(w, 40.0),
                                 Sense::click(),
                             );
-                            if resp.hovered() {
+                            if !is_active && resp.hovered() {
                                 ui.painter().rect_filled(r, CornerRadius::same(8), theme::HOVER_BG);
                             }
                             let icon_rect = Rect::from_center_size(
@@ -589,7 +612,7 @@ impl Editor {
                             );
                             if resp.clicked() {
                                 active_tab = idx;
-                                ctx.data_mut(|d| d.insert_temp(active_tab_id, idx));
+                                self.start.portrait_active_tab = idx;
                                 todo.push(Do::Jump(jump_key.to_string()));
                             }
                         }
@@ -747,8 +770,9 @@ impl Editor {
                     "settings",
                     theme::TEXT_DIM,
                 );
-                if sresp.on_hover_text("Studio Settings — Themes & Wallpapers").clicked() {
-                    crate::wallpaper::toggle_modal(ui.ctx());
+                if sresp.on_hover_text("Studio Settings").clicked() {
+                    let ctx_c = ui.ctx().clone();
+                    self.ui_action(&ctx_c, "studio_settings");
                 }
 
                 let signed = self.game.account.signed_in();
@@ -1242,15 +1266,21 @@ impl Editor {
                     Stroke::new(1.5, crate::wallpaper::RUST_ORANGE),
                 );
 
-                // Dismissible Auto-Save Recovery Banner
-                if !self.start.autosave_dismissed {
+                // Dismissible Auto-Save Recovery Banner with smooth collapse animation
+                let banner_open = !self.start.autosave_dismissed && self.start.autosave_latest.is_some();
+                let banner_anim = ui.ctx().animate_bool_with_time(
+                    egui::Id::new("autosave_banner_collapse_anim"),
+                    banner_open,
+                    0.24,
+                );
+                if banner_anim > 0.02 {
                     if let Some((path, name, ts)) = self.start.autosave_latest.clone() {
-                        ui.add_space(10.0);
+                        ui.add_space(10.0 * banner_anim);
                         egui::Frame::new()
-                            .fill(crate::wallpaper::OBSIDIAN_CARD)
-                            .stroke(Stroke::new(1.0, crate::wallpaper::RUST_ORANGE))
+                            .fill(crate::wallpaper::OBSIDIAN_CARD.gamma_multiply(banner_anim))
+                            .stroke(Stroke::new(1.0, crate::wallpaper::RUST_ORANGE.gamma_multiply(banner_anim)))
                             .corner_radius(CornerRadius::same(12))
-                            .inner_margin(egui::Margin::symmetric(12, 10))
+                            .inner_margin(egui::Margin::symmetric(12, (10.0 * banner_anim).round() as i8))
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 ui.horizontal(|ui| {
@@ -1259,22 +1289,22 @@ impl Editor {
                                             RichText::new("Unsaved autosave detected")
                                                 .size(13.0)
                                                 .strong()
-                                                .color(Color32::WHITE),
+                                                .color(Color32::WHITE.gamma_multiply(banner_anim)),
                                         );
                                         ui.label(
                                             RichText::new(format!("{name} · {}", ago(unix_now(), ts)))
                                                 .size(11.5)
-                                                .color(theme::TEXT_DIM),
+                                                .color(theme::TEXT_DIM.gamma_multiply(banner_anim)),
                                         );
                                     });
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                         let (xr, xresp) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
-                                        ui.painter().rect_filled(xr, CornerRadius::same(7), crate::wallpaper::SLATE_PILL_BG);
+                                        ui.painter().rect_filled(xr, CornerRadius::same(7), crate::wallpaper::SLATE_PILL_BG.gamma_multiply(banner_anim));
                                         rustudio_engine::ti::paint(
                                             ui.painter(),
                                             Rect::from_center_size(xr.center(), Vec2::splat(13.0)),
                                             "x",
-                                            theme::TEXT_DIM,
+                                            theme::TEXT_DIM.gamma_multiply(banner_anim),
                                         );
                                         if xresp.clicked() {
                                             self.start.autosave_dismissed = true;
@@ -1285,9 +1315,9 @@ impl Editor {
                                                     RichText::new("Restore")
                                                         .size(12.0)
                                                         .strong()
-                                                        .color(Color32::WHITE),
+                                                        .color(Color32::WHITE.gamma_multiply(banner_anim)),
                                                 )
-                                                .fill(crate::wallpaper::RUST_ORANGE)
+                                                .fill(crate::wallpaper::RUST_ORANGE.gamma_multiply(banner_anim))
                                                 .corner_radius(CornerRadius::same(8)),
                                             )
                                             .clicked()
@@ -1307,15 +1337,13 @@ impl Editor {
 
     fn start_url_row(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
         ui.horizontal(|ui| {
-            let narrow = ui.available_width() < 460.0;
+            let narrow = ui.available_width() < 600.0;
             if !narrow {
                 ui.label("Open by place ID or URL:");
             }
-            let input_w = if narrow {
-                (ui.available_width() - 62.0).clamp(110.0, 320.0)
-            } else {
-                320.0
-            };
+            let open_btn_w = 64.0;
+            let spacing = ui.spacing().item_spacing.x;
+            let input_w = (ui.available_width() - open_btn_w - spacing).max(110.0);
             let r = ui.add(
                 egui::TextEdit::singleline(&mut self.start.url)
                     .hint_text("Place ID or roblox.com/games/...")
@@ -1327,7 +1355,8 @@ impl Editor {
                     egui::Button::new(RichText::new("Open").color(Color32::WHITE).strong())
                         .fill(crate::wallpaper::SLATE_PILL_BG)
                         .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
-                        .corner_radius(CornerRadius::same(8)),
+                        .corner_radius(CornerRadius::same(8))
+                        .min_size(Vec2::new(open_btn_w, 28.0)),
                 )
                 .clicked()
                 || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
@@ -2124,33 +2153,31 @@ fn group_id(key: &str) -> Option<u64> {
     key.strip_prefix("group:")?.parse().ok()
 }
 
-/// The experience's icon, centred on a pastel-tinted slate fill; a pastel letter tile
-/// until it loads.
+/// Full-bleed aspect-fill template/experience thumbnail with rounded top corners;
+/// falls back to a clean Obsidian tile with letter emblem until the texture loads.
 fn icon_thumb(p: &egui::Painter, r: Rect, icon: Option<egui::TextureId>, name: &str) {
-    let h = name.bytes().fold(7u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) as usize;
-    let accent = crate::wallpaper::pastel_for_index(h);
-    p.rect_filled(
-        r,
-        CornerRadius { nw: 12, ne: 12, sw: 0, se: 0 },
-        Color32::from_rgba_unmultiplied(
-            (accent.r() as u16 / 6) as u8 + 16,
-            (accent.g() as u16 / 6) as u8 + 18,
-            (accent.b() as u16 / 6) as u8 + 26,
-            235,
-        ),
-    );
-    let side = r.height() - 18.0;
-    let ir = Rect::from_center_size(r.center(), Vec2::splat(side));
+    let top_cr = CornerRadius { nw: 12, ne: 12, sw: 0, se: 0 };
     match icon {
         Some(t) => {
-            p.image(t, ir, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+            // Aspect-fill center-crop a square 1:1 Roblox icon across the full preview rect `r`
+            let aspect = (r.height() / r.width().max(1.0)).clamp(0.1, 1.0);
+            let uv_y_margin = (1.0 - aspect) * 0.5;
+            let uv = Rect::from_min_max(Pos2::new(0.0, uv_y_margin), Pos2::new(1.0, 1.0 - uv_y_margin));
+            p.add(egui::Shape::Rect(
+                egui::epaint::RectShape::filled(r, top_cr, Color32::WHITE).with_texture(t, uv),
+            ));
         }
         None => {
-            p.rect_filled(ir, CornerRadius::same(10), accent.gamma_multiply(0.28));
+            let h = name.bytes().fold(7u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) as usize;
+            let accent = crate::wallpaper::pastel_for_index(h);
+            p.rect_filled(r, top_cr, Color32::from_rgb(16, 19, 26));
+            let side = (r.height() - 24.0).max(28.0);
+            let ir = Rect::from_center_size(r.center(), Vec2::splat(side));
+            p.rect_filled(ir, CornerRadius::same(10), accent.gamma_multiply(0.18));
             p.rect_stroke(
                 ir,
                 CornerRadius::same(10),
-                Stroke::new(1.2, accent.gamma_multiply(0.8)),
+                Stroke::new(1.2, accent.gamma_multiply(0.65)),
                 egui::StrokeKind::Inside,
             );
             let letter: String = name.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
@@ -2158,7 +2185,7 @@ fn icon_thumb(p: &egui::Painter, r: Rect, icon: Option<egui::TextureId>, name: &
                 ir.center(),
                 egui::Align2::CENTER_CENTER,
                 letter,
-                egui::FontId::proportional(34.0),
+                egui::FontId::proportional(28.0),
                 accent,
             );
         }

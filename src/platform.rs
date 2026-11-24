@@ -538,9 +538,61 @@ fn ios_dismiss_keyboard() {
 static MEMORY_WARNING_PENDING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// Queries total physical device RAM in bytes (NSProcessInfo on iOS, /proc/meminfo on Android/Linux).
+pub fn physical_memory_bytes() -> u64 {
+    #[cfg(target_os = "ios")]
+    {
+        use objc2::runtime::AnyObject;
+        use objc2::{class, msg_send};
+        unsafe {
+            let info: *mut AnyObject = msg_send![class!(NSProcessInfo), processInfo];
+            if !info.is_null() {
+                let mem: u64 = msg_send![info, physicalMemory];
+                if mem > 0 {
+                    return mem;
+                }
+            }
+        }
+    }
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    {
+        if let Ok(text) = std::fs::read_to_string("/proc/meminfo") {
+            for line in text.lines() {
+                if let Some(rest) = line.strip_prefix("MemTotal:") {
+                    if let Some(kb) = rest.split_whitespace().next().and_then(|s| s.parse::<u64>().ok()) {
+                        return kb * 1024;
+                    }
+                }
+            }
+        }
+    }
+    4 * 1024 * 1024 * 1024
+}
+
+/// Queries current process resident memory (RSS) in bytes on Android/Linux.
+pub fn process_resident_bytes() -> u64 {
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    {
+        if let Ok(text) = std::fs::read_to_string("/proc/self/status") {
+            for line in text.lines() {
+                if let Some(rest) = line.strip_prefix("VmRSS:") {
+                    if let Some(kb) = rest.split_whitespace().next().and_then(|s| s.parse::<u64>().ok()) {
+                        return kb * 1024;
+                    }
+                }
+            }
+        }
+    }
+    0
+}
+
 /// Registers an `UIApplicationDidReceiveMemoryWarningNotification` observer on iOS
 /// so the main loop can immediately purge unused asset caches and run Luau GC.
 pub fn install_memory_warning_observer() {
+    static INIT_RAM: std::sync::Once = std::sync::Once::new();
+    INIT_RAM.call_once(|| {
+        rustudio_core::mobile::set_device_ram_bytes(physical_memory_bytes());
+    });
     #[cfg(target_os = "ios")]
     {
         use objc2::declare::ClassBuilder;

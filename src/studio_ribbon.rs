@@ -695,9 +695,83 @@ impl Editor {
     /// - Horizontal Scrollable Multi-Tab Bar (`3D View` + open Script tabs with `×` + `+`)
     /// - Right Slide-Over Drawer (~75% width, full height) for Explorer + Properties with draggable splitter
     /// - 5-button Bottom Bar (`3D`, `Code`, `Explorer`, `Output`, `+` Quick Tools & Plugins grid)
+    /// Low-overhead full-screen Playtest mode on mobile: suspends heavy Studio Editor panels
+    /// (Ribbon, Explorer, Properties, bottom tab bar) while `is_playing == true`, leaving only
+    /// the 3D Playtest viewport, gameplay controls, and a compact floating `■ Stop` + `UI Scale` pill.
+    fn mobile_playtest_overlay_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let (safe_top, _safe_bottom, _safe_left, safe_right) = crate::platform::get_safe_area_insets();
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(theme::BG))
+            .show(ui, |ui| {
+                self.viewport_ui(ui);
+            });
+
+        egui::Area::new(egui::Id::new("mobile_playtest_stop_cluster"))
+            .order(egui::Order::Foreground)
+            .anchor(
+                egui::Align2::RIGHT_TOP,
+                egui::vec2(-(10.0 + safe_right), 10.0 + safe_top.max(4.0)),
+            )
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(16, 19, 26, 228))
+                    .stroke(egui::Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                    .corner_radius(egui::CornerRadius::same(12))
+                    .inner_margin(egui::Margin::symmetric(8, 5))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 6.0;
+                            let auto_ls = rustudio_core::mobile::gui_auto_landscape();
+                            let ui_lbl = if auto_ls { "UI: 16:9" } else { "UI: Native" };
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new(ui_lbl)
+                                            .size(11.0)
+                                            .strong()
+                                            .color(if auto_ls { crate::wallpaper::LOGO_CYAN } else { theme::TEXT_DIM }),
+                                    )
+                                    .fill(crate::wallpaper::SLATE_PILL_BG)
+                                    .corner_radius(8.0)
+                                    .min_size(Vec2::new(66.0, 26.0)),
+                                )
+                                .on_hover_text("Toggle Portrait PlayerGui Auto-Landscape (16:9) vs Native")
+                                .clicked()
+                            {
+                                rustudio_core::mobile::toggle_gui_auto_landscape();
+                            }
+
+                            let (sr, sresp) = ui.allocate_exact_size(Vec2::new(64.0, 26.0), Sense::click());
+                            ui.painter().rect_filled(sr, egui::CornerRadius::same(8), Color32::from_rgb(185, 50, 50));
+                            rustudio_engine::ti::paint(
+                                ui.painter(),
+                                Rect::from_center_size(egui::pos2(sr.min.x + 14.0, sr.center().y), Vec2::splat(13.0)),
+                                "player-stop",
+                                Color32::WHITE,
+                            );
+                            ui.painter().text(
+                                egui::pos2(sr.min.x + 26.0, sr.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                "Stop",
+                                egui::FontId::proportional(12.0),
+                                Color32::WHITE,
+                            );
+                            if sresp.clicked() {
+                                self.stop_play();
+                            }
+                        });
+                    });
+            });
+    }
+
     /// - Touch Luau Snippet Bar above Bottom Bar when in Code tab
     pub fn portrait_layout_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, screen_rect: egui::Rect) {
         use crate::studio_ui::PortraitTab;
+
+        if self.game.play.is_some() {
+            self.mobile_playtest_overlay_ui(ui, ctx);
+            return;
+        }
 
         if std::mem::take(&mut self.switch_to_viewport) {
             self.ui.portrait_tab = PortraitTab::Viewport;
@@ -1146,6 +1220,42 @@ impl Editor {
                         let is_code = self.ui.portrait_tab == PortraitTab::Code;
                         let is_exp = self.ui.portrait_explorer_drawer;
                         let is_out = self.ui.portrait_output_drawer;
+                        let is_tools = self.ui.portrait_quick_grid_open || self.ui.portrait_tool_panel.is_some();
+
+                        // Gliding illuminated active pill (`dock-glow-pill`, 260ms smooth slide)
+                        let active_dock_idx: usize = if is_tools {
+                            4
+                        } else if is_out {
+                            3
+                        } else if is_exp {
+                            2
+                        } else if is_code {
+                            1
+                        } else {
+                            0
+                        };
+                        let glide_idx = ctx.animate_value_with_time(
+                            egui::Id::new("portrait_bottom_dock_glide_idx"),
+                            active_dock_idx as f32,
+                            0.26,
+                        );
+                        let row_origin = ui.cursor().min;
+                        let step_x = item_w + 4.0;
+                        let pill_rect = Rect::from_min_size(
+                            egui::pos2(row_origin.x + glide_idx * step_x, row_origin.y),
+                            Vec2::new(item_w, 38.0),
+                        );
+                        // Soft #FF5A26 outer glow + solid gliding pill
+                        ui.painter().rect_filled(
+                            pill_rect.expand(2.0),
+                            egui::CornerRadius::same(10),
+                            crate::wallpaper::RUST_ORANGE.gamma_multiply(0.28),
+                        );
+                        ui.painter().rect_filled(
+                            pill_rect,
+                            egui::CornerRadius::same(8),
+                            crate::wallpaper::RUST_ORANGE,
+                        );
 
                         for (idx, icon_name, label, active) in [
                             (0u8, "world", "Workspace", is_ws),
@@ -1157,21 +1267,14 @@ impl Editor {
                                 egui::vec2(item_w, 38.0),
                                 egui::Sense::click(),
                             );
-                            let bg = if active {
-                                if idx == 0 {
-                                    crate::wallpaper::RUST_ORANGE
-                                } else {
-                                    crate::wallpaper::STUDIO_BLUE
-                                }
-                            } else if resp.hovered() {
-                                theme::HOVER_BG
-                            } else {
-                                Color32::TRANSPARENT
-                            };
-                            let fg = if active { Color32::WHITE } else { theme::TEXT_DIM };
-                            if bg != Color32::TRANSPARENT {
-                                ui.painter().rect_filled(r, egui::CornerRadius::same(8), bg);
+                            if !active && resp.hovered() {
+                                ui.painter().rect_filled(r, egui::CornerRadius::same(8), theme::HOVER_BG);
                             }
+                            let fg = if active || (active_dock_idx as u8 == idx) {
+                                Color32::WHITE
+                            } else {
+                                theme::TEXT_DIM
+                            };
                             let icon_rect = egui::Rect::from_center_size(
                                 egui::pos2(r.center().x, r.min.y + 12.5),
                                 egui::vec2(16.0, 16.0),
@@ -1191,47 +1294,46 @@ impl Editor {
                                         self.ui.portrait_tool_panel = None;
                                         self.ui.portrait_explorer_drawer = false;
                                         self.ui.portrait_output_drawer = false;
+                                        self.ui.portrait_quick_grid_open = false;
                                     }
                                     1 => {
                                         self.ui.portrait_tab = PortraitTab::Code;
                                         self.ui.portrait_tool_panel = None;
+                                        self.ui.portrait_quick_grid_open = false;
                                     }
                                     2 => {
                                         self.ui.portrait_explorer_drawer = !self.ui.portrait_explorer_drawer;
+                                        self.ui.portrait_quick_grid_open = false;
                                     }
                                     3 => {
                                         self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
+                                        self.ui.portrait_quick_grid_open = false;
                                     }
                                     _ => {}
                                 }
                             }
                         }
 
-                        // Square #FF5A26 `+ Tools` button on far right
+                        // `+ Tools` tab on far right
                         let (tr, tresp) = ui.allocate_exact_size(
                             egui::vec2(item_w, 38.0),
                             egui::Sense::click(),
                         );
-                        ui.painter().rect_filled(
-                            tr,
-                            egui::CornerRadius::same(8),
-                            if tresp.hovered() {
-                                crate::wallpaper::RUST_ORANGE_HOVER
-                            } else {
-                                crate::wallpaper::RUST_ORANGE
-                            },
-                        );
+                        if !is_tools && tresp.hovered() {
+                            ui.painter().rect_filled(tr, egui::CornerRadius::same(8), theme::HOVER_BG);
+                        }
+                        let t_fg = if is_tools { Color32::WHITE } else { crate::wallpaper::RUST_ORANGE };
                         let t_icon_rect = egui::Rect::from_center_size(
                             egui::pos2(tr.center().x, tr.min.y + 12.5),
                             egui::vec2(16.0, 16.0),
                         );
-                        rustudio_engine::ti::paint(ui.painter(), t_icon_rect, "plus", Color32::WHITE);
+                        rustudio_engine::ti::paint(ui.painter(), t_icon_rect, "plus", t_fg);
                         ui.painter().text(
                             egui::pos2(tr.center().x, tr.max.y - 8.5),
                             egui::Align2::CENTER_CENTER,
                             "Tools",
                             egui::FontId::proportional(10.0),
-                            Color32::WHITE,
+                            t_fg,
                         );
                         if tresp.clicked() {
                             self.ui.portrait_quick_grid_open = !self.ui.portrait_quick_grid_open;
@@ -1878,6 +1980,11 @@ impl Editor {
         screen_rect: egui::Rect,
     ) {
         use crate::studio_ui::PortraitTab;
+
+        if self.game.play.is_some() {
+            self.mobile_playtest_overlay_ui(ui, ctx);
+            return;
+        }
 
         if std::mem::take(&mut self.switch_to_viewport) {
             self.ui.portrait_tab = PortraitTab::Viewport;
