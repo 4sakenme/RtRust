@@ -16,7 +16,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// GitHub's latest release: never a draft or a pre-release, so a stable
 /// build is only ever offered stable releases.
-const FEED: &str = "https://api.github.com/repos/rippelz/rustudio/releases/latest";
+const FEED: &str = "https://api.github.com/repos/4sakenme/RtRust/releases/latest";
 const SNOOZE: Duration = Duration::from_secs(12 * 3600);
 
 #[derive(Clone)]
@@ -377,7 +377,7 @@ fn check() -> Result<Option<Release>, String> {
     let sums = assets.iter().find(|(n, _)| n == "SHA256SUMS").map(|(_, u)| u.clone());
     Ok(Some(Release {
         version: tag.trim_start_matches('v').to_string(),
-        page: feed["html_url"].as_str().unwrap_or("https://github.com/rippelz/rustudio/releases").to_string(),
+        page: feed["html_url"].as_str().unwrap_or("https://github.com/4sakenme/RtRust/releases").to_string(),
         asset,
         sums,
     }))
