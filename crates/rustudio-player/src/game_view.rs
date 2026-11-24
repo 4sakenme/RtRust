@@ -772,7 +772,7 @@ impl Game {
                 if dist > defer_radius
                     && (sp.mesh_asset.is_some()
                         || sp.texture_id.is_some()
-                        || sp.surface.is_some()
+                        || sp.emissive.is_some()
                         || !sp.decals.is_empty())
                 {
                     draw_cache.distant.insert(r);

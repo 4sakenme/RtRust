@@ -116,65 +116,78 @@ impl LoadingScreenState {
                     a(TEXT_DIM),
                 );
 
-                // 4. Animated Hero Centerpiece: Rotating Dashed Rust-Orange Orbit + Breathing Cyan Cube
-                let logo_center = center - Vec2::new(0.0, 22.0);
+                // 4. Animated Hero Centerpiece: Official RtRust.svg App Icon (Rotating Gear + Tilted Studio Square + 3D Gizmo)
+                let logo_center = center - Vec2::new(0.0, 26.0);
                 let t = now as f32;
-                let orbit_r = 46.0;
-                let rot = t * 1.45;
-                // Draw 4 arc segments for the dashed Rust-Orange orbit ring
-                let arc_spans = [
-                    (0.0_f32, 1.45_f32),
-                    (1.85, 2.55),
-                    (3.15, 4.55),
-                    (4.95, 5.65),
-                ];
-                for (a0, a1) in arc_spans {
-                    let steps = 16;
+                let icon_size = 112.0;
+                let s = icon_size / 512.0;
+                let icon_origin = logo_center - Vec2::splat(icon_size * 0.5);
+                let pt = |x: f32, y: f32| -> Pos2 { icon_origin + Vec2::new(x * s, y * s) };
+
+                // Outer rounded dark obsidian app icon card
+                let card_rect = Rect::from_min_size(pt(24.0, 24.0), Vec2::splat(464.0 * s));
+                painter.rect(
+                    card_rect,
+                    CornerRadius::same((108.0 * s).round() as u8),
+                    a(Color32::from_rgb(22, 25, 33)),
+                    Stroke::new(1.8, a(Color32::from_rgb(42, 47, 61))),
+                    egui::StrokeKind::Inside,
+                );
+
+                // Rust gear at bottom-right (295, 295) rotating continuously
+                let gear_c = pt(295.0, 295.0);
+                let gear_r = 110.0 * s;
+                let gear_rot = t * 1.1;
+                for seg in 0..10 {
+                    let a0 = gear_rot + (seg as f32) * (TAU / 10.0);
+                    let a1 = a0 + (TAU / 10.0) * 0.62;
+                    let steps = 6;
                     let mut pts = Vec::with_capacity(steps + 1);
                     for i in 0..=steps {
-                        let ang = rot + a0 + (a1 - a0) * (i as f32 / steps as f32);
-                        pts.push(logo_center + Vec2::new(ang.cos(), ang.sin()) * orbit_r);
+                        let ang = a0 + (a1 - a0) * (i as f32 / steps as f32);
+                        pts.push(gear_c + Vec2::new(ang.cos(), ang.sin()) * gear_r);
                     }
-                    painter.add(egui::Shape::line(
-                        pts,
-                        Stroke::new(2.4, a(RUST_ORANGE)),
-                    ));
+                    painter.add(egui::Shape::line(pts, Stroke::new(26.0 * s, a(Color32::from_rgb(255, 107, 43)))));
                 }
+                painter.circle(
+                    gear_c,
+                    78.0 * s,
+                    a(Color32::from_rgb(19, 22, 29)),
+                    Stroke::new(8.0 * s, a(Color32::from_rgb(200, 50, 0))),
+                );
 
-                // Tilted Electric Cyan cube frame with subtle breathing scale
-                let pulse = 1.0 + 0.04 * (t * 2.6).sin();
-                let tilt = 0.24 + 0.05 * (t * 1.8).cos();
-                let half = 20.0 * pulse;
-                let corners = [
-                    Vec2::new(-half, -half),
-                    Vec2::new(half, -half),
-                    Vec2::new(half, half),
-                    Vec2::new(-half, half),
-                ]
-                .map(|v| {
-                    let (s, c) = tilt.sin_cos();
-                    logo_center + Vec2::new(v.x * c - v.y * s, v.x * s + v.y * c)
-                });
-                painter.add(egui::Shape::closed_line(
-                    corners.to_vec(),
-                    Stroke::new(3.0, a(CYAN_ACCENT)),
-                ));
-                let inner_half = 7.5 * pulse;
-                let inner_corners = [
-                    Vec2::new(-inner_half, -inner_half),
-                    Vec2::new(inner_half, -inner_half),
-                    Vec2::new(inner_half, inner_half),
-                    Vec2::new(-inner_half, inner_half),
-                ]
-                .map(|v| {
-                    let (s, c) = tilt.sin_cos();
-                    logo_center + Vec2::new(v.x * c - v.y * s, v.x * s + v.y * c)
-                });
+                // Tilted Studio square at (215, 215) with gentle breathing pulse
+                let sq_c = pt(215.0, 215.0);
+                let pulse = 1.0 + 0.035 * (t * 2.4).sin();
+                let tilt = -14.0_f32.to_radians() + 0.03 * (t * 1.6).cos();
+                let (ts, tc) = tilt.sin_cos();
+                let rot_poly = |half: f32| -> Vec<Pos2> {
+                    [
+                        Vec2::new(-half, -half),
+                        Vec2::new(half, -half),
+                        Vec2::new(half, half),
+                        Vec2::new(-half, half),
+                    ]
+                    .into_iter()
+                    .map(|v| sq_c + Vec2::new(v.x * tc - v.y * ts, v.x * ts + v.y * tc))
+                    .collect()
+                };
                 painter.add(egui::Shape::convex_polygon(
-                    inner_corners.to_vec(),
-                    a(CYAN_ACCENT),
+                    rot_poly(115.0 * s * pulse),
+                    a(Color32::from_rgb(19, 22, 29)),
+                    Stroke::new(30.0 * s, a(Color32::from_rgb(0, 210, 255))),
+                ));
+                painter.add(egui::Shape::convex_polygon(
+                    rot_poly(32.0 * s * pulse),
+                    a(Color32::WHITE),
                     Stroke::NONE,
                 ));
+
+                // 3D Coordinate Gizmo at (295, 295)
+                painter.line_segment([gear_c, gear_c + Vec2::new(0.0, -52.0 * s)], Stroke::new(10.0 * s, a(Color32::from_rgb(34, 197, 94))));
+                painter.line_segment([gear_c, gear_c + Vec2::new(45.0 * s, 26.0 * s)], Stroke::new(10.0 * s, a(Color32::from_rgb(239, 68, 68))));
+                painter.line_segment([gear_c, gear_c + Vec2::new(-45.0 * s, 26.0 * s)], Stroke::new(10.0 * s, a(Color32::from_rgb(59, 130, 246))));
+                painter.circle_filled(gear_c, 9.0 * s, a(Color32::WHITE));
 
                 // Title & subtitle
                 painter.text(

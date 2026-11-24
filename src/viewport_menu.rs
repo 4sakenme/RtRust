@@ -5,6 +5,101 @@ use egui::{PointerButton, Response, Ui};
 impl Editor {
     pub(crate) fn viewport_context_menu(&mut self, ui: &mut Ui, response: &Response) {
         if self.game.is_playing() { return; }
+        let ctx = ui.ctx().clone();
+        // Long-press on a Part in the 3D Viewport opens a quick Clone / Edit popover
+        let lp_open_id = egui::Id::new("vp_part_lp_open");
+        let lp_pos_id = egui::Id::new("vp_part_lp_pos");
+        let lp_down_id = egui::Id::new("vp_part_lp_down");
+        let now = ctx.input(|i| i.time);
+        let ptr_down = ctx.input(|i| i.pointer.primary_down());
+        let ptr_pos = ctx.input(|i| i.pointer.interact_pos());
+        if ptr_down && response.hovered() && !response.dragged() {
+            if let Some(p) = ptr_pos {
+                let state = ctx.data(|d| d.get_temp::<(f64, egui::Pos2, bool)>(lp_down_id));
+                match state {
+                    None => {
+                        ctx.data_mut(|d| d.insert_temp(lp_down_id, (now, p, false)));
+                    }
+                    Some((t0, p0, fired)) => {
+                        if p.distance(p0) > 10.0 {
+                            ctx.data_mut(|d| d.insert_temp(lp_down_id, (now, p, true)));
+                        } else if !fired && now - t0 >= 0.48 {
+                            if let Some(hit) = self.pick(response.rect, p0, false) {
+                                if !self.game.doc.selection.contains(&hit) {
+                                    self.select(vec![hit]);
+                                }
+                                ctx.data_mut(|d| {
+                                    d.insert_temp(lp_open_id, true);
+                                    d.insert_temp(lp_pos_id, p0);
+                                    d.insert_temp(lp_down_id, (t0, p0, true));
+                                });
+                            } else {
+                                ctx.data_mut(|d| d.insert_temp(lp_down_id, (t0, p0, true)));
+                            }
+                        }
+                    }
+                }
+            }
+        } else if !ptr_down {
+            ctx.data_mut(|d| d.remove_temp::<(f64, egui::Pos2, bool)>(lp_down_id));
+        }
+
+        if ctx.data(|d| d.get_temp::<bool>(lp_open_id).unwrap_or(false)) {
+            let pop_pos = ctx.data(|d| d.get_temp::<egui::Pos2>(lp_pos_id)).unwrap_or(response.rect.center());
+            let mut close = false;
+            let mut lp_act: Option<&'static str> = None;
+            let shown = egui::Area::new(egui::Id::new("vp_part_lp_popover"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(pop_pos + egui::vec2(8.0, -40.0))
+                .show(&ctx, |ui| {
+                    egui::Frame::new()
+                        .fill(egui::Color32::from_rgba_unmultiplied(22, 25, 34, 245))
+                        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 42)))
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .inner_margin(egui::Margin::same(8))
+                        .show(ui, |ui| {
+                            ui.set_min_width(168.0);
+                            ui.spacing_mut().item_spacing.y = 4.0;
+                            ui.label(egui::RichText::new("Part Actions").size(11.0).strong().color(crate::wallpaper::LOGO_CYAN));
+                            for (label, cmd, col) in [
+                                ("📋 Duplicate (Clone)", "duplicate", crate::wallpaper::RUST_ORANGE),
+                                ("📄 Copy", "copy", egui::Color32::from_rgb(38, 44, 58)),
+                                ("📥 Paste", "paste", egui::Color32::from_rgb(38, 44, 58)),
+                                ("🔍 Focus", "focus", egui::Color32::from_rgb(38, 44, 58)),
+                                ("📦 Group", "group", egui::Color32::from_rgb(38, 44, 58)),
+                                ("🗑 Delete", "delete", egui::Color32::from_rgb(155, 44, 44)),
+                            ] {
+                                if ui
+                                    .add_sized(
+                                        [164.0, 32.0],
+                                        egui::Button::new(egui::RichText::new(label).size(12.0).strong().color(egui::Color32::WHITE))
+                                            .fill(col)
+                                            .corner_radius(8.0),
+                                    )
+                                    .clicked()
+                                {
+                                    lp_act = Some(cmd);
+                                    close = true;
+                                }
+                            }
+                        });
+                });
+            let clicked_out = ctx.input(|i| {
+                i.pointer.any_pressed()
+                    && i.pointer.interact_pos().is_some_and(|p| !shown.response.rect.expand(8.0).contains(p))
+            });
+            if close || clicked_out {
+                ctx.data_mut(|d| d.insert_temp(lp_open_id, false));
+            }
+            if let Some(cmd) = lp_act {
+                if cmd == "focus" {
+                    self.focus_selection();
+                } else {
+                    self.ui_action(&ctx, cmd);
+                }
+            }
+        }
+
         if response.clicked_by(PointerButton::Secondary) {
             if let Some(p) = response.interact_pointer_pos() {
                 let hit = self.pick(response.rect, p, ui.input(|i| i.modifiers.alt));
