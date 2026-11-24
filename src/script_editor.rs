@@ -602,6 +602,7 @@ impl Editor {
             buf.completions.clone()
         };
         if !combined_suggestions.is_empty() {
+            let is_renaming = ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("is_renaming_instance")).unwrap_or(false));
             egui::ScrollArea::horizontal().id_salt(("ac_scroll", r)).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for (idx, (label, insert)) in combined_suggestions.iter().take(12).enumerate() {
@@ -618,68 +619,9 @@ impl Editor {
                         };
                         if ui.add(btn).clicked() {
                             accept = Some(insert.clone());
-                            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
-                        }
-                    }
-                });
-            });
-        }
-        // Quick mobile action bar for newline (↵), tab/ghost accept (⇥), and cursor movement
-        // always visible on iOS/Android even when keyboard height is 0.
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            egui::ScrollArea::horizontal().id_salt(("mobile_top_quick_bar", r)).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 5.0;
-                    if ui
-                        .button(
-                            RichText::new("↵ Enter")
-                                .monospace()
-                                .size(13.0)
-                                .strong()
-                                .color(Color32::from_rgb(130, 200, 255)),
-                        )
-                        .on_hover_text("Xuống dòng (Enter)")
-                        .clicked()
-                    {
-                        ui.ctx().data_mut(|d| {
-                            d.insert_temp(egui::Id::new("mobile_luau_newline"), true);
-                        });
-                        ui.ctx().memory_mut(|m| m.request_focus(editor_id));
-                    }
-                    if let Some((lbl, ins)) = combined_suggestions.first() {
-                        if ui
-                            .button(
-                                RichText::new(format!("⇥ Chèn: {lbl}"))
-                                    .monospace()
-                                    .size(13.0)
-                                    .strong()
-                                    .color(Color32::from_rgb(130, 220, 145)),
-                            )
-                            .clicked()
-                        {
-                            accept = Some(ins.clone());
-                            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
-                        }
-                    }
-                    for (label, snip) in [
-                        ("Tab", "    "),
-                        ("local", "local "),
-                        ("function", "function "),
-                        ("if", "if "),
-                        ("then", "then"),
-                        ("end", "end"),
-                        ("()", "()"),
-                        ("\"", "\""),
-                        ("=", " = "),
-                        (":", ":"),
-                        (".", "."),
-                    ] {
-                        if ui.button(RichText::new(label).monospace().size(12.5)).clicked() {
-                            ui.ctx().data_mut(|d| {
-                                d.insert_temp(egui::Id::new("mobile_luau_snippet"), snip.to_string());
-                            });
-                            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+                            if !is_renaming {
+                                ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+                            }
                         }
                     }
                 });
@@ -939,12 +881,17 @@ impl Editor {
                 }
             }
         }
+        let is_renaming_instance = ui
+            .ctx()
+            .data(|d| d.get_temp::<bool>(egui::Id::new("is_renaming_instance")).unwrap_or(false));
         if let (Some(line), Some(mut st)) = (goto, state.clone()) {
             // (the profiler's jump: the cursor at the line's start, focused)
             let at = crate::plugin_host::script_docs::index_of(&buf.text, line as i64, 1);
             st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(at))));
             st.store(ui.ctx(), editor_id);
-            ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+            if !is_renaming_instance {
+                ui.ctx().memory_mut(|m| m.request_focus(editor_id));
+            }
             self.scripts.goto.remove(&r);
         }
         if let Some((sel, mut st)) = crate::plugin_host::script_docs::take_selection_request(r).zip(state) {

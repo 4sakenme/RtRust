@@ -519,23 +519,47 @@ impl Editor {
         }
 
         let renaming = self.explorer.renaming.as_ref().is_some_and(|(rr, _)| *rr == r);
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("is_renaming_instance"),
+                self.explorer.renaming.is_some(),
+            );
+        });
         if renaming {
             let edit_rect = Rect::from_min_max(Pos2::new(text_pos.x, rect.min.y + 1.0), Pos2::new(rect.max.x - 4.0, rect.max.y - 1.0));
             let mut text = self.explorer.renaming.as_ref().map(|(_, t)| t.clone()).unwrap_or_default();
             let edit = ui.put(edit_rect, egui::TextEdit::singleline(&mut text).margin(Vec2::new(2.0, 0.0)));
-            // A press anywhere else (the 3D view included, which egui's focus
-            // never sees) ends the rename and keeps the new name, as in Studio.
+            // Only request focus ONCE when inline rename starts for `r` (not on every frame),
+            // preventing cursor/iOS virtual keyboard focus-fighting flicker.
+            let focus_ref_id = egui::Id::new("explorer_rename_focus_ref");
+            let already_focused = ui.ctx().data(|d| d.get_temp::<Option<Ref>>(focus_ref_id).flatten()) == Some(r);
             let clicked_out = ui.input(|i| {
                 i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !edit_rect.contains(p))
             });
-            if !clicked_out {
+            if !already_focused && !clicked_out {
                 edit.request_focus();
+                ui.ctx().data_mut(|d| d.insert_temp::<Option<Ref>>(focus_ref_id, Some(r)));
             }
-            let (enter, esc) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+            let (enter, esc) = ui.input(|i| {
+                let text_enter = i.events.iter().any(|e| match e {
+                    egui::Event::Text(s) => s.contains('\n') || s.contains('\r'),
+                    egui::Event::Ime(egui::ImeEvent::Commit(s)) => s.contains('\n') || s.contains('\r'),
+                    _ => false,
+                });
+                (i.key_pressed(egui::Key::Enter) || text_enter, i.key_pressed(egui::Key::Escape))
+            });
             if esc {
                 self.explorer.renaming = None;
-            } else if enter || edit.lost_focus() || clicked_out {
-                actions.push(RowAction::Rename(r, text));
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp::<Option<Ref>>(focus_ref_id, None);
+                    d.insert_temp(egui::Id::new("is_renaming_instance"), false);
+                });
+            } else if enter || (already_focused && edit.lost_focus()) || clicked_out {
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp::<Option<Ref>>(focus_ref_id, None);
+                    d.insert_temp(egui::Id::new("is_renaming_instance"), false);
+                });
+                actions.push(RowAction::Rename(r, text.replace(['\r', '\n'], "")));
             } else {
                 self.explorer.renaming = Some((r, text));
             }

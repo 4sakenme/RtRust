@@ -2067,12 +2067,38 @@ impl eframe::App for RustudioApp {
                             modifiers: egui::Modifiers::NONE,
                         });
                     }
-                    egui::Event::Ime(egui::ImeEvent::Commit(ref s)) if s.contains('\n') => {
+                    egui::Event::Text(ref s) if s.contains('\n') || s.contains('\r') => {
+                        let normalized = s.replace("\r\n", "\n").replace('\r', "\n");
+                        let parts: Vec<&str> = normalized.split('\n').collect();
+                        for (idx, part) in parts.iter().enumerate() {
+                            if !part.is_empty() {
+                                cleaned.push(egui::Event::Text((*part).to_string()));
+                            }
+                            if idx + 1 < parts.len() {
+                                cleaned.push(egui::Event::Key {
+                                    key: egui::Key::Enter,
+                                    physical_key: Some(egui::Key::Enter),
+                                    pressed: true,
+                                    repeat: false,
+                                    modifiers: egui::Modifiers::NONE,
+                                });
+                                cleaned.push(egui::Event::Key {
+                                    key: egui::Key::Enter,
+                                    physical_key: Some(egui::Key::Enter),
+                                    pressed: false,
+                                    repeat: false,
+                                    modifiers: egui::Modifiers::NONE,
+                                });
+                            }
+                        }
+                    }
+                    egui::Event::Ime(egui::ImeEvent::Commit(ref s)) if s.contains('\n') || s.contains('\r') => {
                         cleaned.push(egui::Event::Ime(egui::ImeEvent::Preedit {
                             text: String::new(),
                             active_range_chars: None,
                         }));
-                        let parts: Vec<&str> = s.split('\n').collect();
+                        let normalized = s.replace("\r\n", "\n").replace('\r', "\n");
+                        let parts: Vec<&str> = normalized.split('\n').collect();
                         for (idx, part) in parts.iter().enumerate() {
                             if !part.is_empty() {
                                 cleaned.push(egui::Event::Ime(egui::ImeEvent::Commit((*part).to_string())));
