@@ -238,17 +238,21 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     }
 
     let painter = ui.painter_at(rect);
-    painter.circle_filled(joy_center, joy_radius, Color32::from_rgba_unmultiplied(20, 22, 28, if joy_touching { 150 } else { 110 }));
+    painter.circle_filled(joy_center, joy_radius, Color32::from_rgba_unmultiplied(18, 20, 26, if joy_touching { 145 } else { 110 }));
     painter.circle_stroke(
         joy_center,
         joy_radius,
-        Stroke::new(1.5, Color32::from_rgba_unmultiplied(220, 225, 235, if joy_touching { 190 } else { 130 })),
+        Stroke::new(1.5, Color32::from_rgba_unmultiplied(235, 240, 250, if joy_touching { 205 } else { 145 })),
     );
     let knob = joy_center + joy_vec * joy_radius;
     painter.circle_filled(
         knob,
         17.0,
-        Color32::from_rgba_unmultiplied(120, 185, 255, if joy_touching { 225 } else { 150 }),
+        if joy_touching {
+            Color32::from_rgba_unmultiplied(255, 90, 38, 220)
+        } else {
+            Color32::from_rgba_unmultiplied(220, 225, 235, 165)
+        },
     );
 
     // Bottom-right circular controls (Mobile Studio v2.0 style: ^, v, Speed x1/x2/x4, Focus, Mode)
@@ -263,15 +267,15 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         let resp = ui.interact(r, egui::Id::new(id), Sense::click_and_drag());
         let p = ui.painter_at(rect);
         let fill = if active {
-            Color32::from_rgba_unmultiplied(46, 125, 225, 210)
+            Color32::from_rgba_unmultiplied(255, 90, 38, 215)
         } else if resp.is_pointer_button_down_on() {
             Color32::from_rgba_unmultiplied(55, 62, 74, 215)
         } else {
-            Color32::from_rgba_unmultiplied(24, 27, 34, 150)
+            Color32::from_rgba_unmultiplied(18, 20, 26, 140)
         };
-        let stroke = Color32::from_rgba_unmultiplied(230, 235, 245, if active { 230 } else { 170 });
+        let stroke = Color32::from_rgba_unmultiplied(240, 244, 250, if active { 235 } else { 185 });
         p.circle_filled(center, radius, fill);
-        p.circle_stroke(center, radius, Stroke::new(1.5, stroke));
+        p.circle_stroke(center, radius, Stroke::new(1.6, stroke));
         resp
     };
 
