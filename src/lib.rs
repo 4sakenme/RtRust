@@ -1479,6 +1479,7 @@ pub extern "C" fn android_main(android_app: winit::platform::android::activity::
     }
     rustudio_core::mobile::set_eco(true);
     rustudio_core::mobile::set_drawer_mode(true);
+    crate::platform::init_android_vulkan_driver();
 
     rustudio_core::load_trace::init();
     rustudio_core::crash::install();

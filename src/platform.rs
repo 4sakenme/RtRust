@@ -538,6 +538,79 @@ fn ios_dismiss_keyboard() {
 static MEMORY_WARNING_PENDING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// Detects Adreno (600/700+) or Mali (Valhall/Bifrost) GPUs on Android before
+/// `wgpu::Instance` creation and loads a bundled Turnip (`libvulkan_freedreno.so`)
+/// or PanVK (`libvulkan_panfrost.so`) ICD from `nativeLibraryDir` if present.
+/// Cleanly falls back to the system Vulkan/GLES driver on Waydroid or stock devices.
+pub fn init_android_vulkan_driver() {
+    #[cfg(target_os = "android")]
+    {
+        if std::env::var_os("VK_ICD_FILENAMES").is_some() || std::env::var_os("VK_DRIVER_FILES").is_some() {
+            return;
+        }
+        // Discover nativeLibraryDir from our own loaded shared object in /proc/self/maps
+        let native_lib_dir = std::fs::read_to_string("/proc/self/maps")
+            .ok()
+            .and_then(|maps| {
+                maps.lines().find_map(|line| {
+                    let path = line.split_whitespace().last()?;
+                    if path.ends_with("librtrust_mobile.so") {
+                        std::path::Path::new(path).parent().map(|p| p.to_path_buf())
+                    } else {
+                        None
+                    }
+                })
+            });
+        let Some(lib_dir) = native_lib_dir else { return };
+
+        // Detect Adreno 600/700+ via KGSL sysfs or Mali via /sys/class/misc/mali0
+        let adreno_model = std::fs::read_to_string("/sys/class/kgsl/kgsl-3d0/gpu_model")
+            .ok()
+            .map(|s| s.trim().to_string());
+        let is_adreno_modern = adreno_model.as_deref().is_some_and(|m| {
+            let lower = m.to_ascii_lowercase();
+            lower.contains("adreno")
+                && (lower.contains("6") || lower.contains("7") || lower.contains("8"))
+        });
+        let is_mali = std::path::Path::new("/sys/class/misc/mali0").exists();
+
+        let custom_so = if is_adreno_modern {
+            let p = lib_dir.join("libvulkan_freedreno.so");
+            p.exists().then_some(("turnip_icd.json", p))
+        } else if is_mali {
+            let p = lib_dir.join("libvulkan_panfrost.so");
+            p.exists().then_some(("panvk_icd.json", p))
+        } else {
+            None
+        };
+
+        if let Some((icd_name, so_path)) = custom_so {
+            let cache_dir = std::env::var_os("XDG_CACHE_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir);
+            let _ = std::fs::create_dir_all(&cache_dir);
+            let icd_path = cache_dir.join(icd_name);
+            let manifest = format!(
+                "{{\"file_format_version\":\"1.0.0\",\"ICD\":{{\"library_path\":\"{}\",\"api_version\":\"1.3.0\"}}}}",
+                so_path.display()
+            );
+            if std::fs::write(&icd_path, manifest).is_ok() {
+                unsafe {
+                    std::env::set_var("VK_ICD_FILENAMES", &icd_path);
+                    std::env::set_var("VK_DRIVER_FILES", &icd_path);
+                }
+                log::info!("RtRustMobile: loaded custom Android Vulkan ICD {}", icd_path.display());
+            }
+        } else {
+            log::info!(
+                "RtRustMobile: using system Vulkan/GLES driver (adreno={:?}, mali={})",
+                adreno_model,
+                is_mali
+            );
+        }
+    }
+}
+
 /// Queries total physical device RAM in bytes (NSProcessInfo on iOS, /proc/meminfo on Android/Linux).
 pub fn physical_memory_bytes() -> u64 {
     #[cfg(target_os = "ios")]

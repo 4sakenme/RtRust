@@ -480,6 +480,7 @@ pub fn performance_value(key: &str) -> &'static str {
         match key {
             "shadows" | "ssao" | "bloom" | "grass" => return "off",
             "detail" => return "low",
+            "resolution" => return "75",
             _ => {}
         }
     }
