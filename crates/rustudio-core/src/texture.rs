@@ -39,7 +39,13 @@ pub fn decode(bytes: &[u8]) -> Result<Rgba, String> {
     #[cfg(any(target_os = "ios", target_os = "android"))]
     {
         #[cfg(target_os = "ios")]
-        let max_dim = if crate::mobile::is_eco() { 256 } else { 512 };
+        let max_dim = if crate::mobile::is_playtest_eco_active() {
+            128
+        } else if crate::mobile::is_eco() {
+            256
+        } else {
+            512
+        };
         #[cfg(target_os = "android")]
         let max_dim = if crate::mobile::is_eco() { 512 } else { 1024 };
         if decoded.width > max_dim || decoded.height > max_dim {

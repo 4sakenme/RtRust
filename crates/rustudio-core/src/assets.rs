@@ -1022,9 +1022,9 @@ impl AssetStore {
         #[cfg(any(target_os = "ios", target_os = "android"))]
         {
             #[cfg(target_os = "ios")]
-            const MAX_ASSET_MEMORY_BYTES: usize = 160 << 20; // 160 MB LRU cap on iOS
+            const MAX_ASSET_MEMORY_BYTES: usize = 48 << 20; // 48 MB strict LRU cap on iOS (4 GB Jetsam safety)
             #[cfg(target_os = "android")]
-            const MAX_ASSET_MEMORY_BYTES: usize = 200 << 20; // 200 MB LRU cap on Android
+            const MAX_ASSET_MEMORY_BYTES: usize = 96 << 20; // 96 MB LRU cap on Android
             while self.memory_bytes > MAX_ASSET_MEMORY_BYTES {
                 let Some(oldest) = self.memory_lru.pop_front() else {
                     self.memory_bytes = 0;
@@ -1521,11 +1521,23 @@ impl MeshCache {
         std::mem::take(&mut self.deferred)
     }
 
-    /// Purges auxiliary CPU-side mesh metadata on memory warnings.
+    /// Purges auxiliary CPU-side mesh metadata and excess GPU/CPU mesh buffers on mobile memory pressure.
     pub fn purge_unused(&mut self) {
         self.reasons.clear();
         self.roblox_format.clear();
         self.entries.retain(|_, v| v.is_some());
+        if cfg!(any(target_os = "ios", target_os = "android")) && self.entries.len() > 160 {
+            let mut drop_count = self.entries.len().saturating_sub(120);
+            self.entries.retain(|_, v| {
+                if drop_count > 0 && v.as_ref().is_some_and(|a| Arc::strong_count(a) <= 1) {
+                    drop_count -= 1;
+                    false
+                } else {
+                    true
+                }
+            });
+            bump_mesh_generation();
+        }
         self.shared_by_id.retain(|_, w| w.strong_count() > 0);
     }
 
@@ -1882,12 +1894,27 @@ impl TextureCache {
         !self.decoding.is_empty()
     }
 
-    /// Purges unpinned decoded CPU pixel buffers on memory warnings.
+    /// Purges unpinned decoded CPU pixel buffers and excess texture entries on mobile memory pressure.
     pub fn purge_unused(&mut self) {
         self.decoded.clear();
         self.loose.clear();
         self.loose_bytes = 0;
         self.pixels.retain(|k, _| self.pinned.contains(k));
+        if cfg!(any(target_os = "ios", target_os = "android")) && self.entries.len() > 128 {
+            let mut drop_count = self.entries.len().saturating_sub(96);
+            let pinned = &self.pinned;
+            self.entries.retain(|k, v| {
+                if drop_count > 0
+                    && !pinned.contains(k)
+                    && v.as_ref().is_some_and(|a| Arc::strong_count(a) <= 1)
+                {
+                    drop_count -= 1;
+                    false
+                } else {
+                    true
+                }
+            });
+        }
         self.shared_by_id.retain(|_, w| w.strong_count() > 0);
     }
 
