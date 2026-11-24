@@ -67,27 +67,31 @@ impl Editor {
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 5.0;
-                                for (label, cmd, col) in [
-                                    ("Clone", "duplicate", egui::Color32::from_rgb(33, 112, 228)),
-                                    ("Delete", "delete", egui::Color32::from_rgb(185, 42, 42)),
-                                    ("Focus", "focus", egui::Color32::from_rgb(38, 44, 58)),
-                                    ("Anchor", "anchor", egui::Color32::from_rgb(38, 44, 58)),
-                                    ("Lock", "lock", egui::Color32::from_rgb(38, 44, 58)),
+                                for (icon_name, label, cmd, col) in [
+                                    ("copy", "Clone", "duplicate", egui::Color32::from_rgb(33, 112, 228)),
+                                    ("trash", "Delete", "delete", egui::Color32::from_rgb(185, 42, 42)),
+                                    ("focus-2", "Focus", "focus", egui::Color32::from_rgb(38, 44, 58)),
+                                    ("anchor", "Anchor", "anchor", egui::Color32::from_rgb(38, 44, 58)),
+                                    ("lock", "Lock", "lock", egui::Color32::from_rgb(38, 44, 58)),
                                 ] {
-                                    if ui
-                                        .add_sized(
-                                            [60.0, 30.0],
-                                            egui::Button::new(
-                                                egui::RichText::new(label)
-                                                    .size(12.0)
-                                                    .strong()
-                                                    .color(egui::Color32::WHITE),
-                                            )
-                                            .fill(col)
-                                            .corner_radius(8.0),
-                                        )
-                                        .clicked()
-                                    {
+                                    let (br, resp) = ui.allocate_exact_size(
+                                        egui::vec2(66.0, 30.0),
+                                        egui::Sense::click(),
+                                    );
+                                    ui.painter().rect_filled(br, egui::CornerRadius::same(8), col);
+                                    let ic_r = egui::Rect::from_center_size(
+                                        egui::pos2(br.min.x + 12.0, br.center().y),
+                                        egui::vec2(13.0, 13.0),
+                                    );
+                                    rustudio_engine::ti::paint(ui.painter(), ic_r, icon_name, egui::Color32::WHITE);
+                                    ui.painter().text(
+                                        egui::pos2(br.min.x + 22.0, br.center().y),
+                                        egui::Align2::LEFT_CENTER,
+                                        label,
+                                        egui::FontId::proportional(11.5),
+                                        egui::Color32::WHITE,
+                                    );
+                                    if resp.clicked() {
                                         lp_act = Some(cmd);
                                         close = true;
                                     }

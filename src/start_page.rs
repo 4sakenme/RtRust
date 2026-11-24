@@ -84,6 +84,9 @@ pub struct StartPage {
     opened: Option<(TemplateInfo, Result<(Vec<u8>, Source), String>)>,
     /// Whether the left navigation sidebar is expanded (collapsed by default on Android).
     nav_open: bool,
+    autosave_checked: bool,
+    autosave_dismissed: bool,
+    autosave_latest: Option<(PathBuf, String, u64)>,
 }
 
 impl StartPage {
@@ -124,8 +127,48 @@ impl Default for StartPage {
             opening: None,
             opened: None,
             nav_open: !cfg!(any(target_os = "android", target_os = "ios")),
+            autosave_checked: false,
+            autosave_dismissed: false,
+            autosave_latest: None,
         }
     }
+}
+
+fn scan_latest_autosave() -> Option<(PathBuf, String, u64)> {
+    let mut dirs = Vec::new();
+    if let Some(d) = dirs::document_dir() {
+        dirs.push(d.join("Autosaves"));
+    }
+    if let Some(d) = dirs::data_local_dir() {
+        dirs.push(d.join("RtRustStudio").join("Autosaves"));
+    }
+    let mut best: Option<(PathBuf, String, u64)> = None;
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for ent in rd.flatten() {
+            let p = ent.path();
+            let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !(fname.ends_with(".rbxl.autosave") || fname.ends_with(".rbxlx.autosave") || fname.ends_with(".rbxl")) {
+                continue;
+            }
+            let secs = ent
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            if best.as_ref().is_none_or(|b| secs > b.2) {
+                let display = fname
+                    .trim_end_matches(".autosave")
+                    .trim_end_matches(".rbxlx")
+                    .trim_end_matches(".rbxl")
+                    .to_string();
+                best = Some((p, display, secs));
+            }
+        }
+    }
+    best
 }
 
 /// What a click on the page asks for (applied after drawing).
@@ -471,8 +514,8 @@ impl Editor {
             });
         }
 
-        let screen_w = ui.ctx().content_rect().width();
-        let narrow = screen_w < 600.0;
+        let rect = ui.ctx().content_rect();
+        let narrow = rect.width() < 600.0 || rect.height() > rect.width();
         let (safe_top, safe_bottom, safe_left, safe_right) = crate::platform::get_safe_area_insets();
         let top_pad_x = ((if narrow { 8.0 } else { 16.0 }) + safe_left.max(safe_right)).round().clamp(4.0, 96.0) as i8;
         let top_pad_y = if safe_top > 0.0 { (safe_top + 4.0).round().clamp(0.0, 96.0) as i8 } else { 0 };
@@ -644,7 +687,8 @@ impl Editor {
     }
 
     fn start_top(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
-        let narrow = ui.ctx().content_rect().width() < 600.0;
+        let rect = ui.ctx().content_rect();
+        let narrow = rect.width() < 600.0 || rect.height() > rect.width();
         ui.horizontal_centered(|ui| {
             if !narrow {
                 let arrow = if self.start.nav_open { "◀" } else { "☰" };
@@ -669,33 +713,41 @@ impl Editor {
                 ui.add_space(6.0);
             }
             crate::icons::logo(ui, 24.0);
-            if ui.available_width() > 260.0 {
+            if ui.available_width() > 160.0 {
                 ui.add_space(4.0);
                 ui.label(
                     RichText::new("RtRust Studio")
                         .size(15.5)
                         .strong()
-                        .color(crate::wallpaper::PASTEL_LAVENDER),
+                        .color(Color32::WHITE),
                 );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                // Gear / Theme Settings Button
-                if ui
-                    .add(
-                        egui::Button::new(
-                            RichText::new("⚙")
-                                .size(15.0)
-                                .color(crate::wallpaper::PASTEL_MINT),
-                        )
-                        .fill(Color32::from_rgba_unmultiplied(34, 37, 48, 220))
-                        .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_MINT.gamma_multiply(0.45)))
-                        .corner_radius(CornerRadius::same(8))
-                        .min_size(Vec2::new(32.0, 30.0)),
-                    )
-                    .on_hover_text("Studio Settings — Themes & Wallpapers")
-                    .clicked()
-                {
+                // Settings / Themes Button (Tabler "settings" vector icon)
+                let (sr, sresp) = ui.allocate_exact_size(Vec2::new(32.0, 30.0), Sense::click());
+                ui.painter().rect_filled(
+                    sr,
+                    CornerRadius::same(8),
+                    if sresp.hovered() {
+                        crate::wallpaper::OBSIDIAN_HOVER
+                    } else {
+                        crate::wallpaper::OBSIDIAN_CARD
+                    },
+                );
+                ui.painter().rect_stroke(
+                    sr,
+                    CornerRadius::same(8),
+                    Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER),
+                    egui::StrokeKind::Inside,
+                );
+                rustudio_engine::ti::paint(
+                    ui.painter(),
+                    Rect::from_center_size(sr.center(), Vec2::splat(16.0)),
+                    "settings",
+                    theme::TEXT_DIM,
+                );
+                if sresp.on_hover_text("Studio Settings — Themes & Wallpapers").clicked() {
                     crate::wallpaper::toggle_modal(ui.ctx());
                 }
 
@@ -721,7 +773,7 @@ impl Editor {
                         .stroke(Stroke::new(
                             1.0,
                             if signed {
-                                crate::wallpaper::LOGO_CYAN.gamma_multiply(0.65)
+                                crate::wallpaper::OBSIDIAN_BORDER
                             } else {
                                 crate::wallpaper::RUST_ORANGE_HOVER
                             },
@@ -735,12 +787,14 @@ impl Editor {
                     todo.push(Do::Account);
                 }
 
-                let search_w = (ui.available_width() - 8.0).clamp(68.0, 230.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.start.search)
-                        .hint_text("🔍 Search places & templates")
-                        .desired_width(search_w),
-                );
+                if !narrow {
+                    let search_w = (ui.available_width() - 8.0).clamp(68.0, 230.0);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.start.search)
+                            .hint_text("Search places & templates...")
+                            .desired_width(search_w),
+                    );
+                }
             });
         });
     }
@@ -759,7 +813,7 @@ impl Editor {
         };
         if big(
             ui,
-            "🚀 + New Baseplate",
+            "+ New Baseplate",
             crate::wallpaper::RUST_ORANGE,
             Color32::WHITE,
             crate::wallpaper::RUST_ORANGE_HOVER,
@@ -771,7 +825,7 @@ impl Editor {
         }
         if big(
             ui,
-            "📂 Open File (.rbxl)…",
+            "Open File (.rbxl)...",
             crate::wallpaper::SLATE_PILL_BG,
             Color32::WHITE,
             crate::wallpaper::SLATE_PILL_BORDER,
@@ -783,7 +837,7 @@ impl Editor {
         }
         if big(
             ui,
-            "📁 Open Project Folder…",
+            "Open Project Folder...",
             crate::wallpaper::SLATE_PILL_BG,
             Color32::WHITE,
             crate::wallpaper::SLATE_PILL_BORDER,
@@ -795,7 +849,7 @@ impl Editor {
         }
         if big(
             ui,
-            "🎨 Themes & Wallpapers",
+            "Themes & Wallpapers",
             crate::wallpaper::SLATE_PILL_BG,
             crate::wallpaper::RUST_ORANGE_HOVER,
             crate::wallpaper::SLATE_PILL_BORDER,
@@ -808,11 +862,11 @@ impl Editor {
         ui.label(RichText::new("NAVIGATION").small().strong().color(crate::wallpaper::RUST_ORANGE));
         ui.add_space(4.0);
         let mut entries: Vec<(String, String, bool)> = vec![
-            ("templates".into(), "🏠 Home & Templates".into(), false),
-            ("recent".into(), "🕒 Recent Cloud".into(), false),
-            ("files".into(), "📄 Recent Local Files".into(), false),
-            ("mine".into(), "🎮 My Experiences".into(), false),
-            ("shared".into(), "🤝 Shared with Me".into(), false),
+            ("templates".into(), "Home & Templates".into(), false),
+            ("recent".into(), "Recent Cloud".into(), false),
+            ("files".into(), "Recent Local Files".into(), false),
+            ("mine".into(), "My Experiences".into(), false),
+            ("shared".into(), "Shared with Me".into(), false),
         ];
         if let Some(Ok(groups)) = &self.start.groups {
             for g in groups {
@@ -886,6 +940,13 @@ impl Editor {
     }
 
     fn start_body(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
+        if !self.start.autosave_checked {
+            self.start.autosave_checked = true;
+            self.start.autosave_latest = scan_latest_autosave();
+        }
+        let rect = ui.ctx().content_rect();
+        let narrow = rect.width() < 600.0 || rect.height() > rect.width();
+
         // The open-by-ID row sits at the bottom, as in File > Open from Roblox.
         egui::Panel::bottom("start_url")
             .frame(
@@ -909,137 +970,267 @@ impl Editor {
             .scroll_source(touch_scroll)
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                // Hero Welcome Banner with RtRust Obsidian Surface, Ember Rim & Cohesive Orange-Red + Dark-Slate Pills
+                if narrow {
+                    // Full-width #191C24 search bar with Tabler "search" icon
+                    egui::Frame::new()
+                        .fill(crate::wallpaper::OBSIDIAN_CARD)
+                        .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                        .corner_radius(CornerRadius::same(10))
+                        .inner_margin(egui::Margin::symmetric(10, 6))
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                let (ir, _) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
+                                rustudio_engine::ti::paint(ui.painter(), ir, "search", theme::TEXT_DIM);
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.start.search)
+                                        .frame(egui::Frame::NONE)
+                                        .hint_text("Search places & templates...")
+                                        .desired_width(ui.available_width()),
+                                );
+                            });
+                        });
+                    ui.add_space(10.0);
+                }
+
+                // Hero "Start Creating" Card
                 let hero_frame = egui::Frame::new()
                     .fill(crate::wallpaper::OBSIDIAN_CARD)
                     .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
                     .corner_radius(CornerRadius::same(16))
                     .inner_margin(egui::Margin::symmetric(16, 14));
                 let hero_shown = hero_frame.show(ui, |ui| {
-                    // ... hero contents ...
                     ui.set_width(ui.available_width());
-                    ui.horizontal_wrapped(|ui| {
-                        ui.vertical(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new("Welcome to RtRust Studio")
-                                        .size(19.0)
-                                        .strong()
-                                        .color(Color32::WHITE),
-                                );
-                                // Subtle Electric Cyan brand badge from logo
+                    if narrow {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new("Start Creating")
+                                    .size(19.0)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            );
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let badge_text = if cfg!(target_os = "ios") {
+                                    "iOS · Metal".to_string()
+                                } else {
+                                    format!("v{}", env!("CARGO_PKG_VERSION"))
+                                };
                                 egui::Frame::new()
-                                    .fill(crate::wallpaper::LOGO_CYAN.gamma_multiply(0.16))
-                                    .stroke(Stroke::new(1.0, crate::wallpaper::LOGO_CYAN.gamma_multiply(0.55)))
-                                    .corner_radius(CornerRadius::same(10))
-                                    .inner_margin(egui::Margin::symmetric(7, 2))
+                                    .fill(crate::wallpaper::SLATE_PILL_BG)
+                                    .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                                    .corner_radius(CornerRadius::same(8))
+                                    .inner_margin(egui::Margin::symmetric(8, 3))
                                     .show(ui, |ui| {
                                         ui.label(
-                                            RichText::new("MOBILE")
-                                                .size(9.5)
+                                            RichText::new(badge_text)
+                                                .size(10.5)
                                                 .strong()
                                                 .color(crate::wallpaper::LOGO_CYAN),
                                         );
                                     });
                             });
-                            ui.label(
-                                RichText::new("Build, script in Luau, and playtest 3D worlds right on your phone.")
-                                    .size(12.5)
-                                    .color(theme::TEXT_DIM),
-                            );
                         });
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .add_enabled(
-                                    !self.start.busy(),
-                                    egui::Button::new(RichText::new("Refresh").color(Color32::WHITE))
-                                        .fill(crate::wallpaper::SLATE_PILL_BG)
-                                        .stroke(Stroke::new(1.0, crate::wallpaper::SLATE_PILL_BORDER))
-                                        .corner_radius(CornerRadius::same(12)),
-                                )
-                                .clicked()
-                            {
-                                todo.push(Do::Refresh);
-                            }
-                            if self.start.busy() || self.cloud.busy() {
-                                ui.spinner();
-                            }
-                        });
-                    });
-                    ui.add_space(10.0);
-                    ui.horizontal_wrapped(|ui| {
-                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
-                        // Primary pill: Solid vibrant Rust Orange-Red (#FF5A26) with crisp white text
-                        let new_btn = egui::Button::new(
-                            RichText::new("+ New Baseplate")
-                                .size(12.5)
-                                .strong()
-                                .color(Color32::WHITE),
-                        )
-                        .fill(crate::wallpaper::RUST_ORANGE)
-                        .stroke(Stroke::new(1.0, crate::wallpaper::RUST_ORANGE_HOVER))
-                        .corner_radius(CornerRadius::same(14));
-                        if ui.add(new_btn).clicked() {
+                        ui.add_space(2.0);
+                        ui.label(
+                            RichText::new("Build, script in Luau, and playtest 3D worlds.")
+                                .size(12.0)
+                                .color(theme::TEXT_DIM),
+                        );
+                        ui.add_space(10.0);
+
+                        // Full-width #FF5A26 "+ New Baseplate" button
+                        let bw = ui.available_width();
+                        let (nr, nresp) = ui.allocate_exact_size(Vec2::new(bw, 38.0), Sense::click());
+                        ui.painter().rect_filled(
+                            nr,
+                            CornerRadius::same(10),
+                            if nresp.hovered() {
+                                crate::wallpaper::RUST_ORANGE_HOVER
+                            } else {
+                                crate::wallpaper::RUST_ORANGE
+                            },
+                        );
+                        let plus_r = Rect::from_center_size(
+                            Pos2::new(nr.center().x - 56.0, nr.center().y),
+                            Vec2::splat(16.0),
+                        );
+                        rustudio_engine::ti::paint(ui.painter(), plus_r, "plus", Color32::WHITE);
+                        ui.painter().text(
+                            Pos2::new(nr.center().x + 10.0, nr.center().y),
+                            egui::Align2::CENTER_CENTER,
+                            "New Baseplate",
+                            egui::FontId::proportional(13.5),
+                            Color32::WHITE,
+                        );
+                        if nresp.clicked() {
                             todo.push(Do::Template(self.start.default_template()));
                         }
 
-                        // Secondary action pills: Sleek dark-slate (#222632) with orange/cyan accents
-                        for (icon, label, action) in [
-                            ("</>", "Focus Code IDE", 4u8),
-                            ("", "Open .rbxl", 1u8),
-                            ("", "Themes", 3u8),
-                        ] {
-                            let mut job = egui::text::LayoutJob::default();
-                            job.append(
-                                &format!("{icon} "),
-                                0.0,
-                                egui::TextFormat {
-                                    font_id: egui::FontId::proportional(12.5),
-                                    color: if action == 4 {
-                                        crate::wallpaper::LOGO_CYAN
+                        ui.add_space(8.0);
+                        let half_w = ((bw - 8.0) * 0.5).max(80.0);
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            for (icon_name, label, icon_col, is_open) in [
+                                ("folder", "Open .rbxl", crate::wallpaper::RUST_ORANGE, true),
+                                ("palette", "Themes", crate::wallpaper::LOGO_CYAN, false),
+                            ] {
+                                let (br, bresp) = ui.allocate_exact_size(Vec2::new(half_w, 34.0), Sense::click());
+                                ui.painter().rect_filled(
+                                    br,
+                                    CornerRadius::same(10),
+                                    if bresp.hovered() {
+                                        crate::wallpaper::OBSIDIAN_HOVER
                                     } else {
-                                        crate::wallpaper::RUST_ORANGE_HOVER
+                                        crate::wallpaper::SLATE_PILL_BG
                                     },
-                                    ..Default::default()
-                                },
-                            );
-                            job.append(
-                                label,
-                                0.0,
-                                egui::TextFormat {
-                                    font_id: egui::FontId::proportional(12.5),
-                                    color: Color32::WHITE,
-                                    ..Default::default()
-                                },
-                            );
-                            let btn = egui::Button::new(job)
-                                .fill(crate::wallpaper::SLATE_PILL_BG)
-                                .stroke(Stroke::new(
-                                    1.0,
-                                    if action == 4 {
-                                        crate::wallpaper::LOGO_CYAN.gamma_multiply(0.5)
+                                );
+                                ui.painter().rect_stroke(
+                                    br,
+                                    CornerRadius::same(10),
+                                    Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER),
+                                    egui::StrokeKind::Inside,
+                                );
+                                let ic_r = Rect::from_center_size(
+                                    Pos2::new(br.center().x - 34.0, br.center().y),
+                                    Vec2::splat(15.0),
+                                );
+                                rustudio_engine::ti::paint(ui.painter(), ic_r, icon_name, icon_col);
+                                ui.painter().text(
+                                    Pos2::new(br.center().x + 10.0, br.center().y),
+                                    egui::Align2::CENTER_CENTER,
+                                    label,
+                                    egui::FontId::proportional(12.5),
+                                    Color32::WHITE,
+                                );
+                                if bresp.clicked() {
+                                    if is_open {
+                                        todo.push(Do::OpenFile(None));
                                     } else {
-                                        crate::wallpaper::SLATE_PILL_BORDER
-                                    },
-                                ))
-                                .corner_radius(CornerRadius::same(14));
-                            if ui.add(btn).clicked() {
-                                match action {
-                                    1 => todo.push(Do::OpenFile(None)),
-                                    3 => {
-                                        let ctx_c = ui.ctx().clone();
-                                        self.ui_action(&ctx_c, "studio_settings");
+                                        crate::wallpaper::toggle_modal(ui.ctx());
                                     }
-                                    4 => {
-                                        self.ui.focus_code_mode = true;
-                                        self.ui.viewport_hidden = true;
-                                        todo.push(Do::Template(self.start.default_template()));
-                                    }
-                                    _ => {}
                                 }
                             }
-                        }
-                    });
+                        });
+                    } else {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.vertical(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new("Welcome to RtRust Studio")
+                                            .size(19.0)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    );
+                                    // Subtle Electric Cyan brand badge from logo
+                                    egui::Frame::new()
+                                        .fill(crate::wallpaper::LOGO_CYAN.gamma_multiply(0.16))
+                                        .stroke(Stroke::new(1.0, crate::wallpaper::LOGO_CYAN.gamma_multiply(0.55)))
+                                        .corner_radius(CornerRadius::same(10))
+                                        .inner_margin(egui::Margin::symmetric(7, 2))
+                                        .show(ui, |ui| {
+                                            ui.label(
+                                                RichText::new("MOBILE")
+                                                    .size(9.5)
+                                                    .strong()
+                                                    .color(crate::wallpaper::LOGO_CYAN),
+                                            );
+                                        });
+                                });
+                                ui.label(
+                                    RichText::new("Build, script in Luau, and playtest 3D worlds right on your phone.")
+                                        .size(12.5)
+                                        .color(theme::TEXT_DIM),
+                                );
+                            });
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui
+                                    .add_enabled(
+                                        !self.start.busy(),
+                                        egui::Button::new(RichText::new("Refresh").color(Color32::WHITE))
+                                            .fill(crate::wallpaper::SLATE_PILL_BG)
+                                            .stroke(Stroke::new(1.0, crate::wallpaper::SLATE_PILL_BORDER))
+                                            .corner_radius(CornerRadius::same(12)),
+                                    )
+                                    .clicked()
+                                {
+                                    todo.push(Do::Refresh);
+                                }
+                                if self.start.busy() || self.cloud.busy() {
+                                    ui.spinner();
+                                }
+                            });
+                        });
+                        ui.add_space(10.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
+                            let new_btn = egui::Button::new(
+                                RichText::new("+ New Baseplate")
+                                    .size(12.5)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(crate::wallpaper::RUST_ORANGE)
+                            .stroke(Stroke::new(1.0, crate::wallpaper::RUST_ORANGE_HOVER))
+                            .corner_radius(CornerRadius::same(14));
+                            if ui.add(new_btn).clicked() {
+                                todo.push(Do::Template(self.start.default_template()));
+                            }
+
+                            for (icon, label, action) in [
+                                ("</>", "Focus Code IDE", 4u8),
+                                ("", "Open .rbxl", 1u8),
+                                ("", "Themes", 3u8),
+                            ] {
+                                let mut job = egui::text::LayoutJob::default();
+                                if !icon.is_empty() {
+                                    job.append(
+                                        &format!("{icon} "),
+                                        0.0,
+                                        egui::TextFormat {
+                                            font_id: egui::FontId::proportional(12.5),
+                                            color: crate::wallpaper::LOGO_CYAN,
+                                            ..Default::default()
+                                        },
+                                    );
+                                }
+                                job.append(
+                                    label,
+                                    0.0,
+                                    egui::TextFormat {
+                                        font_id: egui::FontId::proportional(12.5),
+                                        color: Color32::WHITE,
+                                        ..Default::default()
+                                    },
+                                );
+                                let btn = egui::Button::new(job)
+                                    .fill(crate::wallpaper::SLATE_PILL_BG)
+                                    .stroke(Stroke::new(
+                                        1.0,
+                                        if action == 4 {
+                                            crate::wallpaper::LOGO_CYAN.gamma_multiply(0.5)
+                                        } else {
+                                            crate::wallpaper::SLATE_PILL_BORDER
+                                        },
+                                    ))
+                                    .corner_radius(CornerRadius::same(14));
+                                if ui.add(btn).clicked() {
+                                    match action {
+                                        1 => todo.push(Do::OpenFile(None)),
+                                        3 => {
+                                            let ctx_c = ui.ctx().clone();
+                                            self.ui_action(&ctx_c, "studio_settings");
+                                        }
+                                        4 => {
+                                            self.ui.focus_code_mode = true;
+                                            self.ui.viewport_hidden = true;
+                                            todo.push(Do::Template(self.start.default_template()));
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        });
+                    }
                 });
                 // Subtle top ember accent bar on hero banner
                 let hr = hero_shown.response.rect;
@@ -1050,6 +1241,65 @@ impl Editor {
                     ],
                     Stroke::new(1.5, crate::wallpaper::RUST_ORANGE),
                 );
+
+                // Dismissible Auto-Save Recovery Banner
+                if !self.start.autosave_dismissed {
+                    if let Some((path, name, ts)) = self.start.autosave_latest.clone() {
+                        ui.add_space(10.0);
+                        egui::Frame::new()
+                            .fill(crate::wallpaper::OBSIDIAN_CARD)
+                            .stroke(Stroke::new(1.0, crate::wallpaper::RUST_ORANGE))
+                            .corner_radius(CornerRadius::same(12))
+                            .inner_margin(egui::Margin::symmetric(12, 10))
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.horizontal(|ui| {
+                                    ui.vertical(|ui| {
+                                        ui.label(
+                                            RichText::new("Unsaved autosave detected")
+                                                .size(13.0)
+                                                .strong()
+                                                .color(Color32::WHITE),
+                                        );
+                                        ui.label(
+                                            RichText::new(format!("{name} · {}", ago(unix_now(), ts)))
+                                                .size(11.5)
+                                                .color(theme::TEXT_DIM),
+                                        );
+                                    });
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        let (xr, xresp) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
+                                        ui.painter().rect_filled(xr, CornerRadius::same(7), crate::wallpaper::SLATE_PILL_BG);
+                                        rustudio_engine::ti::paint(
+                                            ui.painter(),
+                                            Rect::from_center_size(xr.center(), Vec2::splat(13.0)),
+                                            "x",
+                                            theme::TEXT_DIM,
+                                        );
+                                        if xresp.clicked() {
+                                            self.start.autosave_dismissed = true;
+                                        }
+                                        if ui
+                                            .add(
+                                                egui::Button::new(
+                                                    RichText::new("Restore")
+                                                        .size(12.0)
+                                                        .strong()
+                                                        .color(Color32::WHITE),
+                                                )
+                                                .fill(crate::wallpaper::RUST_ORANGE)
+                                                .corner_radius(CornerRadius::same(8)),
+                                            )
+                                            .clicked()
+                                        {
+                                            todo.push(Do::OpenFile(Some(path)));
+                                        }
+                                    });
+                                });
+                            });
+                    }
+                }
+
                 ui.add_space(14.0);
                 self.start_home(ui, todo);
             });
@@ -1068,10 +1318,18 @@ impl Editor {
             };
             let r = ui.add(
                 egui::TextEdit::singleline(&mut self.start.url)
-                    .hint_text("Place ID or roblox.com/games/…")
+                    .hint_text("Place ID or roblox.com/games/...")
                     .desired_width(input_w),
             );
-            let go = ui.add_enabled(!self.start.url.trim().is_empty(), egui::Button::new("Open")).clicked()
+            let go = ui
+                .add_enabled(
+                    !self.start.url.trim().is_empty(),
+                    egui::Button::new(RichText::new("Open").color(Color32::WHITE).strong())
+                        .fill(crate::wallpaper::SLATE_PILL_BG)
+                        .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                        .corner_radius(CornerRadius::same(8)),
+                )
+                .clicked()
                 || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
             if go {
                 match parse_place_ref(&self.start.url) {
@@ -1153,75 +1411,212 @@ impl Editor {
 
     fn start_home(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
         let searching = !self.start.search.trim().is_empty();
+        let rect = ui.ctx().content_rect();
+        let narrow = rect.width() < 600.0 || rect.height() > rect.width();
 
-        // Recent local .rbxl files first so mobile users see their recent projects immediately.
-        let files = self.ui.recent.iter().filter(|p| self.matches(&p.display().to_string())).count();
-        if !(searching && files == 0) && self.fold_header(ui, "files", "Recent Files", Some(files.to_string()), todo) {
-            self.start_files(ui, usize::MAX, todo);
-            ui.add_space(8.0);
-        }
-
-        // Recently opened from Roblox (the download cache's list).
-        let recent: Vec<_> = self
+        // Horizontal "Recent Places" strip (cloud + local .rbxl) matching Stitch Home 1:1
+        let now = unix_now();
+        let recent_cloud: Vec<_> = self
             .cloud
             .cache
             .recent()
             .into_iter()
             .filter(|r| self.matches(&r.origin.name) || self.matches(&r.origin.experience))
             .collect();
-        if !(searching && recent.is_empty()) && self.fold_header(ui, "recent", "Recent Places", Some(recent.len().to_string()), todo) {
-            if recent.is_empty() {
+        let recent_files: Vec<PathBuf> = self
+            .ui
+            .recent
+            .iter()
+            .filter(|p| self.matches(&p.display().to_string()))
+            .cloned()
+            .collect();
+
+        if narrow || !recent_cloud.is_empty() || !recent_files.is_empty() {
+            let show_all = self.start.expanded.contains("recent_all");
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Recent Places").size(15.5).strong().color(Color32::WHITE));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let link = if show_all { "Show less" } else { "View all" };
+                    if ui
+                        .add(egui::Button::new(RichText::new(link).size(12.0).color(crate::wallpaper::LOGO_CYAN)).frame(false))
+                        .clicked()
+                    {
+                        if show_all {
+                            self.start.expanded.remove("recent_all");
+                        } else {
+                            self.start.expanded.insert("recent_all".into());
+                        }
+                    }
+                });
+            });
+            ui.add_space(6.0);
+            if recent_cloud.is_empty() && recent_files.is_empty() {
                 ui.label(
-                    RichText::new("Places you open from Roblox show up here.").color(theme::TEXT_DIM),
+                    RichText::new("Places and .rbxl files you open show up here.")
+                        .size(12.0)
+                        .color(theme::TEXT_DIM),
                 );
             } else {
-                let missing: Vec<u64> = recent
-                    .iter()
-                    .map(|r| r.origin.universe_id)
-                    .filter(|u| !self.start.icons_asked.contains(u))
-                    .collect();
-                if !missing.is_empty() && self.game.account.signed_in() {
-                    self.start_icons(missing);
-                }
-                let now = unix_now();
-                let shown = self.capped(ui, "recent", recent.len());
-                grid(ui, shown, |ui, i| {
-                    let o = &recent[i].origin;
-                    let sub = format!("Opened {}", ago(now, recent[i].opened_at));
-                    let icon = self.start.icons.get(&o.universe_id).map(|t| t.id());
-                    let r = card(ui, &o.name, &sub, |p, rect| icon_thumb(p, rect, icon, &o.name));
-                    let r = r.on_hover_text(format!(
-                        "{} by {}\nplace {} · universe {}",
-                        o.experience,
-                        o.creator_label(),
-                        o.place_id,
-                        o.universe_id
-                    ));
-                    if r.clicked() {
-                        todo.push(Do::Cloud(o.place_id, false));
-                    }
-                    r.context_menu(|ui| {
-                        if ui.button("Open").clicked() {
-                            todo.push(Do::Cloud(o.place_id, false));
-                            ui.close();
-                        }
-                        if ui.button("Open a local copy").clicked() {
-                            todo.push(Do::Cloud(o.place_id, true));
-                            ui.close();
-                        }
-                        if ui.button("Copy place ID").clicked() {
-                            todo.push(Do::Copy(o.place_id.to_string()));
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button("Remove from Recent").clicked() {
-                            todo.push(Do::Forget(o.place_id));
-                            ui.close();
-                        }
+                egui::ScrollArea::horizontal()
+                    .id_salt("recent_places_strip")
+                    .scroll_source(egui::scroll_area::ScrollSource {
+                        scroll_bar: false,
+                        drag: egui::scroll_area::DragScroll::Always,
+                        mouse_wheel: true,
+                    })
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            for r in recent_cloud.iter().take(10) {
+                                let (cr, resp) = ui.allocate_exact_size(Vec2::new(168.0, 58.0), Sense::click());
+                                let hov = resp.hovered();
+                                ui.painter().rect_filled(
+                                    cr,
+                                    CornerRadius::same(10),
+                                    if hov { crate::wallpaper::OBSIDIAN_HOVER } else { crate::wallpaper::OBSIDIAN_CARD },
+                                );
+                                ui.painter().rect_stroke(
+                                    cr,
+                                    CornerRadius::same(10),
+                                    Stroke::new(1.0, if hov { crate::wallpaper::RUST_ORANGE } else { crate::wallpaper::OBSIDIAN_BORDER }),
+                                    egui::StrokeKind::Inside,
+                                );
+                                let font = egui::FontId::proportional(13.0);
+                                let title = elide(ui.painter(), &r.origin.name, &font, cr.width() - 32.0);
+                                ui.painter().text(
+                                    Pos2::new(cr.min.x + 10.0, cr.min.y + 18.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    title,
+                                    font,
+                                    Color32::WHITE,
+                                );
+                                ui.painter().circle_filled(
+                                    Pos2::new(cr.max.x - 14.0, cr.min.y + 18.0),
+                                    3.5,
+                                    Color32::from_rgb(34, 197, 94),
+                                );
+                                ui.painter().text(
+                                    Pos2::new(cr.min.x + 10.0, cr.max.y - 16.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    format!("Edited {} · Cloud", ago(now, r.opened_at)),
+                                    egui::FontId::proportional(11.0),
+                                    theme::TEXT_DIM,
+                                );
+                                if resp.clicked() {
+                                    todo.push(Do::Cloud(r.origin.place_id, false));
+                                }
+                            }
+                            for p in recent_files.iter().take(10) {
+                                let name = p
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| p.display().to_string());
+                                let exists = p.exists();
+                                let (cr, resp) = ui.allocate_exact_size(Vec2::new(168.0, 58.0), Sense::click());
+                                let hov = resp.hovered();
+                                ui.painter().rect_filled(
+                                    cr,
+                                    CornerRadius::same(10),
+                                    if hov { crate::wallpaper::OBSIDIAN_HOVER } else { crate::wallpaper::OBSIDIAN_CARD },
+                                );
+                                ui.painter().rect_stroke(
+                                    cr,
+                                    CornerRadius::same(10),
+                                    Stroke::new(1.0, if hov { crate::wallpaper::RUST_ORANGE } else { crate::wallpaper::OBSIDIAN_BORDER }),
+                                    egui::StrokeKind::Inside,
+                                );
+                                let font = egui::FontId::proportional(13.0);
+                                let title = elide(ui.painter(), &name, &font, cr.width() - 32.0);
+                                ui.painter().text(
+                                    Pos2::new(cr.min.x + 10.0, cr.min.y + 18.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    title,
+                                    font,
+                                    Color32::WHITE,
+                                );
+                                if exists {
+                                    ui.painter().circle_filled(
+                                        Pos2::new(cr.max.x - 14.0, cr.min.y + 18.0),
+                                        3.5,
+                                        Color32::from_rgb(34, 197, 94),
+                                    );
+                                }
+                                ui.painter().text(
+                                    Pos2::new(cr.min.x + 10.0, cr.max.y - 16.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    if p.is_dir() { "Project Folder" } else { "Local .rbxl" },
+                                    egui::FontId::proportional(11.0),
+                                    theme::TEXT_DIM,
+                                );
+                                if resp.clicked() {
+                                    todo.push(Do::OpenFile(Some(p.clone())));
+                                }
+                            }
+                        });
                     });
-                });
-                self.show_all_button(ui, "recent", recent.len(), shown, todo);
             }
+            ui.add_space(12.0);
+        }
+
+        // Full Recent Files & Cloud Recent when expanded or searching (or when jumped to via bottom bar)
+        let files = recent_files.len();
+        if (self.start.expanded.contains("recent_all") || searching || self.start.jump.as_deref() == Some("files"))
+            && !(searching && files == 0)
+            && self.fold_header(ui, "files", "Recent Files", Some(files.to_string()), todo)
+        {
+            self.start_files(ui, usize::MAX, todo);
+            ui.add_space(8.0);
+        }
+
+        if (self.start.expanded.contains("recent_all") || self.start.jump.as_deref() == Some("recent"))
+            && !recent_cloud.is_empty()
+            && self.fold_header(ui, "recent", "Recent Cloud", Some(recent_cloud.len().to_string()), todo)
+        {
+            let missing: Vec<u64> = recent_cloud
+                .iter()
+                .map(|r| r.origin.universe_id)
+                .filter(|u| !self.start.icons_asked.contains(u))
+                .collect();
+            if !missing.is_empty() && self.game.account.signed_in() {
+                self.start_icons(missing);
+            }
+            let shown = self.capped(ui, "recent", recent_cloud.len());
+            grid(ui, shown, |ui, i| {
+                let o = &recent_cloud[i].origin;
+                let sub = format!("Opened {}", ago(now, recent_cloud[i].opened_at));
+                let icon = self.start.icons.get(&o.universe_id).map(|t| t.id());
+                let r = card(ui, &o.name, &sub, |p, rect| icon_thumb(p, rect, icon, &o.name));
+                let r = r.on_hover_text(format!(
+                    "{} by {}\nplace {} · universe {}",
+                    o.experience,
+                    o.creator_label(),
+                    o.place_id,
+                    o.universe_id
+                ));
+                if r.clicked() {
+                    todo.push(Do::Cloud(o.place_id, false));
+                }
+                r.context_menu(|ui| {
+                    if ui.button("Open").clicked() {
+                        todo.push(Do::Cloud(o.place_id, false));
+                        ui.close();
+                    }
+                    if ui.button("Open a local copy").clicked() {
+                        todo.push(Do::Cloud(o.place_id, true));
+                        ui.close();
+                    }
+                    if ui.button("Copy place ID").clicked() {
+                        todo.push(Do::Copy(o.place_id.to_string()));
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Remove from Recent").clicked() {
+                        todo.push(Do::Forget(o.place_id));
+                        ui.close();
+                    }
+                });
+            });
+            self.show_all_button(ui, "recent", recent_cloud.len(), shown, todo);
             ui.add_space(8.0);
         }
 
@@ -1296,8 +1691,18 @@ impl Editor {
         );
         ui.add_space(6.0);
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
             for (k, label) in [(None, "All"), (Some(Kind::Generic), Kind::Generic.label()), (Some(Kind::Gameplay), Kind::Gameplay.label()), (Some(Kind::Theme), Kind::Theme.label())] {
-                if ui.selectable_label(tab == k, label).clicked() {
+                let active = tab == k;
+                let btn = egui::Button::new(
+                    RichText::new(label)
+                        .size(12.0)
+                        .strong()
+                        .color(if active { Color32::WHITE } else { theme::TEXT_DIM }),
+                )
+                .fill(if active { Color32::from_rgb(37, 99, 235) } else { Color32::TRANSPARENT })
+                .corner_radius(CornerRadius::same(8));
+                if ui.add(btn).clicked() {
                     todo.push(Do::TemplateTab(k));
                 }
             }
