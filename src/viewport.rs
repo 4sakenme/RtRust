@@ -1016,10 +1016,23 @@ impl Editor {
             ),
         );
 
-        let menu_c = egui::pos2(safe_rect.left() + 28.0, safe_rect.top() + 26.0);
+        // Roblox Unibar Pill (Menu, Chat, Emote, Reset) on top-left + Zoom -/+ on top-right
+        let unibar_rect = Rect::from_min_size(
+            egui::pos2(safe_rect.left() + 10.0, safe_rect.top() + 8.0),
+            Vec2::new(178.0, 38.0),
+        );
+        painter.rect_filled(unibar_rect, egui::CornerRadius::same(19), Color32::from_rgba_unmultiplied(18, 20, 26, 205));
+        painter.rect_stroke(
+            unibar_rect,
+            egui::CornerRadius::same(19),
+            Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 55)),
+            egui::StrokeKind::Inside,
+        );
+
+        let menu_c = egui::pos2(unibar_rect.left() + 23.0, unibar_rect.center().y);
         let menu_r = top_btn(ui, "mobile_roblox_menu_btn", menu_c, menu_open).on_hover_text("Roblox Menu (Esc)");
         if let Some(t) = &tex_menu {
-            painter.image(t.id(), Rect::from_center_size(menu_c, Vec2::splat(20.0)), uv_full, Color32::WHITE);
+            painter.image(t.id(), Rect::from_center_size(menu_c, Vec2::splat(19.0)), uv_full, Color32::WHITE);
         }
         if menu_r.clicked() {
             if let Some(s) = self.game.play.as_mut() {
@@ -1027,14 +1040,63 @@ impl Editor {
             }
         }
 
-        let chat_c = egui::pos2(safe_rect.left() + 72.0, safe_rect.top() + 26.0);
+        let chat_c = egui::pos2(unibar_rect.left() + 67.0, unibar_rect.center().y);
         let chat_r = top_btn(ui, "mobile_roblox_chat_btn", chat_c, chat_open).on_hover_text("Chat (/)");
         if let Some(t) = &tex_chat {
-            painter.image(t.id(), Rect::from_center_size(chat_c, Vec2::splat(20.0)), uv_full, Color32::WHITE);
+            painter.image(t.id(), Rect::from_center_size(chat_c, Vec2::splat(19.0)), uv_full, Color32::WHITE);
         }
         if chat_r.clicked() {
             if let Some(s) = self.game.play.as_mut() {
                 s.game.chat_open = !s.game.chat_open;
+            }
+        }
+
+        let emote_c = egui::pos2(unibar_rect.left() + 111.0, unibar_rect.center().y);
+        let emote_r = top_btn(ui, "mobile_roblox_emote_btn", emote_c, false).on_hover_text("Emotes");
+        rustudio_engine::ti::paint(&painter, Rect::from_center_size(emote_c, Vec2::splat(18.0)), "mood-smile", Color32::WHITE);
+        if emote_r.clicked() {
+            rustudio_player::emote_wheel::toggle();
+        }
+
+        let reset_c = egui::pos2(unibar_rect.left() + 155.0, unibar_rect.center().y);
+        let reset_r = top_btn(ui, "mobile_roblox_reset_btn", reset_c, false).on_hover_text("Reset Character");
+        rustudio_engine::ti::paint(&painter, Rect::from_center_size(reset_c, Vec2::splat(17.0)), "refresh", Color32::WHITE);
+        if reset_r.clicked() {
+            if let Some(s) = self.game.play.as_mut() {
+                s.game.menu_open = true;
+            }
+        }
+
+        // Subtle "Tap here to chat" pill below Unibar when chat is closed
+        let mut chat_hint_rect = Rect::NOTHING;
+        if !chat_open && !menu_open {
+            chat_hint_rect = Rect::from_min_size(
+                egui::pos2(unibar_rect.left(), unibar_rect.bottom() + 6.0),
+                Vec2::new(148.0, 26.0),
+            );
+            let ch_resp = ui.interact(chat_hint_rect, egui::Id::new("mobile_tap_to_chat_pill"), egui::Sense::click());
+            painter.rect_filled(
+                chat_hint_rect,
+                egui::CornerRadius::same(13),
+                Color32::from_rgba_unmultiplied(18, 20, 26, if ch_resp.hovered() { 195 } else { 140 }),
+            );
+            painter.rect_stroke(
+                chat_hint_rect,
+                egui::CornerRadius::same(13),
+                Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                egui::StrokeKind::Inside,
+            );
+            painter.text(
+                chat_hint_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "Tap here to chat",
+                egui::FontId::proportional(11.5),
+                Color32::from_rgba_unmultiplied(235, 240, 250, 215),
+            );
+            if ch_resp.clicked() {
+                if let Some(s) = self.game.play.as_mut() {
+                    s.game.chat_open = true;
+                }
             }
         }
 
@@ -1062,6 +1124,10 @@ impl Editor {
             || menu_r.clicked()
             || chat_r.is_pointer_button_down_on()
             || chat_r.clicked()
+            || emote_r.is_pointer_button_down_on()
+            || emote_r.clicked()
+            || reset_r.is_pointer_button_down_on()
+            || reset_r.clicked()
             || zoom_out_r.is_pointer_button_down_on()
             || zoom_out_r.clicked()
             || zoom_in_r.is_pointer_button_down_on()
@@ -1130,6 +1196,8 @@ impl Editor {
                                 .is_some_and(|lid| lid.order >= egui::Order::Middle);
                         if !rect.contains(*pos)
                             || over_overlay
+                            || unibar_rect.contains(*pos)
+                            || chat_hint_rect.contains(*pos)
                             || menu_r.rect.contains(*pos)
                             || chat_r.rect.contains(*pos)
                             || zoom_out_r.rect.contains(*pos)

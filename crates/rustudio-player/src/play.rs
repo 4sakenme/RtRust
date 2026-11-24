@@ -2641,6 +2641,16 @@ impl Game {
                 out.insert(j.motor, Xform::from_cframe(&cf));
             }
         }
+        let has_live_anim = out.values().any(|x| {
+            x.pos.length_squared() > 1e-5
+                || (x.rot - Mat3::IDENTITY)
+                    .to_cols_array()
+                    .iter()
+                    .any(|val| val.abs() > 1e-3)
+        });
+        if !has_live_anim && !ch.dead {
+            procedural_noob_transforms(ch, s.time as f32, &mut out);
+        }
         out
     }
 
@@ -4367,6 +4377,84 @@ fn client_scripts(cd: &Document, under: &[Option<Ref>]) -> Vec<Ref> {
         }
     }
     out
+}
+
+/// Offline procedural R6/R15 character animation (Idle, Walk/Run, Jump/Fall, Climb)
+/// so the default Noob character always animates smoothly even when not signed in
+/// or when no cloud animation tracks are loaded.
+fn procedural_noob_transforms(ch: &Character, t: f32, out: &mut HashMap<Ref, Xform>) {
+    let h_speed = (ch.velocity.x * ch.velocity.x + ch.velocity.z * ch.velocity.z).sqrt();
+    let grounded = ch.body.grounded;
+    let climbing = ch.ladder.is_some();
+
+    let ident = |rot: Mat3, pos: Vec3| Xform { pos, rot };
+    for j in &ch.rig.joints {
+        let xf = if !grounded && !climbing {
+            // Jump / Fall pose: arms raised, slight leg tuck
+            let tuck = (ch.velocity.y * 0.025).clamp(-0.35, 0.35);
+            match j.name.as_str() {
+                "Right Shoulder" => ident(Mat3::from_rotation_z(1.45), Vec3::ZERO),
+                "Left Shoulder" => ident(Mat3::from_rotation_z(-1.45), Vec3::ZERO),
+                "Right Hip" => ident(Mat3::from_rotation_z(0.25 + tuck), Vec3::ZERO),
+                "Left Hip" => ident(Mat3::from_rotation_z(-0.25 - tuck), Vec3::ZERO),
+                "RightShoulder" => ident(Mat3::from_rotation_x(1.35), Vec3::ZERO),
+                "LeftShoulder" => ident(Mat3::from_rotation_x(1.35), Vec3::ZERO),
+                "RightHip" => ident(Mat3::from_rotation_x(0.28 + tuck), Vec3::ZERO),
+                "LeftHip" => ident(Mat3::from_rotation_x(-0.22 - tuck), Vec3::ZERO),
+                "RightKnee" | "LeftKnee" => ident(Mat3::from_rotation_x(-0.45), Vec3::ZERO),
+                _ => continue,
+            }
+        } else if climbing {
+            let phase = ch.body.pos.y * 2.2;
+            let s = phase.sin();
+            match j.name.as_str() {
+                "Right Shoulder" => ident(Mat3::from_rotation_z(1.2 + s * 0.6), Vec3::ZERO),
+                "Left Shoulder" => ident(Mat3::from_rotation_z(-1.2 + s * 0.6), Vec3::ZERO),
+                "Right Hip" => ident(Mat3::from_rotation_z(s * 0.5), Vec3::ZERO),
+                "Left Hip" => ident(Mat3::from_rotation_z(-s * 0.5), Vec3::ZERO),
+                "RightShoulder" => ident(Mat3::from_rotation_x(1.2 + s * 0.55), Vec3::ZERO),
+                "LeftShoulder" => ident(Mat3::from_rotation_x(1.2 - s * 0.55), Vec3::ZERO),
+                "RightHip" => ident(Mat3::from_rotation_x(-s * 0.5), Vec3::ZERO),
+                "LeftHip" => ident(Mat3::from_rotation_x(s * 0.5), Vec3::ZERO),
+                _ => continue,
+            }
+        } else if h_speed > 0.4 {
+            // Walk / Run sinusoidal gait
+            let amp = (h_speed / 16.0).clamp(0.18, 1.0);
+            let phase = t * (7.2 + h_speed * 0.26);
+            let swing = phase.sin() * 0.78 * amp;
+            let bob = (phase * 2.0).sin().abs() * 0.12 * amp;
+            match j.name.as_str() {
+                "RootJoint" => ident(Mat3::from_rotation_x(-0.06 * amp), Vec3::new(0.0, bob, 0.0)),
+                "Right Shoulder" => ident(Mat3::from_rotation_z(-swing), Vec3::ZERO),
+                "Left Shoulder" => ident(Mat3::from_rotation_z(-swing), Vec3::ZERO),
+                "Right Hip" => ident(Mat3::from_rotation_z(swing), Vec3::ZERO),
+                "Left Hip" => ident(Mat3::from_rotation_z(swing), Vec3::ZERO),
+                "Root" => ident(Mat3::IDENTITY, Vec3::new(0.0, bob, 0.0)),
+                "Waist" => ident(Mat3::from_rotation_y(swing * 0.12) * Mat3::from_rotation_x(-0.08 * amp), Vec3::ZERO),
+                "RightShoulder" => ident(Mat3::from_rotation_x(-swing * 0.85), Vec3::ZERO),
+                "LeftShoulder" => ident(Mat3::from_rotation_x(swing * 0.85), Vec3::ZERO),
+                "RightElbow" => ident(Mat3::from_rotation_x(0.25 + swing.max(0.0) * 0.35), Vec3::ZERO),
+                "LeftElbow" => ident(Mat3::from_rotation_x(0.25 + (-swing).max(0.0) * 0.35), Vec3::ZERO),
+                "RightHip" => ident(Mat3::from_rotation_x(swing * 0.9), Vec3::ZERO),
+                "LeftHip" => ident(Mat3::from_rotation_x(-swing * 0.9), Vec3::ZERO),
+                "RightKnee" => ident(Mat3::from_rotation_x(-(swing.abs() * 0.45)), Vec3::ZERO),
+                "LeftKnee" => ident(Mat3::from_rotation_x(-(swing.abs() * 0.45)), Vec3::ZERO),
+                _ => continue,
+            }
+        } else {
+            // Subtle idle breathing sway
+            let sway = (t * 2.1).sin() * 0.045;
+            match j.name.as_str() {
+                "Right Shoulder" => ident(Mat3::from_rotation_z(sway), Vec3::ZERO),
+                "Left Shoulder" => ident(Mat3::from_rotation_z(-sway), Vec3::ZERO),
+                "RightShoulder" | "LeftShoulder" => ident(Mat3::from_rotation_x(sway), Vec3::ZERO),
+                "Waist" => ident(Mat3::from_rotation_x(sway * 0.4), Vec3::ZERO),
+                _ => continue,
+            }
+        };
+        out.insert(j.motor, xf);
+    }
 }
 
 /// The character's pose: capsule → HumanoidRootPart → Motor6D chain, each

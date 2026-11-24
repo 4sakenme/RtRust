@@ -4989,9 +4989,16 @@ impl Renderer {
         let planes = frustum(frame.cull_view_proj);
         // A part whose bounding radius covers less than LOD_MIN_PX pixels is skipped.
         let focal = size[1] as f32 * 0.5 / (frame.fov_y * 0.5).tan().max(1e-3);
-        let lod_px = frame.quality.map_or(rustudio_core::mech::LOD_MIN_PX, |p| p.lod_radius_pixels(size[1]));
+        let mut lod_px = frame.quality.map_or(rustudio_core::mech::LOD_MIN_PX, |p| p.lod_radius_pixels(size[1]));
+        let mut draw_distance = frame.quality.map_or(f32::INFINITY, |p| p.distance());
+        if rustudio_core::mobile::is_playtest_eco_active() {
+            lod_px = lod_px.max(4.5);
+            draw_distance = draw_distance.min(480.0);
+        } else if cfg!(any(target_os = "ios", target_os = "android")) && rustudio_core::mobile::is_eco() {
+            lod_px = lod_px.max(2.5);
+            draw_distance = draw_distance.min(900.0);
+        }
         let lod_k = lod_px / focal;
-        let draw_distance = frame.quality.map_or(f32::INFINITY, |p| p.distance());
 
         let r_scope = rustudio_core::bench::scope("r_static_cull");
         // Static batches: frustum test per cell, then trim the smallest parts.

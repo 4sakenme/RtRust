@@ -19,10 +19,14 @@ pub struct EditCamState {
     pub speed_mul: f32,
     pub free_look: bool,
     pub joy_vec: Vec2,
+    pub smooth_joy: Vec2,
+    pub joy_origin: Option<Pos2>,
     pub joy_touching: bool,
     pub joy_touch_id: Option<u64>,
     pub look_touch_id: Option<u64>,
     pub last_look_pos: Pos2,
+    pub pinch_touch_id: Option<u64>,
+    pub last_pinch_pos: Pos2,
     pub up_held: bool,
     pub down_held: bool,
     pub smooth_target: Option<(Vec3, Vec3)>, // (cam.pos, cam.pivot)
@@ -35,10 +39,14 @@ impl Default for EditCamState {
             speed_mul: 1.0,
             free_look: false,
             joy_vec: Vec2::ZERO,
+            smooth_joy: Vec2::ZERO,
+            joy_origin: None,
             joy_touching: false,
             joy_touch_id: None,
             look_touch_id: None,
             last_look_pos: Pos2::ZERO,
+            pinch_touch_id: None,
+            last_pinch_pos: Pos2::ZERO,
             up_held: false,
             down_held: false,
             smooth_target: None,
@@ -67,17 +75,39 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     let (_safe_top, safe_bottom, safe_left, _safe_right) = crate::platform::get_safe_area_insets();
     let dock_lift = ctx.data(|d| d.get_temp::<f32>(egui::Id::new("pill_dock_cam_lift")).unwrap_or(0.0));
     let h_scale = (rect.height() / 420.0).clamp(0.76, 1.05);
-    let joy_radius = (42.0 * h_scale).round();
-    let joy_center = Pos2::new(
-        rect.min.x + safe_left + 16.0 + joy_radius,
-        rect.max.y - safe_bottom - 14.0 - joy_radius - dock_lift * 0.5,
+    let joy_radius = (44.0 * h_scale).round();
+    let default_joy_center = Pos2::new(
+        rect.min.x + safe_left + 18.0 + joy_radius,
+        rect.max.y - safe_bottom - 16.0 - joy_radius - dock_lift * 0.5,
     );
-    let joy_hit_rect = Rect::from_center_size(joy_center, Vec2::splat(joy_radius * 2.3));
+    let joy_zone = Rect::from_min_max(
+        Pos2::new(rect.min.x, (rect.max.y - rect.height() * 0.55).max(rect.min.y)),
+        Pos2::new((rect.min.x + rect.width() * 0.34).min(default_joy_center.x + joy_radius * 2.0), rect.max.y),
+    );
+    let joy_hit_rect = Rect::from_center_size(default_joy_center, Vec2::splat(joy_radius * 2.3));
     let joy_resp = ui.interact(joy_hit_rect, egui::Id::new("edit_cam_fly_joy"), Sense::click_and_drag());
 
-    let (mut joy_touch_id, mut look_touch_id, mut last_look_pos, prev_joy_vec) = STATE.with(|s| {
+    let (
+        mut joy_touch_id,
+        mut joy_origin,
+        mut look_touch_id,
+        mut last_look_pos,
+        mut pinch_touch_id,
+        mut last_pinch_pos,
+        prev_joy_vec,
+        mut smooth_joy,
+    ) = STATE.with(|s| {
         let b = s.borrow();
-        (b.joy_touch_id, b.look_touch_id, b.last_look_pos, b.joy_vec)
+        (
+            b.joy_touch_id,
+            b.joy_origin,
+            b.look_touch_id,
+            b.last_look_pos,
+            b.pinch_touch_id,
+            b.last_pinch_pos,
+            b.joy_vec,
+            b.smooth_joy,
+        )
     });
     let events = ctx.input(|i| i.events.clone());
     let any_active = ctx.input(|i| i.any_touches() || i.pointer.any_down())
@@ -92,11 +122,15 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         });
     if !any_active {
         joy_touch_id = None;
+        joy_origin = None;
         look_touch_id = None;
+        pinch_touch_id = None;
     }
 
     let mut joy_vec = if joy_touch_id.is_some() { prev_joy_vec } else { Vec2::ZERO };
     let mut touch_look_delta = Vec2::ZERO;
+    let mut pinch_zoom_delta = 0.0_f32;
+    let mut pinch_pan_delta = Vec2::ZERO;
     let right_ctrl_zone = Rect::from_min_max(
         Pos2::new(rect.max.x - 175.0 * h_scale, rect.max.y - safe_bottom - dock_lift - 140.0 * h_scale),
         Pos2::new(rect.max.x, rect.max.y),
@@ -117,48 +151,81 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
                     if !rect.contains(*pos) || right_ctrl_zone.contains(*pos) || over_overlay {
                         continue;
                     }
-                    if joy_touch_id.is_none() && joy_hit_rect.contains(*pos) {
+                    if joy_touch_id.is_none() && (joy_hit_rect.contains(*pos) || joy_zone.contains(*pos)) {
                         joy_touch_id = Some(tid);
-                        let d = *pos - joy_center;
-                        let len = d.length();
-                        let clamped = if len > joy_radius { d * (joy_radius / len) } else { d };
-                        joy_vec = clamped / joy_radius;
+                        let clamped_origin = Pos2::new(
+                            pos.x.clamp(rect.min.x + safe_left + joy_radius + 8.0, joy_zone.max.x),
+                            pos.y.clamp(joy_zone.min.y + joy_radius, rect.max.y - safe_bottom - joy_radius - 8.0),
+                        );
+                        joy_origin = Some(clamped_origin);
+                        joy_vec = Vec2::ZERO;
                     } else if look_touch_id.is_none() {
                         look_touch_id = Some(tid);
                         last_look_pos = *pos;
+                    } else if pinch_touch_id.is_none() && look_touch_id != Some(tid) {
+                        pinch_touch_id = Some(tid);
+                        last_pinch_pos = *pos;
                     }
                 }
                 egui::TouchPhase::Move => {
                     if joy_touch_id == Some(tid) {
-                        let d = *pos - joy_center;
+                        let origin = joy_origin.unwrap_or(default_joy_center);
+                        let d = *pos - origin;
                         let len = d.length();
                         let clamped = if len > joy_radius { d * (joy_radius / len) } else { d };
                         joy_vec = clamped / joy_radius;
                     } else if look_touch_id == Some(tid) {
-                        let d = *pos - last_look_pos;
-                        last_look_pos = *pos;
-                        if d.length() <= 120.0 {
-                            touch_look_delta += d;
+                        if pinch_touch_id.is_some() {
+                            let prev_dist = (last_look_pos - last_pinch_pos).length();
+                            let prev_mid = last_look_pos.lerp(last_pinch_pos, 0.5);
+                            last_look_pos = *pos;
+                            let new_dist = (last_look_pos - last_pinch_pos).length();
+                            let new_mid = last_look_pos.lerp(last_pinch_pos, 0.5);
+                            pinch_zoom_delta += (new_dist - prev_dist) * 0.06;
+                            pinch_pan_delta += new_mid - prev_mid;
+                        } else {
+                            let d = *pos - last_look_pos;
+                            last_look_pos = *pos;
+                            if d.length() <= 120.0 {
+                                touch_look_delta += d;
+                            }
+                        }
+                    } else if pinch_touch_id == Some(tid) {
+                        if look_touch_id.is_some() {
+                            let prev_dist = (last_look_pos - last_pinch_pos).length();
+                            let prev_mid = last_look_pos.lerp(last_pinch_pos, 0.5);
+                            last_pinch_pos = *pos;
+                            let new_dist = (last_look_pos - last_pinch_pos).length();
+                            let new_mid = last_look_pos.lerp(last_pinch_pos, 0.5);
+                            pinch_zoom_delta += (new_dist - prev_dist) * 0.06;
+                            pinch_pan_delta += new_mid - prev_mid;
+                        } else {
+                            last_pinch_pos = *pos;
                         }
                     }
                 }
                 egui::TouchPhase::End | egui::TouchPhase::Cancel => {
                     if joy_touch_id == Some(tid) {
                         joy_touch_id = None;
+                        joy_origin = None;
                         joy_vec = Vec2::ZERO;
                     }
                     if look_touch_id == Some(tid) {
-                        look_touch_id = None;
+                        look_touch_id = pinch_touch_id.take();
+                        last_look_pos = last_pinch_pos;
+                    } else if pinch_touch_id == Some(tid) {
+                        pinch_touch_id = None;
                     }
                 }
             }
         }
     }
 
+    let joy_center = joy_origin.unwrap_or(default_joy_center);
     let mut joy_touching = joy_touch_id.is_some();
     if !joy_touching && look_touch_id.is_none() && (joy_resp.dragged() || joy_resp.is_pointer_button_down_on()) {
         if let Some(p) = ctx.input(|i| i.pointer.interact_pos()) {
-            let delta = p - joy_center;
+            let delta = p - default_joy_center;
             let len = delta.length();
             let clamped = if len > joy_radius {
                 delta * (joy_radius / len)
@@ -171,17 +238,17 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     }
 
     let painter = ui.painter_at(rect);
-    painter.circle_filled(joy_center, joy_radius, Color32::from_rgba_unmultiplied(20, 22, 28, 120));
+    painter.circle_filled(joy_center, joy_radius, Color32::from_rgba_unmultiplied(20, 22, 28, if joy_touching { 150 } else { 110 }));
     painter.circle_stroke(
         joy_center,
         joy_radius,
-        Stroke::new(1.5, Color32::from_rgba_unmultiplied(220, 225, 235, 140)),
+        Stroke::new(1.5, Color32::from_rgba_unmultiplied(220, 225, 235, if joy_touching { 190 } else { 130 })),
     );
     let knob = joy_center + joy_vec * joy_radius;
     painter.circle_filled(
         knob,
         17.0,
-        Color32::from_rgba_unmultiplied(120, 185, 255, if joy_touching { 215 } else { 155 }),
+        Color32::from_rgba_unmultiplied(120, 185, 255, if joy_touching { 225 } else { 150 }),
     );
 
     // Bottom-right circular controls (Mobile Studio v2.0 style: ^, v, Speed x1/x2/x4, Focus, Mode)
@@ -256,11 +323,25 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
     painter.text(mode_c, egui::Align2::CENTER_CENTER, mode_lbl, egui::FontId::proportional(11.5), Color32::WHITE);
     let _ = &mut free_look;
 
-    // 2. Apply Virtual Joystick + ▲/▼ Fly Movement
+    // 2. Apply Smoothed Virtual Joystick + ▲/▼ Fly Movement & 2-Finger Pinch Zoom/Pan
+    let smooth_k = (dt * 18.0).clamp(0.18, 0.75);
+    smooth_joy = smooth_joy + (joy_vec - smooth_joy) * smooth_k;
+    if !joy_touching && smooth_joy.length_sq() < 0.0004 {
+        smooth_joy = Vec2::ZERO;
+    }
     let elev = if up_held { 1.0 } else { 0.0 } - if down_held { 1.0 } else { 0.0 };
-    let fly_dir = Vec3::new(joy_vec.x, elev, -joy_vec.y);
-    if fly_dir.length_squared() > 0.001 {
+    let fly_dir = Vec3::new(smooth_joy.x, elev, -smooth_joy.y);
+    if fly_dir.length_squared() > 0.0005 {
         ed.game.cam.fly(fly_dir, dt.max(0.001), false, speed_mul, &prefs);
+        ctx.request_repaint();
+    }
+    if pinch_zoom_delta.abs() > 0.001 {
+        let fwd = ed.game.cam.forward();
+        ed.game.cam.pos += fwd * (pinch_zoom_delta * 2.5 * speed_mul);
+        ctx.request_repaint();
+    }
+    if pinch_pan_delta.length_sq() > 0.01 && pinch_pan_delta.length() <= 120.0 {
+        ed.game.cam.pan(pinch_pan_delta.x, pinch_pan_delta.y, &prefs);
         ctx.request_repaint();
     }
 
@@ -322,10 +403,14 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         b.speed_mul = speed_mul;
         b.free_look = free_look;
         b.joy_vec = joy_vec;
+        b.smooth_joy = smooth_joy;
+        b.joy_origin = joy_origin;
         b.joy_touching = joy_touching;
         b.joy_touch_id = joy_touch_id;
         b.look_touch_id = look_touch_id;
         b.last_look_pos = last_look_pos;
+        b.pinch_touch_id = pinch_touch_id;
+        b.last_pinch_pos = last_pinch_pos;
         b.up_held = up_held;
         b.down_held = down_held;
         b.smooth_target = new_smooth;

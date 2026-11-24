@@ -2033,11 +2033,16 @@ impl Editor {
         let mut active_tab_idx = ctx.data(|d| d.get_temp::<usize>(ribbon_tab_id).unwrap_or(0));
         let ribbon_collapsed_id = egui::Id::new("landscape_ribbon_row2_collapsed");
         let mut ribbon_row2_collapsed = ctx.data(|d| d.get_temp::<bool>(ribbon_collapsed_id).unwrap_or(false));
+        let hide_all_id = egui::Id::new("landscape_hide_all_ui");
+        let mut hide_all_ui = ctx.data(|d| d.get_temp::<bool>(hide_all_id).unwrap_or(false));
+        let insp_float_id = egui::Id::new("landscape_inspector_floating");
+        let mut inspector_floating = ctx.data(|d| d.get_temp::<bool>(insp_float_id).unwrap_or(false));
         let insp_tab_id = egui::Id::new("mobile_inspector_active_tab");
         let mut active_insp_tab = ctx.data(|d| d.get_temp::<u8>(insp_tab_id).unwrap_or(0));
 
         // Row 1: Menu & Session Bar (RtRust logo, File, Tabs | Undo/Redo, Play, Profile)
-        egui::Panel::top("landscape_ribbon_row1")
+        if !hide_all_ui {
+            egui::Panel::top("landscape_ribbon_row1")
             .exact_size(34.0 + top_pad as f32)
             .frame(
                 egui::Frame::new()
@@ -2194,6 +2199,28 @@ impl Editor {
                             }
                         }
 
+                        // Hide All UI (fullscreen viewport toggle, DockLayout style)
+                        let (hr, hresp) = ui.allocate_exact_size(Vec2::new(26.0, 24.0), Sense::click());
+                        ui.painter().rect_filled(
+                            hr,
+                            egui::CornerRadius::same(6),
+                            if hresp.hovered() {
+                                crate::wallpaper::OBSIDIAN_HOVER
+                            } else {
+                                crate::wallpaper::OBSIDIAN_CARD
+                            },
+                        );
+                        rustudio_engine::ti::paint(
+                            ui.painter(),
+                            Rect::from_center_size(hr.center(), Vec2::splat(14.0)),
+                            "eye-off",
+                            Color32::WHITE,
+                        );
+                        if hresp.on_hover_text("Hide All UI (Fullscreen Viewport)").clicked() {
+                            hide_all_ui = true;
+                            ctx.data_mut(|d| d.insert_temp(hide_all_id, true));
+                        }
+
                         // Collapse / Expand Top Ribbon Tool Dock arrow (`▲` / `▼`)
                         let (cr, cresp) = ui.allocate_exact_size(Vec2::new(26.0, 24.0), Sense::click());
                         ui.painter().rect_filled(
@@ -2251,9 +2278,10 @@ impl Editor {
                     });
                 });
             });
+        }
 
         // Row 2: Tall Icon-Above-Label Tool Strip (52pt, collapsible via top arrow)
-        if !ribbon_row2_collapsed {
+        if !hide_all_ui && !ribbon_row2_collapsed {
             egui::Panel::top("landscape_ribbon_row2")
             .exact_size(52.0)
             .frame(
@@ -2630,10 +2658,10 @@ impl Editor {
             self.ui_action(ctx, &a);
         }
 
-        // 2. Right Collapsible & Resizable Unified Tabbed Inspector (min 260pt, default 320pt, max 50% viewport)
+        // 2. Right Collapsible & Resizable / Float-Detachable Unified Tabbed Inspector
         let insp_anim = ctx.animate_bool_with_time(
             egui::Id::new("landscape_inspector_slide_anim"),
-            inspector_open,
+            inspector_open && !hide_all_ui && !inspector_floating,
             0.18,
         );
         let insp_width_id = egui::Id::new("landscape_inspector_width");
@@ -2642,7 +2670,132 @@ impl Editor {
         let mut target_insp_w = ctx
             .data(|d| d.get_temp::<f32>(insp_width_id).unwrap_or(default_insp_w))
             .clamp(260.0, max_insp_w);
-        if insp_anim > 0.01 {
+        let explorer_rect_id = egui::Id::new("portrait_explorer_window_rect");
+        if hide_all_ui || !inspector_open || !inspector_floating {
+            ctx.data_mut(|d| d.insert_temp::<Option<egui::Rect>>(explorer_rect_id, None));
+        }
+
+        if hide_all_ui {
+            egui::Area::new(egui::Id::new("landscape_restore_all_ui_btn"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(screen_rect.right() - safe_right - 44.0, screen_rect.top() + safe_top + 10.0))
+                .show(ctx, |ui| {
+                    let btn = egui::Button::new(egui::RichText::new("Show UI").size(11.0).strong().color(Color32::WHITE))
+                        .fill(Color32::from_rgba_unmultiplied(20, 23, 29, 215))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(56, 62, 78)))
+                        .corner_radius(14.0);
+                    if ui.add(btn).clicked() {
+                        hide_all_ui = false;
+                        ctx.data_mut(|d| d.insert_temp(hide_all_id, false));
+                    }
+                });
+        } else if inspector_open && inspector_floating {
+            let win_w = target_insp_w;
+            let win_h = (screen_rect.height() * 0.68).clamp(220.0, 480.0);
+            if let Some(shown) = egui::Window::new("Inspector")
+                .id(egui::Id::new("landscape_floating_inspector_win"))
+                .title_bar(false)
+                .resizable(true)
+                .movable(true)
+                .default_pos(egui::pos2(screen_rect.right() - win_w - safe_right - 16.0, screen_rect.top() + 94.0))
+                .default_size(egui::vec2(win_w, win_h))
+                .min_size(egui::vec2(260.0, 200.0))
+                .max_size(egui::vec2(max_insp_w, screen_rect.height() - 40.0))
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(Color32::from_rgb(20, 23, 29))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(52, 58, 74)))
+                        .corner_radius(egui::CornerRadius::same(8))
+                        .inner_margin(egui::Margin::same(6)),
+                )
+                .show(ctx, |ui| {
+                    let inner_w = ui.available_width().max(200.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        if ui
+                            .add_sized(
+                                [24.0, 24.0],
+                                egui::Button::new(egui::RichText::new("✕").size(11.0).strong())
+                                    .fill(Color32::from_rgb(30, 34, 44))
+                                    .corner_radius(4.0),
+                            )
+                            .on_hover_text("Close Inspector")
+                            .clicked()
+                        {
+                            inspector_open = false;
+                            ctx.data_mut(|d| d.insert_temp(inspector_open_id, false));
+                        }
+                        if ui
+                            .add_sized(
+                                [24.0, 24.0],
+                                egui::Button::new(egui::RichText::new("📌").size(11.0))
+                                    .fill(Color32::from_rgb(37, 99, 235))
+                                    .corner_radius(4.0),
+                            )
+                            .on_hover_text("Dock to Right Edge")
+                            .clicked()
+                        {
+                            inspector_floating = false;
+                            ctx.data_mut(|d| d.insert_temp(insp_float_id, false));
+                        }
+                        for (idx, label) in [(0u8, "Explorer"), (1u8, "Properties")] {
+                            let active = active_insp_tab == idx;
+                            let btn = egui::Button::new(
+                                egui::RichText::new(label)
+                                    .size(11.5)
+                                    .strong()
+                                    .color(if active { Color32::WHITE } else { theme::TEXT_DIM }),
+                            )
+                            .fill(if active {
+                                Color32::from_rgb(37, 99, 235)
+                            } else {
+                                Color32::from_rgb(28, 32, 42)
+                            })
+                            .corner_radius(4.0)
+                            .min_size(Vec2::new(72.0, 24.0));
+                            if ui.add(btn).clicked() {
+                                active_insp_tab = idx;
+                                ctx.data_mut(|d| d.insert_temp(insp_tab_id, idx));
+                            }
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if active_insp_tab == 0 {
+                                if ui.small_button("+").on_hover_text("Insert Object").clicked() {
+                                    self.ui_action(ctx, "insert_object");
+                                }
+                                if !self.game.doc.selection.is_empty() {
+                                    let props_btn = egui::Button::new(
+                                        egui::RichText::new("Props →").size(10.5).color(Color32::WHITE),
+                                    )
+                                    .fill(Color32::from_rgb(37, 99, 235))
+                                    .corner_radius(4.0);
+                                    if ui.add(props_btn).clicked() {
+                                        active_insp_tab = 1;
+                                        ctx.data_mut(|d| d.insert_temp(insp_tab_id, 1u8));
+                                    }
+                                }
+                            }
+                        });
+                    });
+                    ui.separator();
+                    let body_h = (ui.available_height() - 4.0).max(100.0);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(inner_w, body_h),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| {
+                            ui.set_max_width(inner_w);
+                            if active_insp_tab == 0 {
+                                self.explorer_ui(ui);
+                            } else {
+                                self.properties_ui(ui);
+                            }
+                        },
+                    );
+                })
+            {
+                ctx.data_mut(|d| d.insert_temp(explorer_rect_id, Some(shown.response.rect)));
+            }
+        } else if insp_anim > 0.01 {
             let cur_w = (target_insp_w * insp_anim).max(24.0);
             let right_pad = (6.0 + safe_right).round().clamp(6.0, 120.0) as i8;
             egui::Panel::right("landscape_right_inspector")
@@ -2718,6 +2871,19 @@ impl Editor {
                                 {
                                     inspector_open = false;
                                     ctx.data_mut(|d| d.insert_temp(inspector_open_id, false));
+                                }
+                                if ui
+                                    .add_sized(
+                                        [24.0, 24.0],
+                                        egui::Button::new(egui::RichText::new("❐").size(11.0))
+                                            .fill(Color32::from_rgb(30, 34, 44))
+                                            .corner_radius(4.0),
+                                    )
+                                    .on_hover_text("Float Inspector Window")
+                                    .clicked()
+                                {
+                                    inspector_floating = true;
+                                    ctx.data_mut(|d| d.insert_temp(insp_float_id, true));
                                 }
 
                                 for (idx, label) in [(0u8, "Explorer"), (1u8, "Properties")] {
@@ -2809,7 +2975,7 @@ impl Editor {
         }
 
         // Optional Resizable Output Drawer at bottom of left workspace pane when toggled
-        if self.ui.portrait_output_drawer {
+        if !hide_all_ui && self.ui.portrait_output_drawer {
             let max_out_h = (screen_rect.height() * 0.65).max(160.0);
             self.ui.output_height = self.ui.output_height.clamp(90.0, max_out_h);
             egui::Panel::bottom("landscape_output_drawer")
@@ -2859,7 +3025,7 @@ impl Editor {
         // 2b. Flat Full-Width Bottom Status Bar BEFORE CentralPanel
         let kb_h = crate::platform::keyboard_height_points(ctx);
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("pill_dock_cam_lift"), 0.0_f32));
-        if kb_h <= 40.0 {
+        if !hide_all_ui && kb_h <= 40.0 {
             egui::Panel::bottom("landscape_flat_status_bar")
                 .exact_size(24.0 + safe_bottom * 0.5)
                 .frame(
