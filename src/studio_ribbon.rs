@@ -1941,6 +1941,35 @@ impl Editor {
                         self.ui.portrait_quick_grid_open = false;
                     }
 
+                    // Interactive Snap Grid Pill (`Off`, `0.25`, `1.0` studs)
+                    let snap_lbl = if self.game.snap_move {
+                        format!("Snap: {:.2} ▾", self.game.move_inc)
+                    } else {
+                        "Snap: Off ▾".to_string()
+                    };
+                    let snap_resp = ui.add(
+                        egui::Button::new(egui::RichText::new(snap_lbl).size(11.5).color(Color32::WHITE))
+                            .fill(Color32::from_rgb(30, 34, 46))
+                            .corner_radius(12.0)
+                            .min_size(Vec2::new(82.0, 26.0)),
+                    );
+                    egui::Popup::menu(&snap_resp).show(|ui| {
+                        if ui.selectable_label(!self.game.snap_move, "Snap: Off").clicked() {
+                            self.game.snap_move = false;
+                            ui.close();
+                        }
+                        if ui.selectable_label(self.game.snap_move && (self.game.move_inc - 0.25).abs() < 0.01, "Snap: 0.25 studs").clicked() {
+                            self.game.snap_move = true;
+                            self.game.move_inc = 0.25;
+                            ui.close();
+                        }
+                        if ui.selectable_label(self.game.snap_move && (self.game.move_inc - 1.0).abs() < 0.01, "Snap: 1.00 studs").clicked() {
+                            self.game.snap_move = true;
+                            self.game.move_inc = 1.0;
+                            ui.close();
+                        }
+                    });
+
                     // Focus Code IDE pill (enters pure Code IDE without 3D rendering)
                     if ui
                         .add(
@@ -2487,6 +2516,35 @@ impl Editor {
                 left_pane_rect = ui.max_rect();
                 self.viewport_ui(ui);
             });
+
+        // Subtle Top-Left Live Streaming Telemetry Badge in 3D Viewport
+        if self.ui.portrait_tab == PortraitTab::Viewport && self.ui.portrait_tool_panel.is_none() {
+            let (pending_tex, loaded_tex) = self.game.textures.counts();
+            let loaded_meshes = self.game.meshes.count();
+            let badge_pos = left_pane_rect.min + Vec2::new(10.0 + safe_left * 0.5, 8.0);
+            egui::Area::new(egui::Id::new("vp_streaming_telemetry_badge"))
+                .order(egui::Order::Foreground)
+                .interactable(false)
+                .fixed_pos(badge_pos)
+                .show(ctx, |ui| {
+                    egui::Frame::new()
+                        .fill(Color32::from_rgba_unmultiplied(16, 18, 25, 200))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 28)))
+                        .corner_radius(10.0)
+                        .inner_margin(egui::Margin::symmetric(8, 3))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "Streaming: {}m / {}t ({} pending)",
+                                    loaded_meshes, loaded_tex, pending_tex
+                                ))
+                                .monospace()
+                                .size(10.5)
+                                .color(crate::wallpaper::LOGO_CYAN),
+                            );
+                        });
+                });
+        }
 
         // 3b. Dismissible Floating / Overlay Card for Script Editor or Tool Panel (`Toolbox` / `Terrain`)
         //     with a prominent `← Back to 3D` pill button so the user is never trapped away from the 3D scene.
@@ -3533,8 +3591,10 @@ impl Editor {
                                     ("end", "end"),
                                     ("()", "()"),
                                     ("{}", "{}"),
+                                    ("[]", "[]"),
+                                    (":", ":"),
                                     ("=", " = "),
-                                    ("\"\"", "\"\""),
+                                    ("--", "-- "),
                                 ] {
                                     if ui
                                         .add(

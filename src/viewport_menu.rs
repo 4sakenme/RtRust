@@ -69,10 +69,10 @@ impl Editor {
                                 ui.spacing_mut().item_spacing.x = 5.0;
                                 for (label, cmd, col) in [
                                     ("Clone", "duplicate", egui::Color32::from_rgb(33, 112, 228)),
-                                    ("Delete", "delete", egui::Color32::from_rgb(205, 48, 48)),
+                                    ("Delete", "delete", egui::Color32::from_rgb(185, 42, 42)),
                                     ("Focus", "focus", egui::Color32::from_rgb(38, 44, 58)),
-                                    ("Group", "group", egui::Color32::from_rgb(38, 44, 58)),
-                                    ("Copy", "copy", egui::Color32::from_rgb(38, 44, 58)),
+                                    ("Anchor", "anchor", egui::Color32::from_rgb(38, 44, 58)),
+                                    ("Lock", "lock", egui::Color32::from_rgb(38, 44, 58)),
                                 ] {
                                     if ui
                                         .add_sized(

@@ -491,37 +491,89 @@ impl Editor {
             )
             .show(ui, |ui| self.start_top(ui, &mut todo));
 
-        // Smooth animated collapsible left sidebar (0.0 .. 1.0 slide-in/out)
-        let nav_anim = ctx.animate_bool_with_time(
-            egui::Id::new("start_nav_slide_anim"),
-            self.start.nav_open,
-            0.18,
-        );
-        if nav_anim > 0.01 {
-            let target_w = if narrow {
-                (screen_w * 0.64).clamp(178.0, 226.0)
-            } else {
-                226.0
-            };
-            let nav_w = (target_w * nav_anim).max(16.0);
-            egui::Panel::left("start_nav")
-                .exact_size(nav_w)
-                .resizable(false)
+        // Portrait (`narrow` / `height > width`): NO left sidebar; render fixed 4-tab bottom bar instead.
+        if narrow {
+            let bar_h = 50.0 + safe_bottom;
+            let active_tab_id = egui::Id::new("start_portrait_bottom_tab");
+            let mut active_tab = ctx.data(|d| d.get_temp::<u8>(active_tab_id).unwrap_or(0));
+            egui::Panel::bottom("start_portrait_bottom_bar")
+                .exact_size(bar_h)
                 .frame(
                     egui::Frame::new()
                         .fill(crate::wallpaper::OBSIDIAN_CARD)
                         .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
                         .inner_margin(egui::Margin {
-                            left: (10.0 + safe_left).round().clamp(8.0, 80.0) as i8,
-                            right: 10,
-                            top: 14,
-                            bottom: (14.0 + safe_bottom).round().clamp(10.0, 80.0) as i8,
+                            left: 6,
+                            right: 6,
+                            top: 4,
+                            bottom: (4.0 + safe_bottom).round().clamp(4.0, 64.0) as i8,
                         }),
                 )
                 .show(ui, |ui| {
-                    ui.set_clip_rect(ui.max_rect());
-                    self.start_nav(ui, &mut todo);
+                    let w = ((ui.available_width() - 18.0) / 4.0).max(58.0);
+                    ui.horizontal_centered(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        for (idx, icon_lbl, label, jump_key) in [
+                            (0u8, "🏠", "Home", "home"),
+                            (1, "🕒", "Recent", "recent"),
+                            (2, "📁", "My Places", "mine"),
+                            (3, "👥", "Shared", "shared"),
+                        ] {
+                            let is_active = active_tab == idx;
+                            let fg = if is_active {
+                                crate::wallpaper::RUST_ORANGE
+                            } else {
+                                theme::TEXT_DIM
+                            };
+                            if ui
+                                .add_sized(
+                                    [w, 40.0],
+                                    egui::Button::new(
+                                        RichText::new(format!("{icon_lbl}\n{label}"))
+                                            .size(10.5)
+                                            .color(fg)
+                                            .strong(),
+                                    )
+                                    .fill(Color32::TRANSPARENT)
+                                    .corner_radius(8.0),
+                                )
+                                .clicked()
+                            {
+                                active_tab = idx;
+                                ctx.data_mut(|d| d.insert_temp(active_tab_id, idx));
+                                todo.push(Do::Jump(jump_key.to_string()));
+                            }
+                        }
+                    });
                 });
+        } else {
+            // Smooth animated collapsible left sidebar (Desktop / Landscape only)
+            let nav_anim = ctx.animate_bool_with_time(
+                egui::Id::new("start_nav_slide_anim"),
+                self.start.nav_open,
+                0.18,
+            );
+            if nav_anim > 0.01 {
+                let nav_w = (226.0 * nav_anim).max(16.0);
+                egui::Panel::left("start_nav")
+                    .exact_size(nav_w)
+                    .resizable(false)
+                    .frame(
+                        egui::Frame::new()
+                            .fill(crate::wallpaper::OBSIDIAN_CARD)
+                            .stroke(Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                            .inner_margin(egui::Margin {
+                                left: (10.0 + safe_left).round().clamp(8.0, 80.0) as i8,
+                                right: 10,
+                                top: 14,
+                                bottom: (14.0 + safe_bottom).round().clamp(10.0, 80.0) as i8,
+                            }),
+                    )
+                    .show(ui, |ui| {
+                        ui.set_clip_rect(ui.max_rect());
+                        self.start_nav(ui, &mut todo);
+                    });
+            }
         }
         let body_margin = if narrow {
             egui::Margin {
@@ -855,6 +907,7 @@ impl Editor {
                     .corner_radius(CornerRadius::same(16))
                     .inner_margin(egui::Margin::symmetric(16, 14));
                 let hero_shown = hero_frame.show(ui, |ui| {
+                    // ... hero contents ...
                     ui.set_width(ui.available_width());
                     ui.horizontal_wrapped(|ui| {
                         ui.vertical(|ui| {
