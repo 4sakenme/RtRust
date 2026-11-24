@@ -419,6 +419,9 @@ pub struct PlaySession {
     /// (assets::place_content_allowed).
     _scripts_running: Option<rustudio_core::assets::ScriptsRunning>,
     saved_doc: Option<Document>,
+    /// On mobile/Eco, the pre-Playtest Editor DOM is spilled to a temp `.rbxl` file
+    /// and dropped from RAM so heavy places don't hold 3× DOM copies in memory.
+    saved_doc_spill: Option<(std::path::PathBuf, Option<std::path::PathBuf>, String, u64)>,
     saved_cam: Camera,
     saved_sel: Vec<Ref>,
     server: Option<SideState>,
@@ -502,7 +505,23 @@ pub struct PlaySession {
 }
 
 impl PlaySession {
-    pub(super) fn new(mode: RunMode, saved_doc: Document, saved_cam: Camera, saved_sel: Vec<Ref>) -> Self {
+    pub(super) fn new(mode: RunMode, mut saved_doc: Document, saved_cam: Camera, saved_sel: Vec<Ref>) -> Self {
+        let mut saved_doc_opt = Some(saved_doc);
+        let mut saved_doc_spill = None;
+        if cfg!(any(target_os = "ios", target_os = "android")) {
+            if let Some(mut doc) = saved_doc_opt.take() {
+                let orig_path = doc.path.clone();
+                let orig_title = doc.title.clone();
+                let orig_id = doc.id;
+                let spill_path = std::env::temp_dir().join(format!("rtrust_play_snapshot_{orig_id}.rbxl"));
+                if doc.save_to(&spill_path).is_ok() {
+                    drop(doc);
+                    saved_doc_spill = Some((spill_path, orig_path, orig_title, orig_id));
+                } else {
+                    saved_doc_opt = Some(doc);
+                }
+            }
+        }
         Self {
             npcs: Default::default(),
             own_client: Default::default(),
@@ -510,7 +529,8 @@ impl PlaySession {
             pending_client_scripts: Default::default(),
             mode,
             _scripts_running: None,
-            saved_doc: Some(saved_doc),
+            saved_doc: saved_doc_opt,
+            saved_doc_spill,
             saved_cam,
             saved_sel,
             server: None,
@@ -1223,6 +1243,14 @@ impl Game {
         };
         if let Some(d) = s.saved_doc.take() {
             self.doc = d;
+        } else if let Some((spill_path, orig_path, orig_title, orig_id)) = s.saved_doc_spill.take() {
+            if let Ok(mut d) = Document::open(&spill_path) {
+                d.path = orig_path;
+                d.title = orig_title;
+                d.id = orig_id;
+                self.doc = d;
+            }
+            let _ = std::fs::remove_file(&spill_path);
         }
         self.doc.selection = s.saved_sel.clone();
         self.cam = s.saved_cam.clone();

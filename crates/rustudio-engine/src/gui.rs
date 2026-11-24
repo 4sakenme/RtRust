@@ -219,7 +219,17 @@ type DecodedImage = (String, Option<(egui::ColorImage, Vec<egui::ColorImage>)>);
 fn decode_gui_image(bytes: &[u8]) -> Option<(egui::ColorImage, Vec<egui::ColorImage>)> {
     let img = rustudio_core::texture::decode(bytes).ok()?;
     let size = [img.width as usize, img.height as usize];
-    let base = egui::ColorImage::from_rgba_unmultiplied(size, &img.pixels);
+    let mut base = egui::ColorImage::from_rgba_unmultiplied(size, &img.pixels);
+    // On mobile (iOS/Android), downscale oversized GUI ImageLabels/ImageButtons
+    // (<= 384px in Eco, <= 512px otherwise) and skip the 8-level CPU/GPU mipmap
+    // pyramid to prevent 2K–4K UI assets from exhausting 4 GB Jetsam memory.
+    if cfg!(any(target_os = "ios", target_os = "android")) || rustudio_core::mobile::is_eco() {
+        let max_dim = if rustudio_core::mobile::is_eco() { 384 } else { 512 };
+        while base.size[0].max(base.size[1]) > max_dim && base.size[0] >= 8 && base.size[1] >= 8 {
+            base = half_image(&base);
+        }
+        return Some((base, Vec::new()));
+    }
     let mut levels = Vec::new();
     let mut cur = base.clone();
     while levels.len() < 8 && (cur.size[0] >= 8 || cur.size[1] >= 8) {
@@ -1560,6 +1570,14 @@ impl Gui {
         self.images_decoding.insert(id.to_string());
         self.no_cache = Some("image loading");
         None
+    }
+
+    /// Purges cached GUI textures & mipmaps to reclaim GPU/CPU RAM under memory pressure.
+    pub fn purge_images(&mut self) {
+        self.images.clear();
+        self.mips.clear();
+        self.images_ready.clear();
+        self.images_decoding.clear();
     }
 
     /// Makes the textures of images decoded off the main thread, at most

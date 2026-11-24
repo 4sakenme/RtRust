@@ -443,6 +443,7 @@ impl Game {
         self.assets.purge_memory();
         self.textures.purge_unused();
         self.meshes.purge_unused();
+        self.gui.purge_images();
         rustudio_engine::runtime::domains::media::purge_pcm_cache();
         if let Some(play) = self.play.as_ref() {
             play.gc_collect();
