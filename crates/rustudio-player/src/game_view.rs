@@ -592,6 +592,7 @@ impl Game {
             .as_ref()
             .and_then(|p| p.parent())
             .map(|p| p.to_path_buf());
+        let cam_pos = self.cam.pos;
         let Game { scene, assets, render_state, renderer, meshes, textures, clothing_meshes, draw_cache, .. } = self;
         let (Some(renderer), Some(rs)) = (renderer.as_mut(), render_state.as_ref()) else {
             return;
@@ -664,6 +665,40 @@ impl Game {
             changes.changed
         };
         todo.extend(restyle_full);
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        if !layered {
+            let moved_far = draw_cache
+                .last_stream_cam
+                .is_none_or(|p| (p - cam_pos).length_squared() > 16.0 * 16.0);
+            if moved_far || changes.full {
+                draw_cache.last_stream_cam = Some(cam_pos);
+                let mut wake = Vec::new();
+                for &r in draw_cache.distant.iter().chain(draw_cache.unloaded.iter()) {
+                    if let Some(sp) = scene.get(r) {
+                        let dist = (sp.draw.xf.pos - cam_pos).length() - sp.draw.size.length() * 0.5;
+                        if dist <= 200.0 {
+                            wake.push(r);
+                        }
+                    }
+                }
+                for r in wake {
+                    draw_cache.distant.remove(&r);
+                    draw_cache.unloaded.remove(&r);
+                    todo.push(r);
+                }
+                let mut evict = Vec::new();
+                for (&r, xf) in &draw_cache.xf {
+                    if (xf.pos - cam_pos).length() > 350.0 {
+                        evict.push(r);
+                    }
+                }
+                for r in evict {
+                    renderer.set_item(r, Vec::new());
+                    draw_cache.forget(r);
+                    draw_cache.unloaded.insert(r);
+                }
+            }
+        }
         if regen {
             // A part waiting only on textures is redone when one of them can
             // get further (downloaded, decoded or failed), not each time any
@@ -699,6 +734,25 @@ impl Game {
         todo.extend(drawers);
         let mut seen = std::collections::HashSet::new();
         todo.retain(|r| seen.insert(*r));
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        if !layered && todo.len() > 1 {
+            // Spatial ring priority: stream 0-120 studs first, then mid-ring.
+            todo.sort_by(|a, b| {
+                let da = scene
+                    .get(*a)
+                    .map_or(f32::MAX, |sp| (sp.draw.xf.pos - cam_pos).length_squared());
+                let db = scene
+                    .get(*b)
+                    .map_or(f32::MAX, |sp| (sp.draw.xf.pos - cam_pos).length_squared());
+                da.total_cmp(&db)
+            });
+        }
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        let defer_radius = if rustudio_core::assets::outer_streaming_paused() {
+            120.0
+        } else {
+            250.0
+        };
         for r in todo {
             let Some(sp) = scene.get(r) else { continue };
             renderer.set_layer(r, sp.layer);
@@ -706,6 +760,28 @@ impl Game {
             if rustudio_render::wrap::is_layered_handle(&self.doc, r) {
                 renderer.set_item(r, Vec::new());
                 continue;
+            }
+            #[cfg(any(target_os = "ios", target_os = "android"))]
+            if !layered {
+                let dist = (sp.draw.xf.pos - cam_pos).length() - sp.draw.size.length() * 0.5;
+                if dist > 350.0 {
+                    renderer.set_item(r, Vec::new());
+                    draw_cache.unloaded.insert(r);
+                    continue;
+                }
+                if dist > defer_radius
+                    && (sp.mesh_asset.is_some()
+                        || sp.texture_id.is_some()
+                        || sp.surface.is_some()
+                        || !sp.decals.is_empty())
+                {
+                    draw_cache.distant.insert(r);
+                    renderer.set_item(r, vec![sp.draw]);
+                    draw_cache.set(r, sp.xf, [0, 0, 0, 0], false);
+                    continue;
+                }
+                draw_cache.distant.remove(&r);
+                draw_cache.unloaded.remove(&r);
             }
             let mut d = sp.draw;
             let mut extra = Vec::new();
@@ -3119,6 +3195,11 @@ pub struct DrawCache {
     style: std::collections::HashMap<Ref, ([f32; 3], bool)>,
     /// Waiting parts held up only by these textures.
     wait_tex: std::collections::HashMap<Ref, Vec<String>>,
+    /// Mobile distance streaming: parts beyond 200 studs waiting to stream assets.
+    pub distant: std::collections::HashSet<Ref>,
+    /// Mobile distance streaming: parts beyond 350 studs unloaded from active draws.
+    pub unloaded: std::collections::HashSet<Ref>,
+    pub last_stream_cam: Option<Vec3>,
     totals: [usize; 4],
 }
 
@@ -3150,6 +3231,8 @@ impl DrawCache {
         self.waiting.remove(&r);
         self.style.remove(&r);
         self.wait_tex.remove(&r);
+        self.distant.remove(&r);
+        self.unloaded.remove(&r);
     }
 
     pub fn totals(&self) -> [usize; 4] {

@@ -439,6 +439,7 @@ impl Game {
 
     /// Purges unused CPU-side asset caches and runs Luau GC (used on iOS memory warnings).
     pub fn purge_unused_caches(&mut self) {
+        rustudio_core::assets::pause_outer_streaming();
         self.assets.purge_memory();
         self.textures.purge_unused();
         self.meshes.purge_unused();

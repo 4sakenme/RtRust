@@ -1294,7 +1294,9 @@ const MAX_MOBILE_ASSETS_PER_FRAME: usize = 2;
 /// Loaded meshes by content id (None = failed for good).
 #[derive(Default)]
 pub struct MeshCache {
-    entries: HashMap<String, Option<LoadedMesh>>,
+    entries: HashMap<String, Option<Arc<LoadedMesh>>>,
+    /// Deduplicates GPU mesh allocations across variant keys by numeric AssetId.
+    shared_by_id: HashMap<u64, std::sync::Weak<LoadedMesh>>,
     /// Per id: its bytes are in a Roblox mesh format (mesh::studio_format).
     roblox_format: HashMap<String, bool>,
     /// Why an entry is None (fetch or parse error).
@@ -1344,7 +1346,7 @@ impl MeshCache {
         }
         let key = format!("{id}#novc");
         if let Some(e) = self.entries.get(&key) {
-            return *e;
+            return e.as_deref().copied();
         }
         let mut dropped = |p: &[Vec3], n: &[Vec3], u: &[Vec2], _c: &[glam::Vec4], planes: &[glam::Vec4]| upload(p, n, u, &[], planes);
         // (loaded apart from a MeshPart's coloured copy of the same mesh)
@@ -1359,7 +1361,7 @@ impl MeshCache {
             bump_mesh_generation();
         }
         if got.is_some() || failed {
-            self.entries.insert(key, got);
+            self.entries.insert(key, got.map(Arc::new));
             bump_mesh_generation();
         }
         got
@@ -1373,7 +1375,7 @@ impl MeshCache {
         upload: &mut MeshUpload,
     ) -> Option<LoadedMesh> {
         if let Some(spec) = id.strip_prefix("rustudio-truss:") {
-            if let Some(cached) = self.entries.get(id) { return *cached; }
+            if let Some(cached) = self.entries.get(id) { return cached.as_deref().copied(); }
             let fields: Vec<_> = spec.split(':').collect();
             if fields.len() != 4 { return None; }
             let size = Vec3::new(
@@ -1383,7 +1385,7 @@ impl MeshCache {
             );
             let (p, n, uv) = crate::truss::generate(size, fields[3].parse().ok()?);
             let mesh = LoadedMesh { index: upload(&p, &n, &uv, &[], &[]), extent: size, center: Vec3::ZERO };
-            self.entries.insert(id.to_owned(), Some(mesh));
+            self.entries.insert(id.to_owned(), Some(Arc::new(mesh)));
             bump_mesh_generation();
             return Some(mesh);
         }
@@ -1391,7 +1393,16 @@ impl MeshCache {
             return None;
         }
         if let Some(e) = self.entries.get(id) {
-            return *e;
+            return e.as_deref().copied();
+        }
+        if !id.ends_with("#partcolor") {
+            if let Some(a) = asset_ref(id) {
+                if let Some(shared) = self.shared_by_id.get(&a.id).and_then(|w| w.upgrade()) {
+                    let val = *shared;
+                    self.entries.insert(id.to_string(), Some(shared));
+                    return Some(val);
+                }
+            }
         }
         let loaded = match store.content(id, doc_dir) {
             Fetch::Pending => return None,
@@ -1447,7 +1458,11 @@ impl MeshCache {
                 out
             }
         };
-        self.entries.insert(id.to_string(), loaded);
+        let arc = loaded.map(Arc::new);
+        if let (Some(a), Some(ref shared)) = ((!id.ends_with("#partcolor")).then(|| asset_ref(id)).flatten(), &arc) {
+            self.shared_by_id.insert(a.id, Arc::downgrade(shared));
+        }
+        self.entries.insert(id.to_string(), arc);
         bump_mesh_generation();
         loaded
     }
@@ -1460,14 +1475,14 @@ impl MeshCache {
             return None;
         }
         if let Some(Some(m)) = self.entries.get(id) {
-            return Some(*m);
+            return Some(**m);
         }
         let (verts, extent) = crate::editable_source::live_build(id)?;
         if verts.is_empty() {
             return None;
         }
         let m = LoadedMesh { index: upload(&verts), extent, center: Vec3::ZERO };
-        self.entries.insert(id.to_string(), Some(m));
+        self.entries.insert(id.to_string(), Some(Arc::new(m)));
         bump_mesh_generation();
         Some(m)
     }
@@ -1484,7 +1499,7 @@ impl MeshCache {
 
     /// The loaded mesh of `id`, if any.
     pub fn loaded(&self, id: &str) -> Option<LoadedMesh> {
-        self.entries.get(id).copied().flatten()
+        self.entries.get(id).and_then(|o| o.as_deref().copied())
     }
 
     /// Drops `id` so it loads again.
@@ -1511,6 +1526,7 @@ impl MeshCache {
         self.reasons.clear();
         self.roblox_format.clear();
         self.entries.retain(|_, v| v.is_some());
+        self.shared_by_id.retain(|_, w| w.strong_count() > 0);
     }
 
     /// Loaded (Ok), failed (Err with why), or never asked for (None).
@@ -1525,7 +1541,29 @@ impl MeshCache {
 
 /// RUSTUDIO_SYNC_DECODE=1 (and --fixed-dt) decodes in the requesting frame.
 /// Texture upload time per frame before further uploads wait a frame.
+#[cfg(any(target_os = "ios", target_os = "android"))]
+const UPLOAD_BUDGET_MS: f32 = 4.0;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 const UPLOAD_BUDGET_MS: f32 = 6.0;
+
+static STREAMING_PAUSED_UNTIL: std::sync::Mutex<Option<std::time::Instant>> =
+    std::sync::Mutex::new(None);
+
+/// Temporarily pauses outer-ring asset streaming for 3 seconds after a memory warning.
+pub fn pause_outer_streaming() {
+    if let Ok(mut g) = STREAMING_PAUSED_UNTIL.lock() {
+        *g = Some(std::time::Instant::now() + std::time::Duration::from_secs(3));
+    }
+}
+
+/// Returns `true` while outer-ring asset streaming is paused due to memory pressure.
+pub fn outer_streaming_paused() -> bool {
+    STREAMING_PAUSED_UNTIL
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        .is_some_and(|until| std::time::Instant::now() < until)
+}
 
 /// Texture bytes (level 0 and mip chain) uploaded per frame before further
 /// uploads wait a frame. With the mip chains made on the decode workers an
@@ -1578,7 +1616,9 @@ const LOOSE_PIXELS_BYTES: usize = 64 << 20;
 
 #[derive(Default)]
 pub struct TextureCache {
-    entries: HashMap<String, Option<LoadedTexture>>,
+    entries: HashMap<String, Option<Arc<LoadedTexture>>>,
+    /// Deduplicates GPU texture allocations across content strings by numeric AssetId.
+    shared_by_id: HashMap<u64, std::sync::Weak<LoadedTexture>>,
     /// Why an entry is None (fetch or decode error).
     reasons: HashMap<String, String>,
     /// Composites (clothing): key → GPU index.
@@ -1624,16 +1664,16 @@ impl TextureCache {
         let held = self.editable_gens.get(base).copied();
         if held.is_some_and(|h| h >= gen) {
             if let Some(Some(t)) = self.entries.get(base) {
-                return Some(t.clone());
+                return Some(**t);
             }
         }
         let Some((now, img)) = crate::editable_source::image_pixels(id) else {
-            return self.entries.get(base).cloned().flatten();
+            return self.entries.get(base).and_then(|o| o.as_deref().copied());
         };
-        let reuse = self.entries.get(base).and_then(|t| t.map(|t| t.index));
+        let reuse = self.entries.get(base).and_then(|t| t.as_deref().map(|t| t.index));
         let index = upload(&img, reuse);
         let t = LoadedTexture { index, width: img.width, height: img.height };
-        self.entries.insert(base.to_string(), Some(t));
+        self.entries.insert(base.to_string(), Some(Arc::new(t)));
         self.editable_gens.insert(base.to_string(), now.max(gen));
         Some(t)
     }
@@ -1652,7 +1692,14 @@ impl TextureCache {
             return None;
         }
         if let Some(e) = self.entries.get(id) {
-            return *e;
+            return e.as_deref().copied();
+        }
+        if let Some(a) = asset_ref(id) {
+            if let Some(shared) = self.shared_by_id.get(&a.id).and_then(|w| w.upgrade()) {
+                let val = *shared;
+                self.entries.insert(id.to_string(), Some(shared));
+                return Some(val);
+            }
         }
         if self.decoding.contains(id) {
             return None;
@@ -1747,7 +1794,11 @@ impl TextureCache {
                 }
             },
         };
-        self.entries.insert(id.to_string(), loaded);
+        let arc = loaded.map(Arc::new);
+        if let (Some(a), Some(ref shared)) = (asset_ref(id), &arc) {
+            self.shared_by_id.insert(a.id, Arc::downgrade(shared));
+        }
+        self.entries.insert(id.to_string(), arc);
         loaded
     }
 
@@ -1837,6 +1888,7 @@ impl TextureCache {
         self.loose.clear();
         self.loose_bytes = 0;
         self.pixels.retain(|k, _| self.pinned.contains(k));
+        self.shared_by_id.retain(|_, w| w.strong_count() > 0);
     }
 
     /// Loaded (Ok), failed (Err with why), or never asked for (None).

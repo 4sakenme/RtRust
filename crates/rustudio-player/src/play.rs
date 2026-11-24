@@ -496,6 +496,9 @@ pub struct PlaySession {
     /// The client refs of the physics skip set (play_game.rs `own_parts`),
     /// with the fingerprint of the set and map sizes it was mapped from.
     pub(crate) own_client: std::cell::RefCell<Option<((u64, usize, u64), rustc_hash::FxHashSet<Ref>)>>,
+    /// Staggered Playtest boot queues (max 3 scripts/frame on mobile).
+    pending_server_scripts: std::collections::VecDeque<Ref>,
+    pending_client_scripts: std::collections::VecDeque<Ref>,
 }
 
 impl PlaySession {
@@ -503,6 +506,8 @@ impl PlaySession {
         Self {
             npcs: Default::default(),
             own_client: Default::default(),
+            pending_server_scripts: Default::default(),
+            pending_client_scripts: Default::default(),
             mode,
             _scripts_running: None,
             saved_doc: Some(saved_doc),
@@ -1063,12 +1068,27 @@ impl Game {
         // Server scripts start first, as on a real server; the player joins
         // after (so Players:GetPlayers() is empty when they start).
         let server_scripts = self.server_scripts(None);
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        let mut deferred_srv = std::collections::VecDeque::new();
         self.with_side(Side::Server, |rt, _, _| {
+            #[cfg(any(target_os = "ios", target_os = "android"))]
+            {
+                let mut iter = server_scripts.into_iter();
+                for r in iter.by_ref().take(3) {
+                    rt.start_collected(r);
+                }
+                deferred_srv.extend(iter);
+            }
+            #[cfg(not(any(target_os = "ios", target_os = "android")))]
             for r in server_scripts {
                 rt.start_collected(r);
             }
             rt.dispatch();
         });
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        if let Some(s) = self.play.as_mut() {
+            s.pending_server_scripts.extend(deferred_srv);
+        }
         rustudio_core::load_trace::mark("play: server scripts started");
         if two {
             self.create_player();
@@ -1463,12 +1483,27 @@ impl Game {
             }
         }
         self.sync_view_size();
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        let mut deferred_cli = std::collections::VecDeque::new();
         self.with_side(Side::Client, |rt, _, _| {
+            #[cfg(any(target_os = "ios", target_os = "android"))]
+            {
+                let mut iter = local.into_iter();
+                for r in iter.by_ref().take(3) {
+                    rt.start_collected(r);
+                }
+                deferred_cli.extend(iter);
+            }
+            #[cfg(not(any(target_os = "ios", target_os = "android")))]
             for r in local {
                 rt.start_collected(r);
             }
             rt.dispatch();
         });
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        if let Some(s) = self.play.as_mut() {
+            s.pending_client_scripts.extend(deferred_cli);
+        }
     }
 
     /// Frees what each side's scripts can no longer reach (Runtime::collect),
@@ -2944,6 +2979,43 @@ impl Game {
     }
 
     pub(crate) fn step_play(&mut self, dt: f32, host: &mut dyn GameHost, keyboard: &PlayKeyboard, render_in_parallel: bool) -> bool {
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        {
+            const MAX_BOOT_SCRIPTS_PER_FRAME: usize = 3;
+            let (srv_batch, cli_batch) = if let Some(s) = self.play.as_mut() {
+                let mut sb = Vec::new();
+                for _ in 0..MAX_BOOT_SCRIPTS_PER_FRAME {
+                    if let Some(r) = s.pending_server_scripts.pop_front() {
+                        sb.push(r);
+                    }
+                }
+                let mut cb = Vec::new();
+                for _ in 0..MAX_BOOT_SCRIPTS_PER_FRAME {
+                    if let Some(r) = s.pending_client_scripts.pop_front() {
+                        cb.push(r);
+                    }
+                }
+                (sb, cb)
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            if !srv_batch.is_empty() {
+                self.with_side(Side::Server, |rt, _, _| {
+                    for r in srv_batch {
+                        rt.start_collected(r);
+                    }
+                    rt.dispatch();
+                });
+            }
+            if !cli_batch.is_empty() {
+                self.with_side(Side::Client, |rt, _, _| {
+                    for r in cli_batch {
+                        rt.start_collected(r);
+                    }
+                    rt.dispatch();
+                });
+            }
+        }
         let mut dt = dt;
         let mut display_keys = None;
         if let Some((phase, deferred)) = self.play.as_mut().and_then(|s| s.server_phase.take()) {
