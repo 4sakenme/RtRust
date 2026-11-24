@@ -513,11 +513,11 @@ impl Editor {
                     let w = ((ui.available_width() - 18.0) / 4.0).max(58.0);
                     ui.horizontal_centered(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
-                        for (idx, icon_lbl, label, jump_key) in [
-                            (0u8, "🏠", "Home", "home"),
-                            (1, "🕒", "Recent", "recent"),
-                            (2, "📁", "My Places", "mine"),
-                            (3, "👥", "Shared", "shared"),
+                        for (idx, icon_name, label, jump_key) in [
+                            (0u8, "home", "Home", "home"),
+                            (1, "clock", "Recent", "files"),
+                            (2, "folder", "My Places", "mine"),
+                            (3, "users", "Shared", "shared"),
                         ] {
                             let is_active = active_tab == idx;
                             let fg = if is_active {
@@ -525,20 +525,26 @@ impl Editor {
                             } else {
                                 theme::TEXT_DIM
                             };
-                            if ui
-                                .add_sized(
-                                    [w, 40.0],
-                                    egui::Button::new(
-                                        RichText::new(format!("{icon_lbl}\n{label}"))
-                                            .size(10.5)
-                                            .color(fg)
-                                            .strong(),
-                                    )
-                                    .fill(Color32::TRANSPARENT)
-                                    .corner_radius(8.0),
-                                )
-                                .clicked()
-                            {
+                            let (r, resp) = ui.allocate_exact_size(
+                                Vec2::new(w, 40.0),
+                                Sense::click(),
+                            );
+                            if resp.hovered() {
+                                ui.painter().rect_filled(r, CornerRadius::same(8), theme::HOVER_BG);
+                            }
+                            let icon_rect = Rect::from_center_size(
+                                Pos2::new(r.center().x, r.min.y + 13.0),
+                                Vec2::splat(16.0),
+                            );
+                            rustudio_engine::ti::paint(ui.painter(), icon_rect, icon_name, fg);
+                            ui.painter().text(
+                                Pos2::new(r.center().x, r.max.y - 8.5),
+                                egui::Align2::CENTER_CENTER,
+                                label,
+                                egui::FontId::proportional(10.5),
+                                fg,
+                            );
+                            if resp.clicked() {
                                 active_tab = idx;
                                 ctx.data_mut(|d| d.insert_temp(active_tab_id, idx));
                                 todo.push(Do::Jump(jump_key.to_string()));
@@ -638,27 +644,30 @@ impl Editor {
     }
 
     fn start_top(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
+        let narrow = ui.ctx().content_rect().width() < 600.0;
         ui.horizontal_centered(|ui| {
-            let arrow = if self.start.nav_open { "◀" } else { "☰" };
-            if ui
-                .add(
-                    egui::Button::new(
-                        RichText::new(arrow)
-                            .size(14.5)
-                            .strong()
-                            .color(crate::wallpaper::PASTEL_LAVENDER),
+            if !narrow {
+                let arrow = if self.start.nav_open { "◀" } else { "☰" };
+                if ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new(arrow)
+                                .size(14.5)
+                                .strong()
+                                .color(crate::wallpaper::PASTEL_LAVENDER),
+                        )
+                        .fill(Color32::from_rgba_unmultiplied(34, 37, 48, 220))
+                        .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.45)))
+                        .corner_radius(CornerRadius::same(8))
+                        .min_size(Vec2::new(32.0, 30.0)),
                     )
-                    .fill(Color32::from_rgba_unmultiplied(34, 37, 48, 220))
-                    .stroke(Stroke::new(1.0, crate::wallpaper::PASTEL_LAVENDER.gamma_multiply(0.45)))
-                    .corner_radius(CornerRadius::same(8))
-                    .min_size(Vec2::new(32.0, 30.0)),
-                )
-                .on_hover_text(if self.start.nav_open { "Hide sidebar" } else { "Open navigation drawer" })
-                .clicked()
-            {
-                self.start.nav_open = !self.start.nav_open;
+                    .on_hover_text(if self.start.nav_open { "Hide sidebar" } else { "Open navigation drawer" })
+                    .clicked()
+                {
+                    self.start.nav_open = !self.start.nav_open;
+                }
+                ui.add_space(6.0);
             }
-            ui.add_space(6.0);
             crate::icons::logo(ui, 24.0);
             if ui.available_width() > 260.0 {
                 ui.add_space(4.0);
@@ -943,7 +952,7 @@ impl Editor {
                             if ui
                                 .add_enabled(
                                     !self.start.busy(),
-                                    egui::Button::new(RichText::new("↻ Refresh").color(Color32::WHITE))
+                                    egui::Button::new(RichText::new("Refresh").color(Color32::WHITE))
                                         .fill(crate::wallpaper::SLATE_PILL_BG)
                                         .stroke(Stroke::new(1.0, crate::wallpaper::SLATE_PILL_BORDER))
                                         .corner_radius(CornerRadius::same(12)),
@@ -962,7 +971,7 @@ impl Editor {
                         ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
                         // Primary pill: Solid vibrant Rust Orange-Red (#FF5A26) with crisp white text
                         let new_btn = egui::Button::new(
-                            RichText::new("🚀 + New Baseplate")
+                            RichText::new("+ New Baseplate")
                                 .size(12.5)
                                 .strong()
                                 .color(Color32::WHITE),
@@ -977,8 +986,8 @@ impl Editor {
                         // Secondary action pills: Sleek dark-slate (#222632) with orange/cyan accents
                         for (icon, label, action) in [
                             ("</>", "Focus Code IDE", 4u8),
-                            ("📂", "Open .rbxl File", 1u8),
-                            ("⚙", "Studio Settings", 3u8),
+                            ("", "Open .rbxl", 1u8),
+                            ("", "Themes", 3u8),
                         ] {
                             let mut job = egui::text::LayoutJob::default();
                             job.append(
@@ -1144,7 +1153,13 @@ impl Editor {
 
     fn start_home(&mut self, ui: &mut egui::Ui, todo: &mut Vec<Do>) {
         let searching = !self.start.search.trim().is_empty();
-        self.start_templates_section(ui, searching, todo);
+
+        // Recent local .rbxl files first so mobile users see their recent projects immediately.
+        let files = self.ui.recent.iter().filter(|p| self.matches(&p.display().to_string())).count();
+        if !(searching && files == 0) && self.fold_header(ui, "files", "Recent Files", Some(files.to_string()), todo) {
+            self.start_files(ui, usize::MAX, todo);
+            ui.add_space(8.0);
+        }
 
         // Recently opened from Roblox (the download cache's list).
         let recent: Vec<_> = self
@@ -1154,7 +1169,7 @@ impl Editor {
             .into_iter()
             .filter(|r| self.matches(&r.origin.name) || self.matches(&r.origin.experience))
             .collect();
-        if !(searching && recent.is_empty()) && self.fold_header(ui, "recent", "Recent", Some(recent.len().to_string()), todo) {
+        if !(searching && recent.is_empty()) && self.fold_header(ui, "recent", "Recent Places", Some(recent.len().to_string()), todo) {
             if recent.is_empty() {
                 ui.label(
                     RichText::new("Places you open from Roblox show up here.").color(theme::TEXT_DIM),
@@ -1210,11 +1225,7 @@ impl Editor {
             ui.add_space(8.0);
         }
 
-        let files = self.ui.recent.iter().filter(|p| self.matches(&p.display().to_string())).count();
-        if !(searching && files == 0) && self.fold_header(ui, "files", "Recent Files", Some(files.to_string()), todo) {
-            self.start_files(ui, usize::MAX, todo);
-            ui.add_space(8.0);
-        }
+        self.start_templates_section(ui, searching, todo);
 
         // My Experiences, Shared with Me, then each group.
         let mut lists: Vec<(String, String, ExperienceSource, String)> = vec![

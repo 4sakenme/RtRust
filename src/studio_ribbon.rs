@@ -1147,36 +1147,44 @@ impl Editor {
                         let is_exp = self.ui.portrait_explorer_drawer;
                         let is_out = self.ui.portrait_output_drawer;
 
-                        for (idx, icon_lbl, label, active) in [
-                            (0u8, "🌐", "Workspace", is_ws),
-                            (1, "</>", "Code", is_code),
-                            (2, "☰", "Explorer", is_exp),
-                            (3, "📟", "Output", is_out),
+                        for (idx, icon_name, label, active) in [
+                            (0u8, "world", "Workspace", is_ws),
+                            (1, "code", "Code", is_code),
+                            (2, "list-tree", "Explorer", is_exp),
+                            (3, "terminal-2", "Output", is_out),
                         ] {
+                            let (r, resp) = ui.allocate_exact_size(
+                                egui::vec2(item_w, 38.0),
+                                egui::Sense::click(),
+                            );
                             let bg = if active {
                                 if idx == 0 {
                                     crate::wallpaper::RUST_ORANGE
                                 } else {
                                     crate::wallpaper::STUDIO_BLUE
                                 }
+                            } else if resp.hovered() {
+                                theme::HOVER_BG
                             } else {
                                 Color32::TRANSPARENT
                             };
                             let fg = if active { Color32::WHITE } else { theme::TEXT_DIM };
-                            if ui
-                                .add_sized(
-                                    [item_w, 38.0],
-                                    egui::Button::new(
-                                        egui::RichText::new(format!("{icon_lbl}\n{label}"))
-                                            .size(10.5)
-                                            .color(fg)
-                                            .strong(),
-                                    )
-                                    .fill(bg)
-                                    .corner_radius(8.0),
-                                )
-                                .clicked()
-                            {
+                            if bg != Color32::TRANSPARENT {
+                                ui.painter().rect_filled(r, egui::CornerRadius::same(8), bg);
+                            }
+                            let icon_rect = egui::Rect::from_center_size(
+                                egui::pos2(r.center().x, r.min.y + 12.5),
+                                egui::vec2(16.0, 16.0),
+                            );
+                            rustudio_engine::ti::paint(ui.painter(), icon_rect, icon_name, fg);
+                            ui.painter().text(
+                                egui::pos2(r.center().x, r.max.y - 8.5),
+                                egui::Align2::CENTER_CENTER,
+                                label,
+                                egui::FontId::proportional(10.0),
+                                fg,
+                            );
+                            if resp.clicked() {
                                 match idx {
                                     0 => {
                                         self.ui.portrait_tab = PortraitTab::Viewport;
@@ -1200,20 +1208,32 @@ impl Editor {
                         }
 
                         // Square #FF5A26 `+ Tools` button on far right
-                        if ui
-                            .add_sized(
-                                [item_w, 38.0],
-                                egui::Button::new(
-                                    egui::RichText::new("+\nTools")
-                                        .size(10.5)
-                                        .color(Color32::WHITE)
-                                        .strong(),
-                                )
-                                .fill(crate::wallpaper::RUST_ORANGE)
-                                .corner_radius(8.0),
-                            )
-                            .clicked()
-                        {
+                        let (tr, tresp) = ui.allocate_exact_size(
+                            egui::vec2(item_w, 38.0),
+                            egui::Sense::click(),
+                        );
+                        ui.painter().rect_filled(
+                            tr,
+                            egui::CornerRadius::same(8),
+                            if tresp.hovered() {
+                                crate::wallpaper::RUST_ORANGE_HOVER
+                            } else {
+                                crate::wallpaper::RUST_ORANGE
+                            },
+                        );
+                        let t_icon_rect = egui::Rect::from_center_size(
+                            egui::pos2(tr.center().x, tr.min.y + 12.5),
+                            egui::vec2(16.0, 16.0),
+                        );
+                        rustudio_engine::ti::paint(ui.painter(), t_icon_rect, "plus", Color32::WHITE);
+                        ui.painter().text(
+                            egui::pos2(tr.center().x, tr.max.y - 8.5),
+                            egui::Align2::CENTER_CENTER,
+                            "Tools",
+                            egui::FontId::proportional(10.0),
+                            Color32::WHITE,
+                        );
+                        if tresp.clicked() {
                             self.ui.portrait_quick_grid_open = !self.ui.portrait_quick_grid_open;
                         }
                     });
