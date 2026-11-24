@@ -190,6 +190,24 @@ impl Editor {
                 self.mcp_top_button(ui);
                 // (and File Sync left of MCP)
                 self.file_sync_top_button(ui);
+                if ui
+                    .add(
+                        egui::Button::new(
+                            egui::RichText::new("</> Focus Code")
+                                .size(11.5)
+                                .strong()
+                                .color(crate::wallpaper::LOGO_CYAN),
+                        )
+                        .fill(Color32::from_rgb(28, 34, 46))
+                        .stroke(egui::Stroke::new(1.0, crate::wallpaper::LOGO_CYAN.gamma_multiply(0.45)))
+                        .corner_radius(6.0),
+                    )
+                    .on_hover_text("Enter pure Focus Code IDE (hides 3D)")
+                    .clicked()
+                {
+                    self.ui.focus_code_mode = true;
+                    self.ui.viewport_hidden = true;
+                }
             });
         });
     }
@@ -1855,6 +1873,27 @@ impl Editor {
                         self.ui.portrait_quick_grid_open = false;
                     }
 
+                    // Focus Code IDE pill (enters pure Code IDE without 3D rendering)
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("</> Code IDE")
+                                    .size(11.5)
+                                    .strong()
+                                    .color(crate::wallpaper::LOGO_CYAN),
+                            )
+                            .fill(Color32::from_rgba_unmultiplied(28, 34, 46, 220))
+                            .stroke(egui::Stroke::new(1.0, crate::wallpaper::LOGO_CYAN.gamma_multiply(0.45)))
+                            .corner_radius(13.0)
+                            .min_size(Vec2::new(78.0, 26.0)),
+                        )
+                        .on_hover_text("Switch to pure Focus Code IDE (hides 3D)")
+                        .clicked()
+                    {
+                        self.ui.focus_code_mode = true;
+                        self.ui.viewport_hidden = true;
+                    }
+
                     // Play / Stop compact button
                     let playing = self.game.play.is_some();
                     if playing {
@@ -2277,24 +2316,42 @@ impl Editor {
                 });
         }
 
-        // Optional Output Drawer at bottom of left workspace pane when toggled
+        // Optional Resizable Output Drawer at bottom of left workspace pane when toggled
         if self.ui.portrait_output_drawer {
-            let out_h = (screen_rect.height() * 0.34).clamp(115.0, 240.0);
+            let max_out_h = (screen_rect.height() * 0.65).max(160.0);
+            self.ui.output_height = self.ui.output_height.clamp(90.0, max_out_h);
             egui::Panel::bottom("landscape_output_drawer")
-                .exact_size(out_h)
+                .exact_size(self.ui.output_height)
                 .frame(
                     egui::Frame::new()
-                        .fill(Color32::from_rgba_unmultiplied(20, 22, 30, 242))
-                        .stroke(egui::Stroke::new(1.0, crate::wallpaper::PASTEL_SKY.gamma_multiply(0.4)))
+                        .fill(Color32::from_rgba_unmultiplied(20, 22, 30, 244))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 28)))
                         .inner_margin(egui::Margin::symmetric(8, 4)),
                 )
                 .show(ui, |ui| {
+                    let (grip_rect, grip_resp) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), 10.0),
+                        egui::Sense::drag(),
+                    );
+                    if grip_resp.dragged() {
+                        self.ui.output_height = (self.ui.output_height - grip_resp.drag_delta().y)
+                            .clamp(90.0, max_out_h);
+                    }
+                    ui.painter().rect_filled(
+                        egui::Rect::from_center_size(grip_rect.center(), egui::vec2(48.0, 3.0)),
+                        2.0,
+                        if grip_resp.hovered() || grip_resp.dragged() {
+                            crate::wallpaper::LOGO_CYAN
+                        } else {
+                            Color32::from_rgb(80, 88, 108)
+                        },
+                    );
                     ui.horizontal(|ui| {
                         ui.label(
                             egui::RichText::new("📟 Output")
                                 .strong()
                                 .size(12.0)
-                                .color(crate::wallpaper::PASTEL_SKY),
+                                .color(crate::wallpaper::LOGO_CYAN),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.small_button("✕").clicked() {
@@ -2940,6 +2997,464 @@ impl Editor {
             });
 
         ctx.data_mut(|d| d.insert_temp(perf_id, open));
+    }
+
+    /// Pure Focus Code IDE mode: skips 3D rendering completely, shows Code Editor,
+    /// draggable/dockable Explorer (Left / Right / Bottom + ghost preview + corner resize),
+    /// and a full-width vertically resizable Output drawer.
+    pub fn focus_code_ide_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &egui::Context,
+        screen_rect: egui::Rect,
+    ) {
+        use crate::studio_ui::ExplorerDockSide;
+
+        // Sync any scripts opened from Explorer
+        for r in std::mem::take(&mut self.open_script) {
+            if !self.ui.portrait_open_scripts.contains(&r) {
+                self.ui.portrait_open_scripts.push(r);
+            }
+            self.ui.portrait_active_script = Some(r);
+        }
+        self.ui
+            .portrait_open_scripts
+            .retain(|r| self.game.doc.dom.get_by_ref(*r).is_some());
+        if self.ui.portrait_active_script.is_none() {
+            self.ui.portrait_active_script = self.ui.portrait_open_scripts.first().copied();
+        }
+
+        let (safe_top, safe_bottom, safe_left, safe_right) = crate::platform::get_safe_area_insets();
+        let top_pad = (4.0 + safe_top * 0.35).round().clamp(3.0, 48.0) as i8;
+        let side_left = (8.0 + safe_left).round().clamp(6.0, 120.0) as i8;
+        let side_right = (8.0 + safe_right).round().clamp(6.0, 120.0) as i8;
+
+        // 1. IDE Top Bar
+        egui::Panel::top("focus_code_top_bar")
+            .exact_size(40.0 + top_pad as f32)
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(15, 17, 24))
+                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(36, 40, 52)))
+                    .inner_margin(egui::Margin {
+                        left: side_left,
+                        right: side_right,
+                        top: top_pad,
+                        bottom: 4,
+                    }),
+            )
+            .show(ui, |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 0.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("← 3D Studio")
+                                    .size(12.0)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(crate::wallpaper::RUST_ORANGE)
+                            .corner_radius(8.0)
+                            .min_size(Vec2::new(88.0, 26.0)),
+                        )
+                        .clicked()
+                    {
+                        self.ui.focus_code_mode = false;
+                        self.ui.viewport_hidden = false;
+                    }
+
+                    ui.label(
+                        egui::RichText::new("Focus Code IDE")
+                            .strong()
+                            .size(12.5)
+                            .color(crate::wallpaper::LOGO_CYAN),
+                    );
+
+                    if ui
+                        .add(
+                            egui::Button::new(egui::RichText::new("+ Script").size(11.5).color(Color32::WHITE))
+                                .fill(Color32::from_rgb(34, 38, 50))
+                                .corner_radius(6.0),
+                        )
+                        .clicked()
+                    {
+                        self.ui_action(ctx, "script");
+                    }
+
+                    let exp_open_id = egui::Id::new("focus_code_explorer_open");
+                    let mut exp_open = ctx.data(|d| d.get_temp::<bool>(exp_open_id).unwrap_or(true));
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Explorer")
+                                    .size(11.5)
+                                    .color(if exp_open { Color32::BLACK } else { Color32::WHITE }),
+                            )
+                            .fill(if exp_open {
+                                crate::wallpaper::LOGO_CYAN
+                            } else {
+                                Color32::from_rgb(34, 38, 50)
+                            })
+                            .corner_radius(6.0),
+                        )
+                        .clicked()
+                    {
+                        exp_open = !exp_open;
+                        ctx.data_mut(|d| d.insert_temp(exp_open_id, exp_open));
+                    }
+
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Output")
+                                    .size(11.5)
+                                    .color(if self.ui.portrait_output_drawer {
+                                        Color32::BLACK
+                                    } else {
+                                        Color32::WHITE
+                                    }),
+                            )
+                            .fill(if self.ui.portrait_output_drawer {
+                                crate::wallpaper::RUST_ORANGE_HOVER
+                            } else {
+                                Color32::from_rgb(34, 38, 50)
+                            })
+                            .corner_radius(6.0),
+                        )
+                        .clicked()
+                    {
+                        self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
+                    }
+
+                    // Script tabs
+                    egui::ScrollArea::horizontal()
+                        .id_salt("focus_code_tabs_scroll")
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                let open_list = self.ui.portrait_open_scripts.clone();
+                                for r in open_list {
+                                    let name = self
+                                        .game
+                                        .doc
+                                        .dom
+                                        .get_by_ref(r)
+                                        .map(|i| i.name.clone())
+                                        .unwrap_or_else(|| "Script".into());
+                                    let active = self.ui.portrait_active_script == Some(r);
+                                    if ui
+                                        .add(
+                                            egui::Button::new(
+                                                egui::RichText::new(name)
+                                                    .size(11.5)
+                                                    .color(if active { Color32::WHITE } else { theme::TEXT_DIM }),
+                                            )
+                                            .fill(if active {
+                                                Color32::from_rgb(42, 48, 64)
+                                            } else {
+                                                Color32::TRANSPARENT
+                                            })
+                                            .corner_radius(6.0),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.ui.portrait_active_script = Some(r);
+                                    }
+                                }
+                            });
+                        });
+                });
+            });
+
+        // 2. Resizable Output Panel at bottom with full-width vertical drag handle
+        if self.ui.portrait_output_drawer {
+            let max_out_h = (screen_rect.height() * 0.65).max(160.0);
+            self.ui.output_height = self.ui.output_height.clamp(90.0, max_out_h);
+            egui::Panel::bottom("focus_code_output_panel")
+                .exact_size(self.ui.output_height)
+                .frame(
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(18, 20, 27))
+                        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(38, 42, 54)))
+                        .inner_margin(egui::Margin {
+                            left: side_left,
+                            right: side_right,
+                            top: 4,
+                            bottom: (6.0 + safe_bottom * 0.5).round() as i8,
+                        }),
+                )
+                .show(ui, |ui| {
+                    let (grip_rect, grip_resp) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), 10.0),
+                        egui::Sense::drag(),
+                    );
+                    if grip_resp.dragged() {
+                        self.ui.output_height = (self.ui.output_height - grip_resp.drag_delta().y)
+                            .clamp(90.0, max_out_h);
+                    }
+                    ui.painter().rect_filled(
+                        egui::Rect::from_center_size(grip_rect.center(), egui::vec2(56.0, 3.0)),
+                        2.0,
+                        if grip_resp.hovered() || grip_resp.dragged() {
+                            crate::wallpaper::LOGO_CYAN
+                        } else {
+                            Color32::from_rgb(80, 88, 108)
+                        },
+                    );
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("📟 Output")
+                                .strong()
+                                .size(12.0)
+                                .color(crate::wallpaper::LOGO_CYAN),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("✕").clicked() {
+                                self.ui.portrait_output_drawer = false;
+                            }
+                        });
+                    });
+                    ui.separator();
+                    self.output_ui(ui);
+                });
+        }
+
+        // 3. Draggable & Dockable Explorer (Left / Right / Bottom) with ghost preview & corner resize grip
+        let exp_open = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("focus_code_explorer_open")).unwrap_or(true));
+        let exp_drag_id = egui::Id::new("focus_code_explorer_dragging");
+        let mut dragging_exp = ctx.data(|d| d.get_temp::<bool>(exp_drag_id).unwrap_or(false));
+
+        if exp_open {
+            let max_exp = match self.ui.explorer_dock {
+                ExplorerDockSide::Left | ExplorerDockSide::Right => (screen_rect.width() * 0.55).max(200.0),
+                ExplorerDockSide::Bottom => (screen_rect.height() * 0.55).max(140.0),
+            };
+            self.ui.explorer_size = self.ui.explorer_size.clamp(160.0, max_exp);
+            let dock_side = self.ui.explorer_dock;
+            let frame = egui::Frame::new()
+                .fill(Color32::from_rgb(19, 21, 28))
+                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(40, 44, 58)))
+                .inner_margin(egui::Margin::same(6));
+
+            let mut draw_explorer_inner = |this: &mut Self, ui: &mut egui::Ui| {
+                ui.horizontal(|ui| {
+                    let (hdr_rect, hdr_resp) = ui.allocate_exact_size(
+                        egui::vec2((ui.available_width() - 32.0).max(80.0), 24.0),
+                        egui::Sense::drag(),
+                    );
+                    if hdr_resp.drag_started() {
+                        dragging_exp = true;
+                        ctx.data_mut(|d| d.insert_temp(exp_drag_id, true));
+                    }
+                    ui.painter().text(
+                        hdr_rect.left_center(),
+                        egui::Align2::LEFT_CENTER,
+                        "≡ Explorer (Hold & Drag to Dock)",
+                        egui::FontId::proportional(11.5),
+                        crate::wallpaper::LOGO_CYAN,
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("➕").clicked() {
+                            this.ui_action(ctx, "insert_object");
+                        }
+                    });
+                });
+                ui.separator();
+                let list_h = (ui.available_height() - 18.0).max(60.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(ui.available_width(), list_h),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        this.explorer_ui(ui);
+                    },
+                );
+                // Small corner resize grip at bottom of Explorer
+                ui.with_layout(
+                    if dock_side == ExplorerDockSide::Right {
+                        egui::Layout::left_to_right(egui::Align::BOTTOM)
+                    } else {
+                        egui::Layout::right_to_left(egui::Align::BOTTOM)
+                    },
+                    |ui| {
+                        let (grip_r, grip_resp) =
+                            ui.allocate_exact_size(egui::vec2(18.0, 14.0), egui::Sense::drag());
+                        if grip_resp.dragged() {
+                            let d = grip_resp.drag_delta();
+                            let delta = match dock_side {
+                                ExplorerDockSide::Left => d.x,
+                                ExplorerDockSide::Right => -d.x,
+                                ExplorerDockSide::Bottom => -d.y,
+                            };
+                            this.ui.explorer_size = (this.ui.explorer_size + delta).clamp(160.0, max_exp);
+                        }
+                        ui.painter().text(
+                            grip_r.center(),
+                            egui::Align2::CENTER_CENTER,
+                            "◢",
+                            egui::FontId::proportional(11.0),
+                            if grip_resp.hovered() || grip_resp.dragged() {
+                                crate::wallpaper::RUST_ORANGE
+                            } else {
+                                Color32::from_rgb(100, 108, 128)
+                            },
+                        );
+                    },
+                );
+            };
+
+            match dock_side {
+                ExplorerDockSide::Left => {
+                    egui::Panel::left("focus_code_explorer_left")
+                        .exact_size(self.ui.explorer_size)
+                        .resizable(false)
+                        .frame(frame)
+                        .show(ui, |ui| draw_explorer_inner(self, ui));
+                }
+                ExplorerDockSide::Right => {
+                    egui::Panel::right("focus_code_explorer_right")
+                        .exact_size(self.ui.explorer_size)
+                        .resizable(false)
+                        .frame(frame)
+                        .show(ui, |ui| draw_explorer_inner(self, ui));
+                }
+                ExplorerDockSide::Bottom => {
+                    egui::Panel::bottom("focus_code_explorer_bottom")
+                        .exact_size(self.ui.explorer_size)
+                        .resizable(false)
+                        .frame(frame)
+                        .show(ui, |ui| draw_explorer_inner(self, ui));
+                }
+            }
+        }
+
+        // 4. Translucent Ghost Preview + 3 Dock Drop Zones (Left / Right / Bottom) while dragging Explorer
+        if dragging_exp {
+            let ptr = ctx.input(|i| i.pointer.interact_pos());
+            let still_down = ctx.input(|i| i.pointer.any_down());
+            let zone_left = Rect::from_min_max(
+                egui::pos2(screen_rect.left() + 8.0, screen_rect.top() + 52.0),
+                egui::pos2(screen_rect.left() + 120.0, screen_rect.bottom() - 24.0),
+            );
+            let zone_right = Rect::from_min_max(
+                egui::pos2(screen_rect.right() - 120.0, screen_rect.top() + 52.0),
+                egui::pos2(screen_rect.right() - 8.0, screen_rect.bottom() - 24.0),
+            );
+            let zone_bottom = Rect::from_min_max(
+                egui::pos2(screen_rect.left() + 128.0, screen_rect.bottom() - 120.0),
+                egui::pos2(screen_rect.right() - 128.0, screen_rect.bottom() - 12.0),
+            );
+            let hovered_zone = ptr.and_then(|p| {
+                if zone_left.contains(p) {
+                    Some(ExplorerDockSide::Left)
+                } else if zone_right.contains(p) {
+                    Some(ExplorerDockSide::Right)
+                } else if zone_bottom.contains(p) {
+                    Some(ExplorerDockSide::Bottom)
+                } else {
+                    None
+                }
+            });
+
+            let painter = ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Tooltip,
+                egui::Id::new("explorer_dock_overlay"),
+            ));
+            for (side, rect, label) in [
+                (ExplorerDockSide::Left, zone_left, "Dock Left"),
+                (ExplorerDockSide::Right, zone_right, "Dock Right"),
+                (ExplorerDockSide::Bottom, zone_bottom, "Dock Bottom"),
+            ] {
+                let active = hovered_zone == Some(side);
+                painter.rect(
+                    rect,
+                    egui::CornerRadius::same(12),
+                    if active {
+                        crate::wallpaper::LOGO_CYAN.gamma_multiply(0.24)
+                    } else {
+                        Color32::from_rgba_unmultiplied(30, 34, 46, 130)
+                    },
+                    egui::Stroke::new(
+                        if active { 2.0 } else { 1.0 },
+                        if active {
+                            crate::wallpaper::LOGO_CYAN
+                        } else {
+                            Color32::from_rgba_unmultiplied(255, 255, 255, 70)
+                        },
+                    ),
+                    egui::StrokeKind::Inside,
+                );
+                painter.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    label,
+                    egui::FontId::proportional(13.0),
+                    Color32::WHITE,
+                );
+            }
+
+            // Translucent Ghost Preview following pointer
+            if let Some(p) = ptr {
+                let ghost = Rect::from_center_size(p, Vec2::new(170.0, 210.0));
+                painter.rect(
+                    ghost,
+                    egui::CornerRadius::same(12),
+                    Color32::from_rgba_unmultiplied(25, 28, 38, 155),
+                    egui::Stroke::new(1.5, crate::wallpaper::RUST_ORANGE.gamma_multiply(0.85)),
+                    egui::StrokeKind::Inside,
+                );
+                painter.text(
+                    ghost.center_top() + Vec2::new(0.0, 18.0),
+                    egui::Align2::CENTER_CENTER,
+                    "Explorer",
+                    egui::FontId::proportional(12.5),
+                    Color32::WHITE.gamma_multiply(0.85),
+                );
+            }
+
+            if !still_down {
+                if let Some(side) = hovered_zone {
+                    self.ui.explorer_dock = side;
+                }
+                ctx.data_mut(|d| d.insert_temp(exp_drag_id, false));
+            }
+        }
+
+        // 5. Central Code Editor (no 3D viewport!)
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(Color32::from_rgb(13, 15, 21)).inner_margin(egui::Margin::same(8)))
+            .show(ui, |ui| {
+                if let Some(r) = self.ui.portrait_active_script {
+                    self.script_tab_ui(ui, r);
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.label(
+                                egui::RichText::new("Focus Code IDE — 3D Viewport Disabled")
+                                    .size(16.0)
+                                    .strong()
+                                    .color(crate::wallpaper::LOGO_CYAN),
+                            );
+                            ui.add_space(6.0);
+                            ui.label(
+                                egui::RichText::new("Select a Script in Explorer or create a new one to start editing.")
+                                    .size(12.5)
+                                    .color(theme::TEXT_DIM),
+                            );
+                            ui.add_space(10.0);
+                            if ui
+                                .add(
+                                    egui::Button::new(egui::RichText::new("+ New Script").strong().color(Color32::WHITE))
+                                        .fill(crate::wallpaper::RUST_ORANGE)
+                                        .corner_radius(8.0),
+                                )
+                                .clicked()
+                            {
+                                self.ui_action(ctx, "script");
+                            }
+                        });
+                    });
+                }
+            });
     }
 }
 

@@ -86,6 +86,13 @@ pub enum PortraitTab {
     Code,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExplorerDockSide {
+    Left,
+    Right,
+    Bottom,
+}
+
 pub struct UiState {
     pub tab: RibbonTab,
     pub run_type: RunType,
@@ -125,6 +132,14 @@ pub struct UiState {
     pub portrait_drawer_split: f32,
     pub portrait_quick_grid_open: bool,
     pub portrait_tool_panel: Option<Tab>,
+    /// Pure Code IDE mode (no 3D viewport loaded or rendered).
+    pub focus_code_mode: bool,
+    /// Dock side for draggable Explorer (Left, Right, Bottom).
+    pub explorer_dock: ExplorerDockSide,
+    /// Width (when Left/Right) or height (when Bottom) of Explorer panel.
+    pub explorer_size: f32,
+    /// Height of resizable Output drawer/panel.
+    pub output_height: f32,
 }
 
 impl Default for UiState {
@@ -156,6 +171,10 @@ impl Default for UiState {
             portrait_drawer_split: 0.50,
             portrait_quick_grid_open: false,
             portrait_tool_panel: None,
+            focus_code_mode: false,
+            explorer_dock: ExplorerDockSide::Right,
+            explorer_size: 250.0,
+            output_height: 180.0,
         }
     }
 }

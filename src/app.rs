@@ -2423,7 +2423,11 @@ impl RustudioApp {
             && (cfg!(any(target_os = "android", target_os = "ios"))
                 || rustudio_core::mobile::is_drawer_mode());
 
-        if is_portrait {
+        let focus_code = ed.ui.focus_code_mode;
+        if focus_code {
+            ed.focus_code_ide_ui(ui, &ctx, screen_rect);
+            ed.ui.viewport_hidden = true;
+        } else if is_portrait {
             self.ed.portrait_layout_ui(ui, &ctx, screen_rect);
             self.ed.ui.viewport_hidden =
                 self.ed.ui.portrait_tab != crate::studio_ui::PortraitTab::Viewport;
@@ -2489,7 +2493,7 @@ impl RustudioApp {
         let _dock_scope = rustudio_core::bench::scope("dock_panels");
         let windows: Vec<(String, String)> = self.panels.popped.iter().map(|w| (w.key.clone(), w.title())).collect();
         let mut dock_rect = screen_rect;
-        if !is_portrait && !is_mobile_landscape {
+        if !focus_code && !is_portrait && !is_mobile_landscape {
             egui::CentralPanel::default()
                 .frame(egui::Frame::new().fill(theme::BG))
                 .show(ui, |ui| {
@@ -2504,7 +2508,7 @@ impl RustudioApp {
         }
         drop(_dock_scope);
         // Floating Left/Right Drawers for Explorer & Properties in Desktop Mobile Drawer Mode
-        if !is_portrait && !is_mobile_landscape && rustudio_core::mobile::is_drawer_mode() {
+        if !focus_code && !is_portrait && !is_mobile_landscape && rustudio_core::mobile::is_drawer_mode() {
             let max_h = (dock_rect.height() - 16.0).max(200.0);
             let drawer_w = (dock_rect.width() * 0.64).clamp(210.0, 260.0);
             if self.ed.ui.mobile_explorer_open {

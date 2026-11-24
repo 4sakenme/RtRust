@@ -536,7 +536,6 @@ impl Editor {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(crate::wallpaper::OBSIDIAN_CANVAS).inner_margin(body_margin))
             .show(ui, |ui| {
-                crate::wallpaper::paint_studio_background(&ctx, ui.painter(), ui.max_rect().expand(40.0));
                 self.start_body(ui, &mut todo);
             });
 
@@ -922,10 +921,10 @@ impl Editor {
                             todo.push(Do::Template(self.start.default_template()));
                         }
 
-                        // Secondary action pills: Sleek dark-slate (#222632) with orange-tinted icons & #323848 borders
+                        // Secondary action pills: Sleek dark-slate (#222632) with orange/cyan accents
                         for (icon, label, action) in [
+                            ("</>", "Focus Code IDE", 4u8),
                             ("📂", "Open .rbxl File", 1u8),
-                            ("🎨", "Themes & Wallpaper", 2u8),
                             ("⚙", "Studio Settings", 3u8),
                         ] {
                             let mut job = egui::text::LayoutJob::default();
@@ -934,7 +933,11 @@ impl Editor {
                                 0.0,
                                 egui::TextFormat {
                                     font_id: egui::FontId::proportional(12.5),
-                                    color: crate::wallpaper::RUST_ORANGE_HOVER,
+                                    color: if action == 4 {
+                                        crate::wallpaper::LOGO_CYAN
+                                    } else {
+                                        crate::wallpaper::RUST_ORANGE_HOVER
+                                    },
                                     ..Default::default()
                                 },
                             );
@@ -949,15 +952,26 @@ impl Editor {
                             );
                             let btn = egui::Button::new(job)
                                 .fill(crate::wallpaper::SLATE_PILL_BG)
-                                .stroke(Stroke::new(1.0, crate::wallpaper::SLATE_PILL_BORDER))
+                                .stroke(Stroke::new(
+                                    1.0,
+                                    if action == 4 {
+                                        crate::wallpaper::LOGO_CYAN.gamma_multiply(0.5)
+                                    } else {
+                                        crate::wallpaper::SLATE_PILL_BORDER
+                                    },
+                                ))
                                 .corner_radius(CornerRadius::same(14));
                             if ui.add(btn).clicked() {
                                 match action {
                                     1 => todo.push(Do::OpenFile(None)),
-                                    2 => crate::wallpaper::toggle_modal(ui.ctx()),
                                     3 => {
                                         let ctx_c = ui.ctx().clone();
                                         self.ui_action(&ctx_c, "studio_settings");
+                                    }
+                                    4 => {
+                                        self.ui.focus_code_mode = true;
+                                        self.ui.viewport_hidden = true;
+                                        todo.push(Do::Template(self.start.default_template()));
                                     }
                                     _ => {}
                                 }
