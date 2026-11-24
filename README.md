@@ -27,7 +27,7 @@
 
 ---
 
-## Modern UI / UX Design (Stitch Obsidian Studio)
+## Modern UI / UX Design 
 
 Crafted with a clean dark `#111318` Obsidian canvas, crisp typography, and vibrant `#FF5A26` Rust-Orange + `#26C6DA` Cyan accents for an intuitive mobile & desktop creation experience:
 
