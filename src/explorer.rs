@@ -16,8 +16,8 @@ use rustudio_core::doc::{DocKind, Document};
 use crate::icons;
 use rustudio_engine::theme;
 
-const ROW_H: f32 = if cfg!(any(target_os = "android", target_os = "ios")) { 40.0 } else { 24.0 };
-const INDENT: f32 = 14.0;
+const ROW_H: f32 = if cfg!(any(target_os = "android", target_os = "ios")) { 38.0 } else { 24.0 };
+const INDENT: f32 = 16.0;
 /// Hovering a collapsed row this long while dragging expands it.
 const AUTO_EXPAND_S: f32 = 0.6;
 /// Dragging within this many points of the list's top or bottom scrolls it.
@@ -463,7 +463,15 @@ impl Editor {
         } else if resp.hovered() || drop.is_some() {
             painter.rect_filled(rect, 0.0, theme::HOVER_BG);
         }
-        let x0 = rect.min.x + 4.0 + depth as f32 * INDENT;
+        let x0 = rect.min.x + 6.0 + depth as f32 * INDENT;
+        // Subtle vertical hierarchy guide lines for nested children
+        for d in 0..depth {
+            let gx = rect.min.x + 6.0 + d as f32 * INDENT + 10.0;
+            painter.line_segment(
+                [Pos2::new(gx, rect.min.y), Pos2::new(gx, rect.max.y)],
+                Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 18)),
+            );
+        }
         match drop {
             Some(Drop::Into) => {
                 painter.rect_stroke(rect.shrink(1.0), 2.0, Stroke::new(1.5, theme::ACCENT), egui::StrokeKind::Inside);
@@ -487,34 +495,46 @@ impl Editor {
                 _ => self.explorer.drag_hover = Some((r, Instant::now())),
             }
         }
-        let tri_rect = Rect::from_center_size(Pos2::new(x0 + 6.0, rect.center().y), Vec2::splat(12.0));
+        // Strict horizontal flex slots: [indent] + [caret 20px] + [class icon 18px] + [truncated name] + [right + button]
+        let tri_rect = Rect::from_center_size(Pos2::new(x0 + 10.0, rect.center().y), Vec2::splat(12.0));
         if has_children {
             let glyph = if expanded { "caret-down-filled" } else { "caret-right-filled" };
             rustudio_engine::ti::paint(&painter, tri_rect, glyph, theme::TEXT_DIM);
         }
-        let icon_rect = Rect::from_center_size(Pos2::new(x0 + 22.0, rect.center().y), Vec2::splat(16.0));
+        let icon_rect = Rect::from_center_size(Pos2::new(x0 + 30.0, rect.center().y), Vec2::splat(16.0));
         if !icons::paint_part_icon(&painter, icon_rect, &class, shape) {
             icons::paint_class_icon(&painter, icon_rect, &class);
         }
-        let text_pos = Pos2::new(x0 + 34.0, rect.center().y);
-        // The "+" just right of the name while the row is hovered (Studio's quick insert).
-        let label = if name.is_empty() { format!("({class})") } else { name.clone() };
-        let name_w = ui.fonts_mut(|f| f.layout_no_wrap(label, egui::FontId::proportional(13.0), theme::TEXT).size().x);
-        let mobile = rustudio_core::mobile::is_drawer_mode()
+        let text_x = x0 + 44.0;
+        let mobile = cfg!(any(target_os = "android", target_os = "ios"))
+            || rustudio_core::mobile::is_drawer_mode()
             || ui.ctx().content_rect().width() < ui.ctx().content_rect().height();
-        let plus_x = (text_pos.x + name_w + 6.0 + 10.0).min(rect.max.x - 14.0);
+        let right_reserve = if mobile { 32.0 } else { 24.0 };
         let plus_rect = Rect::from_center_size(
-            Pos2::new(plus_x, rect.center().y),
+            Pos2::new(rect.max.x - right_reserve * 0.5, rect.center().y),
             Vec2::splat(if mobile { 24.0 } else { 16.0 }),
         );
         let row_hot = ui.rect_contains_pointer(rect) && !egui::DragAndDrop::has_any_payload(ui.ctx());
-        let show_plus = (row_hot || mobile) && !egui::DragAndDrop::has_any_payload(ui.ctx());
+        let show_plus = (row_hot || selected || mobile) && !egui::DragAndDrop::has_any_payload(ui.ctx());
         let plus = show_plus.then(|| ui.interact(plus_rect, egui::Id::new(("explorer_plus", r)), Sense::click()));
         if let Some(p) = &plus {
-            if p.hovered() || mobile {
-                painter.rect_filled(plus_rect.shrink(if mobile { 3.0 } else { -1.0 }), 3.0, if p.hovered() { theme::ACTIVE_TAB } else { Color32::from_rgba_unmultiplied(60, 66, 78, 120) });
+            if p.hovered() || (mobile && selected) {
+                painter.rect_filled(
+                    plus_rect.shrink(if mobile { 2.0 } else { -1.0 }),
+                    4.0,
+                    if p.hovered() {
+                        theme::ACTIVE_TAB
+                    } else {
+                        Color32::from_rgba_unmultiplied(60, 66, 78, 130)
+                    },
+                );
             }
-            rustudio_engine::ti::paint(&painter, Rect::from_center_size(plus_rect.center(), Vec2::splat(14.0)), "plus", if p.hovered() { Color32::WHITE } else { theme::TEXT });
+            rustudio_engine::ti::paint(
+                &painter,
+                Rect::from_center_size(plus_rect.center(), Vec2::splat(13.0)),
+                "plus",
+                if p.hovered() || selected { Color32::WHITE } else { theme::TEXT_DIM },
+            );
             self.explorer.plus_rect = Some((r, plus_rect));
         }
 
@@ -526,7 +546,10 @@ impl Editor {
             );
         });
         if renaming {
-            let edit_rect = Rect::from_min_max(Pos2::new(text_pos.x, rect.min.y + 1.0), Pos2::new(rect.max.x - 4.0, rect.max.y - 1.0));
+            let edit_rect = Rect::from_min_max(
+                Pos2::new(text_x, rect.min.y + 2.0),
+                Pos2::new((rect.max.x - 6.0).max(text_x + 40.0), rect.max.y - 2.0),
+            );
             let mut text = self.explorer.renaming.as_ref().map(|(_, t)| t.clone()).unwrap_or_default();
             let edit = ui.put(edit_rect, egui::TextEdit::singleline(&mut text).margin(Vec2::new(2.0, 0.0)));
             // Only request focus ONCE when inline rename starts for `r` (not on every frame),
@@ -566,7 +589,24 @@ impl Editor {
         } else {
             let color = if selected { Color32::WHITE } else { theme::TEXT };
             let (label, col) = if name.is_empty() { (format!("({class})"), theme::TEXT_DIM) } else { (name.clone(), color) };
-            painter.text(text_pos, egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(13.0), col);
+            let text_max_w = (rect.max.x - right_reserve - text_x - 4.0).max(20.0);
+            let mut job = egui::text::LayoutJob::single_section(
+                label,
+                egui::TextFormat::simple(egui::FontId::proportional(13.0), col),
+            );
+            job.wrap = egui::text::TextWrapping {
+                max_width: text_max_w,
+                max_rows: 1,
+                break_anywhere: true,
+                overflow_character: Some('…'),
+            };
+            let galley = ui.fonts_mut(|f| f.layout_job(job));
+            let text_y = rect.center().y - galley.size().y * 0.5;
+            let text_clip = Rect::from_min_max(
+                Pos2::new(text_x, rect.min.y),
+                Pos2::new((rect.max.x - right_reserve - 2.0).max(text_x), rect.max.y),
+            );
+            ui.painter_at(text_clip).galley(Pos2::new(text_x, text_y), galley, col);
         }
 
         // Interaction.

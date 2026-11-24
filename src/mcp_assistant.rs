@@ -183,7 +183,7 @@ impl Default for McpAssistantState {
             show_mcp_servers: false,
             provider: ProviderKind::GeminiFree,
             roblox_probe: RobloxProbeState::NotProbed,
-            roblox_probe_note: "Roblox Assistant nội bộ dùng endpoint private; mặc định dùng Gemini Free / MCP.".to_owned(),
+            roblox_probe_note: "Roblox internal Assistant uses a private endpoint; defaulting to Gemini Free / MCP.".to_owned(),
             roblox_custom_endpoint: String::new(),
             roblox_custom_header: String::new(),
             gemini_api_key: std::env::var("GEMINI_API_KEY").unwrap_or_default(),
@@ -197,7 +197,7 @@ impl Default for McpAssistantState {
             prompt_input: String::new(),
             messages: vec![ChatMessage {
                 role: "system".to_owned(),
-                text: "Xin chào! Tôi là Studio AI Assistant (MCP). Hãy yêu cầu tôi đọc cây Explorer, viết Script, chạy Luau dựng map/UI, chèn model Toolbox hoặc tự chạy Playtest sửa lỗi."
+                text: "Hello! I am Studio AI Assistant (MCP). Ask me to inspect the Explorer tree, write Luau scripts, build maps/UI, insert Toolbox models, or run Playtest to debug."
                     .to_owned(),
             }],
             checklist: Vec::new(),
@@ -308,7 +308,7 @@ impl McpAssistantState {
                             args,
                             enabled,
                             tools: Vec::new(),
-                            status: "Chưa kết nối".to_owned(),
+                            status: "Not connected".to_owned(),
                         });
                     }
                 }
@@ -469,7 +469,7 @@ pub fn probe_roblox_assistant(ed: &Editor, ctx: &egui::Context) {
         .with_client(|c| (c.session.cookie(), c.session.profile.clone()));
     let (tx, custom_ep, custom_hdr) = with_state(|st| {
         st.roblox_probe = RobloxProbeState::Probing;
-        st.roblox_probe_note = "Đang dò Roblox Studio Assistant API bằng phiên đăng nhập...".to_owned();
+        st.roblox_probe_note = "Probing Roblox Studio Assistant API with current session...".to_owned();
         (
             st.bg_tx.clone(),
             st.roblox_custom_endpoint.clone(),
@@ -482,7 +482,7 @@ pub fn probe_roblox_assistant(ed: &Editor, ctx: &egui::Context) {
         let Some((cookie, profile)) = creds else {
             let _ = tx.send(BgEvent::ProbeDone {
                 ok: false,
-                message: "Chưa đăng nhập tài khoản Roblox — chuyển sang chế độ Free Token / MCP dự phòng.".to_owned(),
+                message: "Not signed in to Roblox — switching to Free Token / MCP fallback.".to_owned(),
             });
             ctx.request_repaint();
             return;
@@ -519,13 +519,13 @@ pub fn probe_roblox_assistant(ed: &Editor, ctx: &egui::Context) {
                 Ok((status, body)) if (200..300).contains(&status) => {
                     let _ = tx.send(BgEvent::ProbeDone {
                         ok: true,
-                        message: format!("Roblox Official Assistant sẵn sàng ({status}): {}", &body.chars().take(80).collect::<String>()),
+                        message: format!("Roblox Official Assistant ready ({status}): {}", &body.chars().take(80).collect::<String>()),
                     });
                     ctx.request_repaint();
                     return;
                 }
                 Ok((status, _)) => {
-                    last_err = format!("HTTP {status} tại {url}");
+                    last_err = format!("HTTP {status} at {url}");
                 }
                 Err(e) => {
                     last_err = format!("{e}");
@@ -536,7 +536,7 @@ pub fn probe_roblox_assistant(ed: &Editor, ctx: &egui::Context) {
         let _ = tx.send(BgEvent::ProbeDone {
             ok: false,
             message: format!(
-                "Roblox Assistant từ chối/chưa mở Client ID ({last_err}). Tự động chuyển sang Gemini Free / MCP."
+                "Roblox Assistant denied / Client ID unavailable ({last_err}). Automatically switching to Gemini Free / MCP."
             ),
         });
         ctx.request_repaint();
@@ -1316,7 +1316,7 @@ fn call_roblox_official(
     history: &[Value],
     _tools: &[McpToolSpec],
 ) -> LlmOutcome {
-    let session = session.ok_or("Chưa đăng nhập Roblox Account")?;
+    let session = session.ok_or("Not signed in to Roblox Account")?;
     let url = if custom_ep.trim().is_empty() {
         "https://apis.roblox.com/studio-assistant/v1/chat"
     } else {
@@ -1357,7 +1357,7 @@ fn call_gemini(
     tools: &[McpToolSpec],
 ) -> LlmOutcome {
     if api_key.trim().is_empty() {
-        return Err("Chưa có Gemini API Key. Bấm '⚙ Provider' để dán key miễn phí (aistudio.google.com), hoặc kết nối Antigravity/Claude/Cursor tới MCP Server: http://127.0.0.1:28821".to_owned());
+        return Err("Missing Gemini API Key. Click '⚙ Provider' to paste a free key (aistudio.google.com), or connect Antigravity/Claude/Cursor to MCP Server: http://127.0.0.1:28821".to_owned());
     }
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
@@ -1423,7 +1423,7 @@ fn call_openai_compat(
     tools: &[McpToolSpec],
 ) -> LlmOutcome {
     if api_key.trim().is_empty() {
-        return Err("Chưa nhập API Key cho provider hiện tại.".to_owned());
+        return Err("Missing API Key for the current provider.".to_owned());
     }
     let mut messages = vec![json!({ "role": "system", "content": system_prompt })];
     messages.extend_from_slice(history);
@@ -1750,7 +1750,7 @@ pub fn ui(ed: &mut Editor, ctx: &egui::Context) {
                             ui.add_space(4.0);
                         }
                         if st.busy {
-                            ui.label(RichText::new("⏳ Đang suy nghĩ / gọi MCP tool...").italics().color(Color32::from_rgb(255, 210, 120)));
+                            ui.label(RichText::new("⏳ Thinking / calling MCP tool...").italics().color(Color32::from_rgb(255, 210, 120)));
                         }
                     });
 
@@ -1759,7 +1759,7 @@ pub fn ui(ed: &mut Editor, ctx: &egui::Context) {
                     let resp = ui.add(
                         egui::TextEdit::singleline(&mut st.prompt_input)
                             .desired_width((ui.available_width() - 72.0).max(120.0))
-                            .hint_text("Yêu cầu AI tạo script, UI, dựng map hoặc test..."),
+                            .hint_text("Ask AI to create scripts, UI, build maps, or test..."),
                     );
                     let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     if (ui.button("Send").clicked() || enter) && !st.prompt_input.trim().is_empty() && !st.busy {

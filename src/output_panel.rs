@@ -395,7 +395,7 @@ impl Editor {
                 egui::TextEdit::singleline(&mut cmd_text)
                     .desired_width((ui.available_width() - 64.0).max(120.0))
                     .font(egui::FontId::monospace(12.5))
-                    .hint_text("Chạy lệnh Luau (Edit hoặc Playtest)..."),
+                    .hint_text("Run Luau command (Edit or Playtest)..."),
             );
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if (ui.small_button("▶ Run").clicked() || enter) && !cmd_text.trim().is_empty() {

@@ -1521,13 +1521,16 @@ impl MeshCache {
         std::mem::take(&mut self.deferred)
     }
 
-    /// Purges auxiliary CPU-side mesh metadata and excess GPU/CPU mesh buffers on mobile memory pressure.
+    /// Purges auxiliary CPU-side mesh metadata and excess GPU/CPU mesh buffers during Playtest Eco pressure.
     pub fn purge_unused(&mut self) {
         self.reasons.clear();
         self.roblox_format.clear();
         self.entries.retain(|_, v| v.is_some());
-        if cfg!(any(target_os = "ios", target_os = "android")) && self.entries.len() > 160 {
-            let mut drop_count = self.entries.len().saturating_sub(120);
+        if cfg!(any(target_os = "ios", target_os = "android"))
+            && crate::mobile::is_playtest_eco_active()
+            && self.entries.len() > 280
+        {
+            let mut drop_count = self.entries.len().saturating_sub(220);
             self.entries.retain(|_, v| {
                 if drop_count > 0 && v.as_ref().is_some_and(|a| Arc::strong_count(a) <= 1) {
                     drop_count -= 1;
@@ -1894,14 +1897,17 @@ impl TextureCache {
         !self.decoding.is_empty()
     }
 
-    /// Purges unpinned decoded CPU pixel buffers and excess texture entries on mobile memory pressure.
+    /// Purges unpinned decoded CPU pixel buffers and excess texture entries during Playtest Eco pressure.
     pub fn purge_unused(&mut self) {
         self.decoded.clear();
         self.loose.clear();
         self.loose_bytes = 0;
         self.pixels.retain(|k, _| self.pinned.contains(k));
-        if cfg!(any(target_os = "ios", target_os = "android")) && self.entries.len() > 128 {
-            let mut drop_count = self.entries.len().saturating_sub(96);
+        if cfg!(any(target_os = "ios", target_os = "android"))
+            && crate::mobile::is_playtest_eco_active()
+            && self.entries.len() > 220
+        {
+            let mut drop_count = self.entries.len().saturating_sub(180);
             let pinned = &self.pinned;
             self.entries.retain(|k, v| {
                 if drop_count > 0

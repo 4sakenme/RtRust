@@ -101,12 +101,20 @@ pub fn ui_and_step(ed: &mut Editor, ui: &mut egui::Ui, rect: Rect, resp: &egui::
         Pos2::new(rect.max.x - 175.0 * h_scale, rect.max.y - safe_bottom - dock_lift - 140.0 * h_scale),
         Pos2::new(rect.max.x, rect.max.y),
     );
+    let explorer_rect: Option<Rect> = ctx.data(|d| {
+        d.get_temp::<Option<Rect>>(egui::Id::new("portrait_explorer_window_rect"))
+            .flatten()
+    });
     for ev in &events {
         if let egui::Event::Touch { id, phase, pos, .. } = ev {
             let tid = id.0;
             match phase {
                 egui::TouchPhase::Start => {
-                    if !rect.contains(*pos) || right_ctrl_zone.contains(*pos) {
+                    let over_overlay = explorer_rect.is_some_and(|er| er.contains(*pos))
+                        || ctx
+                            .layer_id_at(*pos)
+                            .is_some_and(|lid| lid.order >= egui::Order::Middle);
+                    if !rect.contains(*pos) || right_ctrl_zone.contains(*pos) || over_overlay {
                         continue;
                     }
                     if joy_touch_id.is_none() && joy_hit_rect.contains(*pos) {

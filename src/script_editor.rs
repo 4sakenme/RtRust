@@ -394,7 +394,7 @@ impl Editor {
                         find_open = !find_open;
                         ui.ctx().data_mut(|d| d.insert_temp(find_open_id, find_open));
                     }
-                    if ui.small_button("--").on_hover_text("Toggle Comment dòng hiện tại").clicked() {
+                    if ui.small_button("--").on_hover_text("Toggle comment on current line").clicked() {
                         toggle_comment = true;
                     }
                     return;
@@ -419,27 +419,27 @@ impl Editor {
                         }
                     }
                 });
-                if ui.selectable_label(cur_wrap, "Wrap").on_hover_text("Tự động xuống dòng / Cuộn ngang").clicked() {
+                if ui.selectable_label(cur_wrap, "Wrap").on_hover_text("Word wrap / horizontal scroll").clicked() {
                     ui.ctx().data_mut(|d| d.insert_temp(wrap_id, !cur_wrap));
                 }
-                if ui.small_button("A+").on_hover_text("Tăng cỡ chữ").clicked() {
+                if ui.small_button("A+").on_hover_text("Increase font size").clicked() {
                     ui.ctx().data_mut(|d| d.insert_temp(font_override_id, (cur_px + 1.5).min(24.0)));
                 }
-                if ui.small_button("A-").on_hover_text("Giảm cỡ chữ").clicked() {
+                if ui.small_button("A-").on_hover_text("Decrease font size").clicked() {
                     ui.ctx().data_mut(|d| d.insert_temp(font_override_id, (cur_px - 1.5).max(10.0)));
                 }
                 if ui.selectable_label(find_open, "🔍 Find").clicked() {
                     find_open = !find_open;
                     ui.ctx().data_mut(|d| d.insert_temp(find_open_id, find_open));
                 }
-                if ui.small_button("--").on_hover_text("Toggle Comment dòng hiện tại").clicked() {
+                if ui.small_button("--").on_hover_text("Toggle comment on current line").clicked() {
                     toggle_comment = true;
                 }
                 let clip_id = egui::Id::new("mobile_clipboard_ring");
                 let clip_ring = ui.ctx().data(|d| d.get_temp::<Vec<String>>(clip_id).unwrap_or_default());
                 ui.menu_button("📋 History", |ui| {
                     if clip_ring.is_empty() {
-                        ui.label(RichText::new("Chưa có lịch sử copy").small().color(theme::TEXT_DIM));
+                        ui.label(RichText::new("No clipboard history yet").small().color(theme::TEXT_DIM));
                     } else {
                         for item in &clip_ring {
                             let preview: String = item.lines().next().unwrap_or("").chars().take(32).collect();
@@ -453,7 +453,7 @@ impl Editor {
                 let outline_items = scan_function_outline(&buf.text);
                 ui.menu_button("ƒ Outline", |ui| {
                     if outline_items.is_empty() {
-                        ui.label(RichText::new("Không tìm thấy function / section").small().color(theme::TEXT_DIM));
+                        ui.label(RichText::new("No functions / sections found").small().color(theme::TEXT_DIM));
                     } else {
                         egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
                             for (line_no, label) in &outline_items {
@@ -484,7 +484,7 @@ impl Editor {
                 let outline_items = scan_function_outline(&buf.text);
                 ui.menu_button("ƒ Outline", |ui| {
                     if outline_items.is_empty() {
-                        ui.label(RichText::new("Không tìm thấy function / section").small().color(theme::TEXT_DIM));
+                        ui.label(RichText::new("No functions / sections found").small().color(theme::TEXT_DIM));
                     } else {
                         egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
                             for (line_no, label) in &outline_items {
@@ -500,7 +500,7 @@ impl Editor {
                 let clip_ring = ui.ctx().data(|d| d.get_temp::<Vec<String>>(clip_id).unwrap_or_default());
                 ui.menu_button("📋 History", |ui| {
                     if clip_ring.is_empty() {
-                        ui.label(RichText::new("Chưa có lịch sử copy").small().color(theme::TEXT_DIM));
+                        ui.label(RichText::new("No clipboard history yet").small().color(theme::TEXT_DIM));
                     } else {
                         for item in &clip_ring {
                             let preview: String = item.lines().next().unwrap_or("").chars().take(32).collect();

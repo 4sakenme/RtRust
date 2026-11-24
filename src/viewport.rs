@@ -716,23 +716,53 @@ impl Editor {
             }
         }
         // -------------------------------------------------- select & gizmo
+        let is_mobile_touch = cfg!(any(target_os = "android", target_os = "ios"))
+            || rustudio_core::mobile::is_drawer_mode();
+        let mut mobile_double_tap = false;
+        if is_mobile_touch && !in_game && !press_taken && !brushing {
+            let tap_id = egui::Id::new("mobile_part_last_tap");
+            if ctx.input(|i| i.pointer.primary_pressed()) {
+                if let Some(p) = pointer {
+                    if rect.contains(p) {
+                        let now_t = ctx.input(|i| i.time);
+                        let prev: Option<(f64, Pos2)> = ctx.data(|d| d.get_temp::<Option<(f64, Pos2)>>(tap_id).flatten());
+                        if let Some((pt, pp)) = prev {
+                            if (now_t - pt) <= 0.45 && (p - pp).length() <= 36.0 {
+                                mobile_double_tap = true;
+                            }
+                        }
+                        ctx.data_mut(|d| {
+                            d.insert_temp(tap_id, Some((now_t, p)));
+                            d.insert_temp(egui::Id::new("mobile_part_drag_armed"), mobile_double_tap);
+                        });
+                    }
+                }
+            }
+            if !ctx.input(|i| i.pointer.primary_down()) {
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("mobile_part_drag_armed"), false));
+            }
+        }
         let primary_drag = resp.dragged_by(PointerButton::Primary) && (!alt || self.drag.is_some() || self.part_drag.is_some()) && !in_game && !brushing;
         if resp.drag_started_by(PointerButton::Primary) && self.tool != Tool::None && !in_game && !press_taken && !brushing {
             let start = ctx.input(|i| i.pointer.press_origin()).or(pointer);
             if let Some(p) = start {
+                let mobile_drag_armed = !is_mobile_touch
+                    || mobile_double_tap
+                    || ctx.data(|d| d.get_temp::<bool>(egui::Id::new("mobile_part_drag_armed")).unwrap_or(false));
                 // A handle takes the press even with Alt held (Alt = scale all axes).
                 if crate::edit_camera::is_free_look() {
                     // Camera look mode active: let edit_camera orbit/rotate freely.
                 } else if let Some(h) = self.handle_at(&handles, p) {
                     self.start_drag(rect, h, p);
                 } else if alt {
-                } else if matches!(self.tool, Tool::Select | Tool::Move | Tool::Scale | Tool::Rotate | Tool::Transform)
+                } else if mobile_drag_armed
+                    && matches!(self.tool, Tool::Select | Tool::Move | Tool::Scale | Tool::Rotate | Tool::Transform)
                     && self.start_part_drag(rect, p, ctrl || shift)
                 {
-                    // Allow tapping & dragging parts on both PC and Mobile.
-                } else if !cfg!(any(target_os = "android", target_os = "ios")) && !rustudio_core::mobile::is_drawer_mode() {
-                    // PC: Left-drag on empty space draws box selection ("bôi đen").
-                    // Mobile: No box selection so swiping empty space rotates the camera.
+                    // PC: direct drag on Part. Mobile: double-tap + drag on Part (single drag orbits camera).
+                } else if !is_mobile_touch {
+                    // PC: Left-drag on empty space draws box selection.
+                    // Mobile: No box selection so swiping empty space orbits the camera.
                     self.marquee = Some(p);
                     self.marquee_base = if ctrl || shift { self.game.doc.selection.clone() } else { Vec::new() };
                 }
@@ -1083,13 +1113,23 @@ impl Editor {
         let mut orbit_delta = egui::Vec2::ZERO;
         let mut pinch_delta = 0.0_f32;
 
+        let explorer_rect: Option<egui::Rect> = ui.ctx().data(|d| {
+            d.get_temp::<Option<egui::Rect>>(egui::Id::new("portrait_explorer_window_rect"))
+                .flatten()
+        });
         for ev in &events {
             if let egui::Event::Touch { id, phase, pos, .. } = ev {
                 touch_events_seen = true;
                 let tid = id.0;
                 match phase {
                     egui::TouchPhase::Start => {
+                        let over_overlay = explorer_rect.is_some_and(|er| er.contains(*pos))
+                            || ui
+                                .ctx()
+                                .layer_id_at(*pos)
+                                .is_some_and(|lid| lid.order >= egui::Order::Middle);
                         if !rect.contains(*pos)
+                            || over_overlay
                             || menu_r.rect.contains(*pos)
                             || chat_r.rect.contains(*pos)
                             || zoom_out_r.rect.contains(*pos)

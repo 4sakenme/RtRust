@@ -496,12 +496,12 @@ pub fn settings_ui(ui: &mut egui::Ui) {
                     .color(egui::Color32::from_gray(160)),
             );
             ui.label(
-                egui::RichText::new("local function test() -- Tiếng Việt OK")
+                egui::RichText::new("local function test() -- Font Preview OK")
                     .font(egui::FontId::monospace(14.0))
                     .color(egui::Color32::from_rgb(130, 215, 255)),
             );
             ui.label(
-                egui::RichText::new("UI Label: Xin chào RtRustMobile — Tiếng Việt sắc nét 100%")
+                egui::RichText::new("UI Label: Hello RtRustMobile — Crisp Text 100%")
                     .font(egui::FontId::proportional(13.5))
                     .color(egui::Color32::from_gray(235)),
             );

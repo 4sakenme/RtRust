@@ -413,7 +413,7 @@ pub fn floating_shortcut_pill_ui(ctx: &egui::Context, has_open_plugin: bool) {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
                         if !visible {
-                            if ui.small_button("⌨").on_hover_text("Mở thanh phím tắt Animator").clicked() {
+                            if ui.small_button("⌨").on_hover_text("Open Animator shortcut bar").clicked() {
                                 BRIDGE.with(|b| b.borrow_mut().toolbar_visible = true);
                             }
                             return;
@@ -440,12 +440,12 @@ pub fn floating_shortcut_pill_ui(ctx: &egui::Context, has_open_plugin: bool) {
                         let shift = shift_held();
                         if ui
                             .selectable_label(shift, "⇧ Shift")
-                            .on_hover_text("Giữ Shift (Multi-select)")
+                            .on_hover_text("Hold Shift (Multi-select)")
                             .clicked()
                         {
                             toggle_shift();
                         }
-                        if ui.small_button("✕").on_hover_text("Thu gọn").clicked() {
+                        if ui.small_button("✕").on_hover_text("Collapse").clicked() {
                             BRIDGE.with(|b| b.borrow_mut().toolbar_visible = false);
                         }
                     });
