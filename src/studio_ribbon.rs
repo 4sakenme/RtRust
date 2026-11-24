@@ -1000,12 +1000,11 @@ impl Editor {
                         })
                     });
                 let pop_rect = shown.inner.response.rect;
-                crate::wallpaper::draw_luminous_border_trail(
-                    ctx,
-                    &ctx.layer_painter(shown.response.layer_id),
+                ctx.layer_painter(shown.response.layer_id).rect_stroke(
                     pop_rect,
-                    14.0,
-                    crate::wallpaper::PASTEL_LAVENDER,
+                    egui::CornerRadius::same(14),
+                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                    egui::StrokeKind::Inside,
                 );
                 let clicked_out = ctx.input(|i| {
                     i.pointer.any_pressed()
@@ -1430,12 +1429,11 @@ impl Editor {
                 ui.separator();
                 self.output_ui(ui);
             }) {
-                crate::wallpaper::draw_luminous_border_trail(
-                    ctx,
-                    &ctx.layer_painter(shown.response.layer_id),
+                ctx.layer_painter(shown.response.layer_id).rect_stroke(
                     shown.response.rect,
-                    14.0,
-                    crate::wallpaper::PASTEL_SKY,
+                    egui::CornerRadius::same(14),
+                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                    egui::StrokeKind::Inside,
                 );
             }
         }
@@ -1500,12 +1498,11 @@ impl Editor {
                     });
                 });
             if let Some(r) = shown {
-                crate::wallpaper::draw_luminous_border_trail(
-                    ctx,
-                    &ctx.layer_painter(r.response.layer_id),
+                ctx.layer_painter(r.response.layer_id).rect_stroke(
                     r.response.rect,
-                    16.0,
-                    crate::wallpaper::PASTEL_PEACH,
+                    egui::CornerRadius::same(16),
+                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                    egui::StrokeKind::Inside,
                 );
             }
             if !open {
@@ -1679,12 +1676,11 @@ impl Editor {
                     });
                 });
             }) {
-                crate::wallpaper::draw_luminous_border_trail(
-                    ctx,
-                    &ctx.layer_painter(shown.response.layer_id),
+                ctx.layer_painter(shown.response.layer_id).rect_stroke(
                     shown.response.rect,
-                    14.0,
-                    crate::wallpaper::PASTEL_MINT,
+                    egui::CornerRadius::same(14),
+                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                    egui::StrokeKind::Inside,
                 );
             }
         } else {
@@ -2129,12 +2125,11 @@ impl Editor {
                             })
                     });
                 let pop_rect = shown.inner.response.rect;
-                crate::wallpaper::draw_luminous_border_trail(
-                    ctx,
-                    &ctx.layer_painter(shown.response.layer_id),
+                ctx.layer_painter(shown.response.layer_id).rect_stroke(
                     pop_rect,
-                    14.0,
-                    crate::wallpaper::PASTEL_LAVENDER,
+                    egui::CornerRadius::same(14),
+                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                    egui::StrokeKind::Inside,
                 );
                 let clicked_out = ctx.input(|i| {
                     i.pointer.any_pressed()
@@ -2448,12 +2443,11 @@ impl Editor {
                             }
                         })
                 });
-            crate::wallpaper::draw_luminous_border_trail(
-                ctx,
-                &ctx.layer_painter(shown.response.layer_id),
+            ctx.layer_painter(shown.response.layer_id).rect_stroke(
                 shown.inner.response.rect,
-                14.0,
-                crate::wallpaper::PASTEL_SKY,
+                egui::CornerRadius::same(14),
+                egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                egui::StrokeKind::Inside,
             );
         }
 
@@ -2504,12 +2498,11 @@ impl Editor {
                     });
                 });
             if let Some(r) = shown {
-                crate::wallpaper::draw_luminous_border_trail(
-                    ctx,
-                    &ctx.layer_painter(r.response.layer_id),
+                ctx.layer_painter(r.response.layer_id).rect_stroke(
                     r.response.rect,
-                    16.0,
-                    crate::wallpaper::PASTEL_PEACH,
+                    egui::CornerRadius::same(16),
+                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                    egui::StrokeKind::Inside,
                 );
             }
             if !open {

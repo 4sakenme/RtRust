@@ -1019,9 +1019,12 @@ impl AssetStore {
         self.memory_bytes += bytes.len();
         self.memory.insert(a, bytes);
         self.touch_memory(a);
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "android"))]
         {
+            #[cfg(target_os = "ios")]
             const MAX_ASSET_MEMORY_BYTES: usize = 160 << 20; // 160 MB LRU cap on iOS
+            #[cfg(target_os = "android")]
+            const MAX_ASSET_MEMORY_BYTES: usize = 200 << 20; // 200 MB LRU cap on Android
             while self.memory_bytes > MAX_ASSET_MEMORY_BYTES {
                 let Some(oldest) = self.memory_lru.pop_front() else {
                     self.memory_bytes = 0;
@@ -1283,10 +1286,10 @@ pub type MeshUpload<'a> = dyn FnMut(&[Vec3], &[Vec3], &[Vec2], &[glam::Vec4], &[
 /// (`None`: a new one), so the slot itself stays with the renderer.
 pub type TextureUpload<'a> = dyn FnMut(&Rgba, Option<u32>) -> u32 + 'a;
 
-/// Shared per-frame decode/upload counter on iOS to stagger streaming (max 2 assets/frame).
+/// Shared per-frame decode/upload counter on mobile to stagger streaming (max 2 assets/frame).
 static FRAME_ASSET_UPLOADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-#[cfg(target_os = "ios")]
-const MAX_IOS_ASSETS_PER_FRAME: usize = 2;
+#[cfg(any(target_os = "ios", target_os = "android"))]
+const MAX_MOBILE_ASSETS_PER_FRAME: usize = 2;
 
 /// Loaded meshes by content id (None = failed for good).
 #[derive(Default)]
@@ -1402,14 +1405,14 @@ impl MeshCache {
                 None
             }
             Fetch::Ready(bytes) => {
-                #[cfg(target_os = "ios")]
+                #[cfg(any(target_os = "ios", target_os = "android"))]
                 if !sync_decode()
-                    && FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME
+                    && FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_MOBILE_ASSETS_PER_FRAME
                 {
                     self.deferred = true;
                     return None;
                 }
-                #[cfg(target_os = "ios")]
+                #[cfg(any(target_os = "ios", target_os = "android"))]
                 FRAME_ASSET_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let out = match load_mesh_projected(&bytes) {
                     Ok((pos, nrm, uv, extent, mut colors, planes, center)) => {
@@ -1670,9 +1673,9 @@ impl TextureCache {
                 // Small images decode here; bigger ones on the decode
                 // workers (the part waits and is redone on arrival).
                 Fetch::Ready(bytes) if bytes.len() <= 16 * 1024 || sync_decode() => {
-                    #[cfg(target_os = "ios")]
+                    #[cfg(any(target_os = "ios", target_os = "android"))]
                     if !sync_decode()
-                        && FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME
+                        && FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_MOBILE_ASSETS_PER_FRAME
                     {
                         self.deferred = true;
                         return None;
@@ -1680,12 +1683,12 @@ impl TextureCache {
                     Some(texture::decode(&bytes).map(|i| (i, None, None)))
                 }
                 Fetch::Ready(bytes) => {
-                    #[cfg(target_os = "ios")]
-                    if FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME {
+                    #[cfg(any(target_os = "ios", target_os = "android"))]
+                    if FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_MOBILE_ASSETS_PER_FRAME {
                         self.deferred = true;
                         return None;
                     }
-                    #[cfg(target_os = "ios")]
+                    #[cfg(any(target_os = "ios", target_os = "android"))]
                     FRAME_ASSET_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let (tx, _) = self.decode_chan.get_or_insert_with(std::sync::mpsc::channel);
                     texture::decode_async(bytes, tx.clone(), id.to_string());
@@ -1694,12 +1697,12 @@ impl TextureCache {
                 }
             },
         };
-        #[cfg(target_os = "ios")]
-        let ios_over_budget = FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_IOS_ASSETS_PER_FRAME;
-        #[cfg(not(target_os = "ios"))]
-        let ios_over_budget = false;
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        let mobile_over_budget = FRAME_ASSET_UPLOADS.load(std::sync::atomic::Ordering::Relaxed) >= MAX_MOBILE_ASSETS_PER_FRAME;
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        let mobile_over_budget = false;
         if decoded.is_some()
-            && (ios_over_budget || self.upload_ms > UPLOAD_BUDGET_MS || self.upload_bytes >= upload_budget_bytes())
+            && (mobile_over_budget || self.upload_ms > UPLOAD_BUDGET_MS || self.upload_bytes >= upload_budget_bytes())
             && !sync_decode()
         {
             // Over this frame's budget: upload it next frame.
@@ -1713,7 +1716,7 @@ impl TextureCache {
             None => None,
             Some(result) => match result {
                 Ok((img, mips, _waiting)) => {
-                    #[cfg(target_os = "ios")]
+                    #[cfg(any(target_os = "ios", target_os = "android"))]
                     FRAME_ASSET_UPLOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let t0 = std::time::Instant::now();
                     // (the chain holds level 0 too; made in add_texture otherwise)

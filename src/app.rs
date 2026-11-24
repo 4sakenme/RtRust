@@ -236,6 +236,7 @@ pub struct Editor {
     pub harness: Harness,
     pub last_frame: Instant,
     pub fps: f32,
+    pub loading_screen: crate::loading_screen::LoadingScreenState,
     pub confirm_discard: Option<PendingAction>,
     /// Selection as of the last Explorer sync.
     pub last_selection: Vec<Ref>,
@@ -409,6 +410,7 @@ impl RustudioApp {
             harness,
             last_frame: Instant::now(),
             fps: 0.0,
+            loading_screen: Default::default(),
             confirm_discard: None,
             last_selection: Vec::new(),
             last_work_ms: 0.0,
@@ -2389,6 +2391,8 @@ impl RustudioApp {
             ctx.data_mut(|d| d.insert_temp(prev_kb_id, wants_kb));
         }
         crate::wallpaper::modal_ui(&ctx);
+        let place_loading = ed.place_loading();
+        let pending_assets = ed.game.textures.counts().0;
         // The Start Page replaces the editor's chrome until something opens.
         if ed.start_page_ui(ui) {
             ed.confirm_ui(&ctx);
@@ -2406,6 +2410,7 @@ impl RustudioApp {
             if ed.game.account.busy() || ed.game.assets.busy() {
                 ctx.request_repaint();
             }
+            ed.loading_screen.show(&ctx, place_loading, pending_assets);
             self.watchdog.complete();
             return;
         }
@@ -2733,6 +2738,9 @@ impl RustudioApp {
                 ctx.request_repaint();
             }
         }
+        let place_loading_end = ed.place_loading();
+        let pending_assets_end = ed.game.textures.counts().0;
+        ed.loading_screen.show(&ctx, place_loading_end, pending_assets_end);
         self.watchdog.complete();
     }
 

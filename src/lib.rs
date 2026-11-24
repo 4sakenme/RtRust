@@ -43,6 +43,7 @@ pub mod hypr;
 pub mod studio_settings;
 pub mod font_manager;
 pub mod platform;
+pub mod loading_screen;
 pub mod wallpaper;
 pub mod touch_input_bridge;
 pub mod mcp_assistant;

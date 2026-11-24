@@ -88,6 +88,16 @@ fn detect_total_ram_mb() -> u64 {
             }
         }
     }
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    {
+        unsafe {
+            let pages = libc::sysconf(libc::_SC_PHYS_PAGES);
+            let page_size = libc::sysconf(libc::_SC_PAGESIZE);
+            if pages > 0 && page_size > 0 {
+                return ((pages as u64) * (page_size as u64)) / (1024 * 1024);
+            }
+        }
+    }
     4096
 }
 
@@ -98,33 +108,34 @@ fn detect_cpu_cores() -> usize {
 }
 
 fn config_for_ram(ram_mb: u64, preset: PerfPreset) -> TunerConfig {
+    let is_mobile = cfg!(any(target_os = "ios", target_os = "android"));
     match preset {
         PerfPreset::Ultra => TunerConfig {
             preset,
-            cache_budget_mb: 2048,
-            luau_gc_mb: 256,
+            cache_budget_mb: if is_mobile { 384 } else { 2048 },
+            luau_gc_mb: if is_mobile { 128 } else { 256 },
             render_scale: 0.75,
             fps_limit: 60,
             shadows_enabled: false,
         },
         PerfPreset::Balanced => TunerConfig {
             preset,
-            cache_budget_mb: 1024,
-            luau_gc_mb: 256,
-            render_scale: 0.50,
+            cache_budget_mb: if is_mobile { 224 } else { 1024 },
+            luau_gc_mb: if is_mobile { 96 } else { 256 },
+            render_scale: 0.55,
             fps_limit: 60,
             shadows_enabled: false,
         },
         PerfPreset::BatterySaver => TunerConfig {
             preset,
-            cache_budget_mb: 1024,
-            luau_gc_mb: 128,
-            render_scale: 0.35,
-            fps_limit: 60,
+            cache_budget_mb: if is_mobile { 160 } else { 512 },
+            luau_gc_mb: 64,
+            render_scale: 0.40,
+            fps_limit: 30,
             shadows_enabled: false,
         },
         PerfPreset::AutoDetect => {
-            if ram_mb >= 7600 {
+            if ram_mb >= 7600 && !is_mobile {
                 TunerConfig {
                     preset,
                     cache_budget_mb: 3072,
@@ -133,30 +144,39 @@ fn config_for_ram(ram_mb: u64, preset: PerfPreset) -> TunerConfig {
                     fps_limit: 60,
                     shadows_enabled: true,
                 }
-            } else if ram_mb >= 3800 {
+            } else if ram_mb >= 5500 {
                 TunerConfig {
                     preset,
-                    cache_budget_mb: 1536,
-                    luau_gc_mb: 256,
-                    render_scale: 0.50,
+                    cache_budget_mb: if is_mobile { 256 } else { 1536 },
+                    luau_gc_mb: if is_mobile { 96 } else { 256 },
+                    render_scale: if is_mobile { 0.65 } else { 0.50 },
                     fps_limit: 60,
+                    shadows_enabled: false,
+                }
+            } else if ram_mb >= 3500 {
+                TunerConfig {
+                    preset,
+                    cache_budget_mb: if is_mobile { 160 } else { 1024 },
+                    luau_gc_mb: 64,
+                    render_scale: 0.50,
+                    fps_limit: if is_mobile { 30 } else { 60 },
                     shadows_enabled: false,
                 }
             } else {
                 TunerConfig {
                     preset,
-                    cache_budget_mb: 1024,
-                    luau_gc_mb: 128,
+                    cache_budget_mb: 128,
+                    luau_gc_mb: 64,
                     render_scale: 0.40,
-                    fps_limit: 60,
+                    fps_limit: 30,
                     shadows_enabled: false,
                 }
             }
         }
         PerfPreset::Custom => TunerConfig {
             preset,
-            cache_budget_mb: 1024,
-            luau_gc_mb: 256,
+            cache_budget_mb: if is_mobile { 192 } else { 1024 },
+            luau_gc_mb: 96,
             render_scale: 0.50,
             fps_limit: 60,
             shadows_enabled: false,
