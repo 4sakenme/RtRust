@@ -517,6 +517,13 @@ impl Editor {
         if self.game.play.is_some() || !t.available() {
             return;
         }
+        // Purge unused Editor asset/texture/mesh caches and activate Playtest Eco BEFORE
+        // PlaySession clones the DOM & allocates physics/Luau VM so heavy maps (e.g. Crimson)
+        // never spike past iOS's 2098 MB Jetsam ceiling on 4 GB devices (iPhone 11).
+        if rustudio_core::mobile::is_eco() {
+            rustudio_core::mobile::set_playtest_eco_active(true);
+            self.game.purge_unused_caches();
+        }
         self.ui.run_type = t;
         match t {
             RunType::Test => {

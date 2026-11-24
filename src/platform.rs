@@ -642,8 +642,58 @@ pub fn physical_memory_bytes() -> u64 {
     4 * 1024 * 1024 * 1024
 }
 
-/// Queries current process resident memory (RSS) in bytes on Android/Linux.
+/// Queries current process resident memory in bytes:
+/// - iOS: `task_info(TASK_VM_INFO).phys_footprint` (the exact metric iOS Jetsam enforces)
+/// - Android / Linux: `VmRSS` from `/proc/self/status`
 pub fn process_resident_bytes() -> u64 {
+    #[cfg(target_os = "ios")]
+    {
+        // Mach `task_vm_info_data_t` (macOS/iOS XNU `mach/task_info.h`, TASK_VM_INFO = 22).
+        // `phys_footprint` is at field index 12 (offset 88 bytes on 64-bit arm64).
+        #[repr(C)]
+        struct TaskVmInfo {
+            virtual_size: u64,
+            region_count: i32,
+            page_size: i32,
+            resident_size: u64,
+            resident_size_peak: u64,
+            device: u64,
+            device_peak: u64,
+            internal: u64,
+            internal_peak: u64,
+            external: u64,
+            external_peak: u64,
+            reusable: u64,
+            reusable_peak: u64,
+            purgeable_volatile_pmap: u64,
+            purgeable_volatile_resident: u64,
+            purgeable_volatile_virtual: u64,
+            compressed: u64,
+            compressed_peak: u64,
+            compressed_lifetime: u64,
+            phys_footprint: u64,
+            _pad: [u64; 32],
+        }
+        extern "C" {
+            fn mach_task_self() -> u32;
+            fn task_info(
+                target_task: u32,
+                flavor: i32,
+                task_info_out: *mut TaskVmInfo,
+                task_info_out_cnt: *mut u32,
+            ) -> i32;
+        }
+        const TASK_VM_INFO: i32 = 22;
+        let mut info: TaskVmInfo = unsafe { std::mem::zeroed() };
+        let mut count = (std::mem::size_of::<TaskVmInfo>() / std::mem::size_of::<u32>()) as u32;
+        let kr = unsafe { task_info(mach_task_self(), TASK_VM_INFO, &mut info, &mut count) };
+        if kr == 0 && info.phys_footprint > 0 {
+            return info.phys_footprint;
+        }
+        if kr == 0 && info.resident_size > 0 {
+            return info.resident_size;
+        }
+    }
     #[cfg(any(target_os = "android", target_os = "linux"))]
     {
         if let Ok(text) = std::fs::read_to_string("/proc/self/status") {

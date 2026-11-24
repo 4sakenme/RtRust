@@ -2315,7 +2315,10 @@ impl RustudioApp {
         let playtest_eco = ed.game.play.is_some() && rustudio_core::mobile::is_eco();
         rustudio_core::mobile::set_playtest_eco_active(playtest_eco);
         let mut need_purge = crate::platform::take_memory_warning();
-        if ed.game.play.is_some() && (ed.game.frame_no % 60 == 0) {
+        let check_interval = if ed.game.play.is_some() { 15 } else { 60 };
+        if (ed.game.play.is_some() || cfg!(any(target_os = "ios", target_os = "android")))
+            && (ed.game.frame_no % check_interval == 0)
+        {
             let rss = crate::platform::process_resident_bytes();
             let threshold = (rustudio_core::mobile::playtest_ram_budget_bytes() * 80) / 100;
             if rss > 0 && rss >= threshold {
