@@ -1562,10 +1562,10 @@ impl Editor {
             }
         }
 
-        // 7. Quick Tools & Plugins Grid Popup (from bottom `+` button) with Luminous Border Trail
+        // 7. Quick Tools & Insert Menu (from bottom `+ Tools` button)
         if self.ui.portrait_quick_grid_open {
             let mut open = self.ui.portrait_quick_grid_open;
-            let shown = egui::Window::new("⚡ Quick Tools & Plugins")
+            let shown = egui::Window::new("Quick Insert & Tools")
                 .id(egui::Id::new("portrait_quick_grid"))
                 .open(&mut open)
                 .collapsible(false)
@@ -1573,49 +1573,83 @@ impl Editor {
                 .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -(68.0 + safe_bottom)))
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .fill(Color32::from_rgba_unmultiplied(20, 22, 30, 242))
+                        .fill(crate::wallpaper::OBSIDIAN_CARD)
                         .corner_radius(egui::CornerRadius::same(16))
                         .inner_margin(egui::Margin::same(12)),
                 )
                 .show(ctx, |ui| {
-                    let btn_sz = egui::vec2(108.0, 42.0);
+                    let btn_sz = egui::vec2(108.0, 40.0);
+                    let mut quick_btn = |ui: &mut egui::Ui, icon_name: &str, label: &str, accent: Color32| -> bool {
+                        let (r, resp) = ui.allocate_exact_size(btn_sz, Sense::click());
+                        ui.painter().rect_filled(
+                            r,
+                            egui::CornerRadius::same(10),
+                            if resp.hovered() {
+                                crate::wallpaper::OBSIDIAN_HOVER
+                            } else {
+                                crate::wallpaper::SLATE_PILL_BG
+                            },
+                        );
+                        ui.painter().rect_stroke(
+                            r,
+                            egui::CornerRadius::same(10),
+                            egui::Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER),
+                            egui::StrokeKind::Inside,
+                        );
+                        let ic_r = Rect::from_center_size(egui::pos2(r.min.x + 18.0, r.center().y), Vec2::splat(16.0));
+                        rustudio_engine::ti::paint(ui.painter(), ic_r, icon_name, accent);
+                        ui.painter().text(
+                            egui::pos2(r.min.x + 32.0, r.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            label,
+                            egui::FontId::proportional(12.0),
+                            Color32::WHITE,
+                        );
+                        resp.clicked()
+                    };
                     egui::Grid::new("portrait_tools_grid").spacing([8.0, 8.0]).show(ui, |ui| {
-                        if ui.add_sized(btn_sz, egui::Button::new("🔌 Plugins")).clicked() {
-                            self.ui_action(ctx, "manage_plugins");
+                        if quick_btn(ui, "cube", "Part", crate::wallpaper::RUST_ORANGE) {
+                            self.ui_action(ctx, "part_block");
                             self.ui.portrait_quick_grid_open = false;
                         }
-                        if ui.add_sized(btn_sz, egui::Button::new("🧑 Character")).clicked() {
-                            self.ui_action(ctx, "character");
+                        if quick_btn(ui, "file-code", "Script", crate::wallpaper::LOGO_CYAN) {
+                            self.ui_action(ctx, "script");
+                            if let Some(r) = self.game.doc.selection.first().copied() {
+                                self.open_script.push(r);
+                            }
                             self.ui.portrait_quick_grid_open = false;
                         }
-                        if ui.add_sized(btn_sz, egui::Button::new("🧰 Toolbox")).clicked() {
-                            self.ui.portrait_tool_panel = Some(crate::app::Tab::Toolbox);
+                        if quick_btn(ui, "code", "LocalScript", crate::wallpaper::PASTEL_SKY) {
+                            self.ui_action(ctx, "class:LocalScript");
+                            if let Some(r) = self.game.doc.selection.first().copied() {
+                                self.open_script.push(r);
+                            }
                             self.ui.portrait_quick_grid_open = false;
                         }
                         ui.end_row();
-                        if ui.add_sized(btn_sz, egui::Button::new("⛰ Terrain")).clicked() {
-                            self.ui.portrait_tool_panel = Some(crate::app::Tab::TerrainEditor);
+                        if quick_btn(ui, "folder", "Folder", crate::wallpaper::PASTEL_GOLD) {
+                            self.ui_action(ctx, "class:Folder");
                             self.ui.portrait_quick_grid_open = false;
                         }
-                        if ui.add_sized(btn_sz, egui::Button::new("➕ Insert Obj")).clicked() {
+                        if quick_btn(ui, "box", "Model", crate::wallpaper::PASTEL_MINT) {
+                            self.ui_action(ctx, "class:Model");
+                            self.ui.portrait_quick_grid_open = false;
+                        }
+                        if quick_btn(ui, "plus", "Insert Obj", crate::wallpaper::PASTEL_LAVENDER) {
                             self.ui_action(ctx, "insert_object");
                             self.ui.portrait_quick_grid_open = false;
                         }
-                        if ui.add_sized(btn_sz, egui::Button::new("📜 New Script")).clicked() {
-                            self.ui_action(ctx, "script");
-                            self.ui.portrait_quick_grid_open = false;
-                        }
                         ui.end_row();
-                        if ui.add_sized(btn_sz, egui::Button::new("🎨 Wallpapers")).clicked() {
-                            crate::wallpaper::toggle_modal(ctx);
+                        if quick_btn(ui, "tools", "Toolbox", crate::wallpaper::PASTEL_PEACH) {
+                            self.ui.portrait_tool_panel = Some(crate::app::Tab::Toolbox);
                             self.ui.portrait_quick_grid_open = false;
                         }
-                        if ui.add_sized(btn_sz, egui::Button::new("⚙ Settings")).clicked() {
+                        if quick_btn(ui, "mountain", "Terrain", crate::wallpaper::PASTEL_MINT) {
+                            self.ui.portrait_tool_panel = Some(crate::app::Tab::TerrainEditor);
+                            self.ui.portrait_quick_grid_open = false;
+                        }
+                        if quick_btn(ui, "settings", "Settings", theme::TEXT_DIM) {
                             self.ui_action(ctx, "studio_settings");
-                            self.ui.portrait_quick_grid_open = false;
-                        }
-                        if ui.add_sized(btn_sz, egui::Button::new("🤖 AI (MCP)")).clicked() {
-                            crate::mcp_assistant::toggle_open();
                             self.ui.portrait_quick_grid_open = false;
                         }
                         ui.end_row();
@@ -1625,7 +1659,7 @@ impl Editor {
                 ctx.layer_painter(r.response.layer_id).rect_stroke(
                     r.response.rect,
                     egui::CornerRadius::same(16),
-                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
+                    egui::Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER),
                     egui::StrokeKind::Inside,
                 );
             }
@@ -1895,14 +1929,18 @@ impl Editor {
         let side_right = (8.0 + safe_right).round().clamp(6.0, 120.0) as i8;
         let top_pad = (4.0 + safe_top * 0.35).round().clamp(3.0, 48.0) as i8;
 
-        // 1. Single-Row Compact Top Ribbon Bar (`height: 38pt`)
+        // 1. Two-Tier Landscape Studio Ribbon matching Stitch 1:1
         let mut act: Option<String> = None;
-        egui::Panel::top("landscape_single_top_bar")
-            .exact_size(38.0 + top_pad as f32)
+        let ribbon_tab_id = egui::Id::new("landscape_ribbon_tab_idx");
+        let mut active_tab_idx = ctx.data(|d| d.get_temp::<usize>(ribbon_tab_id).unwrap_or(0));
+
+        // Row 1: Menu & Session Bar (RtRust logo, File, Tabs | Undo/Redo, Play, Profile)
+        egui::Panel::top("landscape_ribbon_row1")
+            .exact_size(34.0 + top_pad as f32)
             .frame(
                 egui::Frame::new()
-                    .fill(Color32::from_rgba_unmultiplied(18, 20, 27, 246))
-                    .stroke(egui::Stroke::new(1.0, Color32::from_rgb(38, 42, 54)))
+                    .fill(crate::wallpaper::OBSIDIAN_CANVAS)
+                    .stroke(egui::Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
                     .inner_margin(egui::Margin {
                         left: side_left,
                         right: side_right,
@@ -1912,18 +1950,26 @@ impl Editor {
             )
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
-                    ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
+                    ui.spacing_mut().item_spacing = egui::vec2(5.0, 0.0);
 
-                    // File menu pill (Stitch Rust-Orange #FF5A26)
+                    crate::icons::logo(ui, 18.0);
+                    ui.label(
+                        egui::RichText::new("RtRust")
+                            .size(13.0)
+                            .strong()
+                            .color(Color32::WHITE),
+                    );
+
+                    // #FF5A26 File menu button
                     let file_btn = egui::Button::new(
                         egui::RichText::new("File")
-                            .size(12.5)
+                            .size(12.0)
                             .color(Color32::WHITE)
                             .strong(),
                     )
                     .fill(crate::wallpaper::RUST_ORANGE)
                     .corner_radius(6.0)
-                    .min_size(Vec2::new(42.0, 26.0));
+                    .min_size(Vec2::new(40.0, 24.0));
                     let file_resp = ui.add(file_btn);
                     egui::Popup::menu(&file_resp).show(|ui| {
                         ui.label(egui::RichText::new("File").strong().small().color(theme::TEXT_DIM));
@@ -1935,249 +1981,56 @@ impl Editor {
                         if ui.button("Save to Roblox As...").clicked() { self.ui_action(ctx, "save_roblox_as"); ui.close(); }
                         if ui.button("Publish to Roblox").clicked() { self.ui_action(ctx, "save_roblox"); ui.close(); }
                         if ui
-                            .button(egui::RichText::new("Close Place (Home)").color(Color32::from_rgb(255, 115, 115)))
+                            .button(egui::RichText::new("Exit to Home").color(Color32::from_rgb(255, 115, 115)))
                             .clicked()
                         {
                             self.ui_action(ctx, "close_place");
                             ui.close();
                         }
                         ui.separator();
-                        if ui.button("🎨 Themes & Wallpapers...").clicked() { crate::wallpaper::toggle_modal(ctx); ui.close(); }
+                        if ui.button("Themes & Wallpapers...").clicked() { crate::wallpaper::toggle_modal(ctx); ui.close(); }
                         if ui.button("Studio Settings...").clicked() { self.ui_action(ctx, "studio_settings"); ui.close(); }
                         if ui.button("Manage Plugins...").clicked() { self.ui_action(ctx, "manage_plugins"); ui.close(); }
                         if ui.button("AI Assistant (MCP)").clicked() { crate::mcp_assistant::toggle_open(); ui.close(); }
                     });
 
-                    // Always-visible `3D Viewport` / `Workspace` pill button so user can return to pure 3D view anytime
-                    let is_pure_3d = self.ui.portrait_tab == PortraitTab::Viewport
-                        && self.ui.portrait_tool_panel.is_none();
-                    let ws_btn = egui::Button::new(
-                        egui::RichText::new("🌐 3D Viewport")
-                            .size(12.0)
-                            .strong()
-                            .color(Color32::WHITE),
-                    )
-                    .fill(if is_pure_3d {
-                        Color32::from_rgb(33, 112, 228)
-                    } else {
-                        Color32::from_rgba_unmultiplied(32, 36, 48, 220)
-                    })
-                    .corner_radius(13.0)
-                    .min_size(Vec2::new(88.0, 28.0));
-                    if ui.add(ws_btn).on_hover_text("Return to pure 3D Viewport").clicked() {
-                        self.ui.portrait_tab = PortraitTab::Viewport;
-                        self.ui.portrait_tool_panel = None;
-                        self.ui.portrait_quick_grid_open = false;
-                    }
-
-                    // Interactive Snap Grid Pill (`Off`, `0.25`, `1.0` studs)
-                    let snap_lbl = if self.game.snap_move {
-                        format!("Snap: {:.2} ▾", self.game.move_inc)
-                    } else {
-                        "Snap: Off ▾".to_string()
-                    };
-                    let snap_resp = ui.add(
-                        egui::Button::new(egui::RichText::new(snap_lbl).size(11.5).color(Color32::WHITE))
-                            .fill(Color32::from_rgb(30, 34, 46))
-                            .corner_radius(12.0)
-                            .min_size(Vec2::new(82.0, 26.0)),
-                    );
-                    egui::Popup::menu(&snap_resp).show(|ui| {
-                        if ui.selectable_label(!self.game.snap_move, "Snap: Off").clicked() {
-                            self.game.snap_move = false;
-                            ui.close();
-                        }
-                        if ui.selectable_label(self.game.snap_move && (self.game.move_inc - 0.25).abs() < 0.01, "Snap: 0.25 studs").clicked() {
-                            self.game.snap_move = true;
-                            self.game.move_inc = 0.25;
-                            ui.close();
-                        }
-                        if ui.selectable_label(self.game.snap_move && (self.game.move_inc - 1.0).abs() < 0.01, "Snap: 1.00 studs").clicked() {
-                            self.game.snap_move = true;
-                            self.game.move_inc = 1.0;
-                            ui.close();
-                        }
-                    });
-
-                    // Focus Code IDE pill (enters pure Code IDE without 3D rendering)
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("</> Code IDE")
-                                    .size(11.5)
-                                    .strong()
-                                    .color(crate::wallpaper::LOGO_CYAN),
-                            )
-                            .fill(Color32::from_rgba_unmultiplied(28, 34, 46, 220))
-                            .stroke(egui::Stroke::new(1.0, crate::wallpaper::LOGO_CYAN.gamma_multiply(0.45)))
-                            .corner_radius(13.0)
-                            .min_size(Vec2::new(78.0, 26.0)),
-                        )
-                        .on_hover_text("Switch to pure Focus Code IDE (hides 3D)")
-                        .clicked()
-                    {
-                        self.ui.focus_code_mode = true;
-                        self.ui.viewport_hidden = true;
-                    }
-
-                    // Play / Stop compact button
-                    let playing = self.game.play.is_some();
-                    if playing {
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    egui::RichText::new("■ Stop")
-                                        .size(12.5)
-                                        .color(Color32::WHITE)
-                                        .strong(),
-                                )
-                                .fill(Color32::from_rgb(185, 50, 50))
-                                .corner_radius(6.0)
-                                .min_size(Vec2::new(56.0, 26.0)),
-                            )
-                            .clicked()
-                        {
-                            self.stop_play();
-                        }
-                    } else if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("▶ Play")
-                                    .size(12.5)
-                                    .color(Color32::WHITE)
-                                    .strong(),
-                            )
-                            .fill(Color32::from_rgb(38, 142, 74))
-                            .corner_radius(6.0)
-                            .min_size(Vec2::new(56.0, 26.0)),
-                        )
-                        .clicked()
-                    {
-                        self.start_run(self.ui.run_type);
-                    }
-
-                    // Core Transform & Insert tools inline: Select, Move, Scale, Rotate, Part
-                    for (icon, label, tool) in [
-                        ("pointer", "Select", Tool::Select),
-                        ("arrows-move", "Move", Tool::Move),
-                        ("resize", "Scale", Tool::Scale),
-                        ("rotate-clockwise-2", "Rotate", Tool::Rotate),
+                    // Ribbon Tab Pills: Home, Model, Avatar, UI, Test, View, Plugins
+                    for (idx, label, mapped) in [
+                        (0usize, "Home", Some(RibbonTab::Home)),
+                        (1, "Model", Some(RibbonTab::Model)),
+                        (2, "Avatar", Some(RibbonTab::Avatar)),
+                        (3, "UI", Some(RibbonTab::Ui)),
+                        (4, "Test", None),
+                        (5, "View", None),
+                        (6, "Plugins", Some(RibbonTab::Plugins)),
                     ] {
-                        let active = self.tool == tool;
-                        let (r, resp) = ui.allocate_exact_size(Vec2::new(52.0, 28.0), Sense::click());
-                        let fill = if active {
-                            Color32::from_rgb(33, 112, 228)
-                        } else if resp.hovered() {
-                            theme::HOVER_BG
+                        let active = active_tab_idx == idx;
+                        let btn = egui::Button::new(
+                            egui::RichText::new(label)
+                                .size(11.5)
+                                .strong()
+                                .color(if active { Color32::WHITE } else { theme::TEXT_DIM }),
+                        )
+                        .fill(if active {
+                            Color32::from_rgb(37, 99, 235)
                         } else {
-                            Color32::from_rgba_unmultiplied(28, 31, 40, 200)
-                        };
-                        ui.painter().rect_filled(r, egui::CornerRadius::same(6), fill);
-                        let ic_r = Rect::from_center_size(egui::pos2(r.left() + 11.0, r.center().y), Vec2::splat(13.0));
-                        rustudio_engine::ti::paint(
-                            ui.painter(),
-                            ic_r,
-                            icon,
-                            if active { Color32::WHITE } else { crate::wallpaper::PASTEL_LAVENDER },
-                        );
-                        ui.painter().text(
-                            egui::pos2(r.left() + 20.0, r.center().y),
-                            egui::Align2::LEFT_CENTER,
-                            label,
-                            egui::FontId::proportional(11.0),
-                            Color32::WHITE,
-                        );
-                        self.ui_rects.insert(tool_key(tool), r);
-                        if resp.clicked() {
-                            self.tool = tool;
+                            Color32::TRANSPARENT
+                        })
+                        .corner_radius(6.0)
+                        .min_size(Vec2::new(38.0, 24.0));
+                        if ui.add(btn).clicked() {
+                            active_tab_idx = idx;
+                            ctx.data_mut(|d| d.insert_temp(ribbon_tab_id, idx));
+                            if let Some(rt) = mapped {
+                                self.ui.tab = rt;
+                            }
                         }
                     }
 
-                    // Quick `+ Part` button
-                    let (part_r, part_resp) = ui.allocate_exact_size(Vec2::new(48.0, 28.0), Sense::click());
-                    ui.painter().rect_filled(
-                        part_r,
-                        egui::CornerRadius::same(6),
-                        if part_resp.hovered() {
-                            theme::HOVER_BG
-                        } else {
-                            Color32::from_rgba_unmultiplied(28, 31, 40, 200)
-                        },
-                    );
-                    let p_ic = Rect::from_center_size(egui::pos2(part_r.left() + 11.0, part_r.center().y), Vec2::splat(13.0));
-                    rustudio_engine::ti::paint(ui.painter(), p_ic, "cube", crate::wallpaper::PASTEL_MINT);
-                    ui.painter().text(
-                        egui::pos2(part_r.left() + 20.0, part_r.center().y),
-                        egui::Align2::LEFT_CENTER,
-                        "Part",
-                        egui::FontId::proportional(11.0),
-                        Color32::WHITE,
-                    );
-                    if part_resp.on_hover_text("Insert Part").clicked() {
-                        act = Some("part_block".to_string());
-                    }
-
-                    // Pill Category Dropdown Box (`[ <Icon> UI ▾ ]` / `[ <Icon> Script ▾ ]`)
-                    let cat_pop_id = egui::Id::new("portrait_cat_dropdown_open");
-                    let mut cat_open = ctx.data(|d| d.get_temp::<bool>(cat_pop_id).unwrap_or(false));
-                    let cat_icon = match self.ui.tab {
-                        RibbonTab::Home => "pointer",
-                        RibbonTab::Model => "cube",
-                        RibbonTab::Avatar => "user-cog",
-                        RibbonTab::Ui => "app-window",
-                        RibbonTab::Script => "file-code",
-                        RibbonTab::Plugins => "sparkles",
-                    };
-                    let cat_accent = match self.ui.tab {
-                        RibbonTab::Home => crate::wallpaper::PASTEL_LAVENDER,
-                        RibbonTab::Model => crate::wallpaper::PASTEL_MINT,
-                        RibbonTab::Avatar => crate::wallpaper::PASTEL_GOLD,
-                        RibbonTab::Ui => crate::wallpaper::PASTEL_ROSE,
-                        RibbonTab::Script => crate::wallpaper::PASTEL_SKY,
-                        RibbonTab::Plugins => crate::wallpaper::PASTEL_PEACH,
-                    };
-                    let pill_label = format!("{} ▾", self.ui.tab.label());
-                    let font = egui::FontId::proportional(12.0);
-                    let text_w = ui.fonts_mut(|f| f.layout_no_wrap(pill_label.clone(), font.clone(), Color32::WHITE).size().x);
-                    let pill_sz = egui::vec2((text_w + 38.0).max(84.0), 26.0);
-                    let (pill_rect, pill_resp) = ui.allocate_exact_size(pill_sz, Sense::click());
-                    ui.painter().rect_filled(
-                        pill_rect,
-                        egui::CornerRadius::same(13),
-                        if cat_open {
-                            Color32::from_rgba_unmultiplied(40, 44, 58, 240)
-                        } else {
-                            Color32::from_rgba_unmultiplied(26, 29, 38, 225)
-                        },
-                    );
-                    ui.painter().rect_stroke(
-                        pill_rect,
-                        egui::CornerRadius::same(13),
-                        egui::Stroke::new(1.0, cat_accent.gamma_multiply(0.7)),
-                        egui::StrokeKind::Inside,
-                    );
-                    rustudio_engine::ti::paint(
-                        ui.painter(),
-                        Rect::from_center_size(egui::pos2(pill_rect.left() + 13.0, pill_rect.center().y), Vec2::splat(13.0)),
-                        cat_icon,
-                        cat_accent,
-                    );
-                    ui.painter().text(
-                        egui::pos2(pill_rect.left() + 24.0, pill_rect.center().y),
-                        egui::Align2::LEFT_CENTER,
-                        &pill_label,
-                        font,
-                        Color32::WHITE,
-                    );
-                    if pill_resp.clicked() {
-                        cat_open = !cat_open;
-                        ctx.data_mut(|d| d.insert_temp(cat_pop_id, cat_open));
-                    }
-                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("portrait_cat_pill_rect"), pill_rect));
-
-                    // Right side controls: Sign In, Settings/Wallpaper, Perf, Undo, Redo, Inspector Toggle
+                    // Right side: Profile pill, Play/Stop, Redo, Undo
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
+                        ui.spacing_mut().item_spacing.x = 5.0;
+
                         let signed = self.game.account.signed_in();
                         let acc_label = if signed {
                             self.game.account.status_short().trim_start_matches("Roblox: ").to_string()
@@ -2187,16 +2040,14 @@ impl Editor {
                         let acc_resp = ui.add(
                             egui::Button::new(
                                 egui::RichText::new(acc_label)
-                                    .size(11.5)
+                                    .size(11.0)
                                     .strong()
-                                    .color(if signed { Color32::WHITE } else { Color32::BLACK }),
+                                    .color(Color32::WHITE),
                             )
-                            .fill(if signed {
-                                Color32::from_rgb(38, 60, 50)
-                            } else {
-                                crate::wallpaper::PASTEL_LAVENDER
-                            })
-                            .corner_radius(12.0),
+                            .fill(crate::wallpaper::OBSIDIAN_CARD)
+                            .stroke(egui::Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                            .corner_radius(12.0)
+                            .min_size(Vec2::new(64.0, 24.0)),
                         );
                         self.ui_rects.insert("account", acc_resp.rect);
                         if acc_resp.clicked() {
@@ -2204,108 +2055,222 @@ impl Editor {
                             self.game.account.adding = false;
                         }
 
-                        if ui.small_button("⚙").on_hover_text("Studio Settings").clicked() {
-                            self.ui_action(ctx, "studio_settings");
+                        // Play / Stop button with Tabler icon
+                        let playing = self.game.play.is_some();
+                        let (pr, presp) = ui.allocate_exact_size(Vec2::new(62.0, 24.0), Sense::click());
+                        ui.painter().rect_filled(
+                            pr,
+                            egui::CornerRadius::same(6),
+                            if playing {
+                                Color32::from_rgb(185, 50, 50)
+                            } else {
+                                Color32::from_rgb(38, 142, 74)
+                            },
+                        );
+                        rustudio_engine::ti::paint(
+                            ui.painter(),
+                            Rect::from_center_size(egui::pos2(pr.min.x + 14.0, pr.center().y), Vec2::splat(13.0)),
+                            if playing { "player-stop" } else { "player-play" },
+                            Color32::WHITE,
+                        );
+                        ui.painter().text(
+                            egui::pos2(pr.min.x + 25.0, pr.center().y),
+                            egui::Align2::LEFT_CENTER,
+                            if playing { "Stop" } else { "Play" },
+                            egui::FontId::proportional(11.5),
+                            Color32::WHITE,
+                        );
+                        if presp.clicked() {
+                            if playing {
+                                self.stop_play();
+                            } else {
+                                self.start_run(self.ui.run_type);
+                            }
                         }
-                        if ui.small_button("🎨").on_hover_text("Themes & Wallpapers").clicked() {
-                            crate::wallpaper::toggle_modal(ctx);
-                        }
-                        if ui.small_button("↷").on_hover_text("Redo").clicked() {
-                            self.ui_action(ctx, "redo");
-                        }
-                        if ui.small_button("↶").on_hover_text("Undo").clicked() {
-                            self.ui_action(ctx, "undo");
+
+                        // Redo & Undo Tabler icon buttons
+                        for (icon_name, cmd, tip) in [
+                            ("arrow-forward-up", "redo", "Redo"),
+                            ("arrow-back-up", "undo", "Undo"),
+                        ] {
+                            let (ur, uresp) = ui.allocate_exact_size(Vec2::new(26.0, 24.0), Sense::click());
+                            ui.painter().rect_filled(
+                                ur,
+                                egui::CornerRadius::same(6),
+                                if uresp.hovered() {
+                                    crate::wallpaper::OBSIDIAN_HOVER
+                                } else {
+                                    crate::wallpaper::OBSIDIAN_CARD
+                                },
+                            );
+                            rustudio_engine::ti::paint(
+                                ui.painter(),
+                                Rect::from_center_size(ur.center(), Vec2::splat(14.0)),
+                                icon_name,
+                                Color32::WHITE,
+                            );
+                            if uresp.on_hover_text(tip).clicked() {
+                                self.ui_action(ctx, cmd);
+                            }
                         }
                     });
                 });
             });
 
+        // Row 2: Tall Icon-Above-Label Tool Strip (52pt)
+        egui::Panel::top("landscape_ribbon_row2")
+            .exact_size(52.0)
+            .frame(
+                egui::Frame::new()
+                    .fill(crate::wallpaper::OBSIDIAN_CARD)
+                    .stroke(egui::Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                    .inner_margin(egui::Margin {
+                        left: side_left,
+                        right: side_right,
+                        top: 4,
+                        bottom: 4,
+                    }),
+            )
+            .show(ui, |ui| {
+                egui::ScrollArea::horizontal()
+                    .id_salt("landscape_ribbon_row2_scroll")
+                    .scroll_source(egui::scroll_area::ScrollSource {
+                        scroll_bar: false,
+                        drag: egui::scroll_area::DragScroll::Always,
+                        mouse_wheel: true,
+                    })
+                    .show(ui, |ui| {
+                        ui.horizontal_centered(|ui| {
+                            ui.spacing_mut().item_spacing.x = 5.0;
+
+                            let tool_btn = |ui: &mut egui::Ui, icon_name: &str, label: &str, active: bool, active_col: Color32, width: f32| -> (Rect, egui::Response) {
+                                let (r, resp) = ui.allocate_exact_size(Vec2::new(width, 42.0), Sense::click());
+                                let fill = if active {
+                                    active_col
+                                } else if resp.hovered() {
+                                    crate::wallpaper::OBSIDIAN_HOVER
+                                } else {
+                                    Color32::TRANSPARENT
+                                };
+                                if fill != Color32::TRANSPARENT {
+                                    ui.painter().rect_filled(r, egui::CornerRadius::same(8), fill);
+                                }
+                                let ic_r = Rect::from_center_size(
+                                    egui::pos2(r.center().x, r.min.y + 13.5),
+                                    Vec2::splat(16.0),
+                                );
+                                let fg = if active { Color32::WHITE } else { theme::TEXT };
+                                rustudio_engine::ti::paint(ui.painter(), ic_r, icon_name, fg);
+                                ui.painter().text(
+                                    egui::pos2(r.center().x, r.max.y - 8.5),
+                                    egui::Align2::CENTER_CENTER,
+                                    label,
+                                    egui::FontId::proportional(10.0),
+                                    if active { Color32::WHITE } else { theme::TEXT_DIM },
+                                );
+                                (r, resp)
+                            };
+
+                            // Transform tools: Select, Move, Scale, Rotate, Transform
+                            for (icon_name, label, tool) in [
+                                ("pointer", "Select", Tool::Select),
+                                ("arrows-move", "Move", Tool::Move),
+                                ("resize", "Scale", Tool::Scale),
+                                ("rotate-clockwise-2", "Rotate", Tool::Rotate),
+                                ("transform", "Transform", Tool::Transform),
+                            ] {
+                                let (r, resp) = tool_btn(
+                                    ui,
+                                    icon_name,
+                                    label,
+                                    self.tool == tool,
+                                    Color32::from_rgb(37, 99, 235),
+                                    52.0,
+                                );
+                                self.ui_rects.insert(tool_key(tool), r);
+                                if resp.clicked() {
+                                    self.tool = tool;
+                                }
+                            }
+
+                            ui.separator();
+
+                            // Interactive Snap Grid Pill (`Off`, `0.25`, `1.0` studs)
+                            let snap_lbl = if self.game.snap_move {
+                                format!("Snap: {:.2} ▾", self.game.move_inc)
+                            } else {
+                                "Snap: Off ▾".to_string()
+                            };
+                            let snap_resp = ui.add(
+                                egui::Button::new(egui::RichText::new(snap_lbl).size(11.5).color(Color32::WHITE))
+                                    .fill(crate::wallpaper::SLATE_PILL_BG)
+                                    .stroke(egui::Stroke::new(1.0, crate::wallpaper::OBSIDIAN_BORDER))
+                                    .corner_radius(10.0)
+                                    .min_size(Vec2::new(84.0, 30.0)),
+                            );
+                            egui::Popup::menu(&snap_resp).show(|ui| {
+                                if ui.selectable_label(!self.game.snap_move, "Snap: Off").clicked() {
+                                    self.game.snap_move = false;
+                                    ui.close();
+                                }
+                                if ui.selectable_label(self.game.snap_move && (self.game.move_inc - 0.25).abs() < 0.01, "Snap: 0.25 studs").clicked() {
+                                    self.game.snap_move = true;
+                                    self.game.move_inc = 0.25;
+                                    ui.close();
+                                }
+                                if ui.selectable_label(self.game.snap_move && (self.game.move_inc - 1.0).abs() < 0.01, "Snap: 1.00 studs").clicked() {
+                                    self.game.snap_move = true;
+                                    self.game.move_inc = 1.0;
+                                    ui.close();
+                                }
+                            });
+
+                            ui.separator();
+
+                            // Build & Insert tools: Part, Terrain, Toolbox, Script
+                            if tool_btn(ui, "cube", "Part", false, crate::wallpaper::RUST_ORANGE, 48.0).1.clicked() {
+                                act = Some("part_block".to_string());
+                            }
+                            let is_terrain = self.ui.portrait_tool_panel == Some(crate::app::Tab::TerrainEditor);
+                            if tool_btn(ui, "mountain", "Terrain", is_terrain, crate::wallpaper::RUST_ORANGE, 50.0).1.clicked() {
+                                self.ui.portrait_tool_panel = if is_terrain { None } else { Some(crate::app::Tab::TerrainEditor) };
+                            }
+                            let is_toolbox = self.ui.portrait_tool_panel == Some(crate::app::Tab::Toolbox);
+                            if tool_btn(ui, "tools", "Toolbox", is_toolbox, crate::wallpaper::RUST_ORANGE, 52.0).1.clicked() {
+                                self.ui.portrait_tool_panel = if is_toolbox { None } else { Some(crate::app::Tab::Toolbox) };
+                            }
+                            if tool_btn(ui, "file-code", "Script", false, crate::wallpaper::LOGO_CYAN, 48.0).1.clicked() {
+                                self.ui_action(ctx, "script");
+                                if let Some(r) = self.game.doc.selection.first().copied() {
+                                    self.open_script.push(r);
+                                }
+                            }
+
+                            ui.separator();
+
+                            // Panel toggles: Explorer, Properties, Output, Code
+                            if tool_btn(ui, "list-tree", "Explorer", inspector_open, Color32::from_rgb(37, 99, 235), 54.0).1.clicked() {
+                                inspector_open = !inspector_open;
+                                ctx.data_mut(|d| d.insert_temp(inspector_open_id, inspector_open));
+                            }
+                            if tool_btn(ui, "adjustments", "Properties", inspector_open, Color32::from_rgb(37, 99, 235), 58.0).1.clicked() {
+                                inspector_open = !inspector_open;
+                                ctx.data_mut(|d| d.insert_temp(inspector_open_id, inspector_open));
+                            }
+                            if tool_btn(ui, "terminal-2", "Output", self.ui.portrait_output_drawer, Color32::from_rgb(37, 99, 235), 50.0).1.clicked() {
+                                self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
+                            }
+                            let is_code = self.ui.portrait_tab == PortraitTab::Code && self.ui.portrait_tool_panel.is_none();
+                            if tool_btn(ui, "code", "Code", is_code, crate::wallpaper::RUST_ORANGE, 46.0).1.clicked() {
+                                self.ui.portrait_tool_panel = None;
+                                self.ui.portrait_tab = if is_code { PortraitTab::Viewport } else { PortraitTab::Code };
+                            }
+                        });
+                    });
+            });
+
         if let Some(a) = act {
             self.ui_action(ctx, &a);
-        }
-
-        // Category Dropdown Popover with Animated Luminous Border Trail
-        {
-            let cat_pop_id = egui::Id::new("portrait_cat_dropdown_open");
-            let cat_open = ctx.data(|d| d.get_temp::<bool>(cat_pop_id).unwrap_or(false));
-            let anim = ctx.animate_bool_with_time(egui::Id::new("landscape_cat_pop_anim"), cat_open, 0.16);
-            if cat_open || anim > 0.01 {
-                let anchor_rect = ctx
-                    .data(|d| d.get_temp::<Rect>(egui::Id::new("portrait_cat_pill_rect")))
-                    .unwrap_or_else(|| Rect::from_min_size(egui::pos2(240.0, 40.0), Vec2::new(86.0, 26.0)));
-                let pop_pos = egui::pos2(anchor_rect.left(), anchor_rect.bottom() + 6.0 * anim);
-                let shown = egui::Area::new(egui::Id::new("landscape_cat_dropdown_area"))
-                    .order(egui::Order::Foreground)
-                    .interactable(true)
-                    .fixed_pos(pop_pos)
-                    .show(ctx, |ui| {
-                        egui::Frame::new()
-                            .fill(Color32::from_rgba_unmultiplied(20, 22, 30, (242.0 * anim) as u8))
-                            .corner_radius(egui::CornerRadius::same(14))
-                            .inner_margin(egui::Margin::same(10))
-                            .show(ui, |ui| {
-                                ui.set_width(220.0);
-                                ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-                                ui.label(
-                                    egui::RichText::new("CATEGORY & TOOLS")
-                                        .size(10.5)
-                                        .strong()
-                                        .color(theme::TEXT_DIM),
-                                );
-                                for (tab, icon, accent) in [
-                                    (RibbonTab::Home, "pointer", crate::wallpaper::PASTEL_LAVENDER),
-                                    (RibbonTab::Model, "cube", crate::wallpaper::PASTEL_MINT),
-                                    (RibbonTab::Avatar, "user-cog", crate::wallpaper::PASTEL_GOLD),
-                                    (RibbonTab::Ui, "app-window", crate::wallpaper::PASTEL_ROSE),
-                                    (RibbonTab::Script, "file-code", crate::wallpaper::PASTEL_SKY),
-                                    (RibbonTab::Plugins, "sparkles", crate::wallpaper::PASTEL_PEACH),
-                                ] {
-                                    let selected = self.ui.tab == tab;
-                                    if ui
-                                        .add_sized(
-                                            [200.0, 28.0],
-                                            egui::Button::new(
-                                                egui::RichText::new(format!("{} Category", tab.label()))
-                                                    .size(12.5)
-                                                    .color(if selected { Color32::BLACK } else { Color32::WHITE })
-                                                    .strong(),
-                                            )
-                                            .fill(if selected {
-                                                accent
-                                            } else {
-                                                Color32::from_rgba_unmultiplied(32, 36, 48, 200)
-                                            })
-                                            .corner_radius(8.0),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.ui.tab = tab;
-                                    }
-                                    let _ = icon;
-                                }
-                                ui.separator();
-                                egui::ScrollArea::horizontal().id_salt("landscape_cat_ribbon_tools").show(ui, |ui| {
-                                    self.studio_ribbon(ui);
-                                });
-                            })
-                    });
-                let pop_rect = shown.inner.response.rect;
-                ctx.layer_painter(shown.response.layer_id).rect_stroke(
-                    pop_rect,
-                    egui::CornerRadius::same(14),
-                    egui::Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 36)),
-                    egui::StrokeKind::Inside,
-                );
-                let clicked_out = ctx.input(|i| {
-                    i.pointer.any_pressed()
-                        && i.pointer.interact_pos().is_some_and(|p| {
-                            !pop_rect.expand(8.0).contains(p) && !anchor_rect.expand(4.0).contains(p)
-                        })
-                });
-                if clicked_out {
-                    ctx.data_mut(|d| d.insert_temp(cat_pop_id, false));
-                }
-            }
         }
 
         // 2. Right Collapsible Stacked Inspector (~26% width, min 210pt, max 280pt)
@@ -2351,7 +2316,7 @@ impl Editor {
                                 if ui
                                     .add_sized(
                                         [28.0, 24.0],
-                                        egui::Button::new(egui::RichText::new("✕").strong())
+                                        egui::Button::new(egui::RichText::new("x").strong())
                                             .fill(Color32::from_rgba_unmultiplied(45, 48, 60, 200))
                                             .corner_radius(6.0),
                                     )
@@ -2369,7 +2334,7 @@ impl Editor {
                                 );
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     if ui
-                                        .small_button("➕")
+                                        .small_button("+")
                                         .on_hover_text("Quick Insert Object into Selection / Workspace")
                                         .clicked()
                                     {
@@ -2474,13 +2439,13 @@ impl Editor {
                     );
                     ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("📟 Output")
+                            egui::RichText::new("Output")
                                 .strong()
                                 .size(12.0)
                                 .color(crate::wallpaper::LOGO_CYAN),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("✕").clicked() {
+                            if ui.small_button("x").clicked() {
                                 self.ui.portrait_output_drawer = false;
                             }
                         });
@@ -2521,15 +2486,24 @@ impl Editor {
                                 "Android Vulkan"
                             };
                             ui.label(egui::RichText::new(tag).size(10.5).color(theme::TEXT_DIM));
+                            if ui.small_button("Explorer").clicked() {
+                                inspector_open = !inspector_open;
+                                ctx.data_mut(|d| d.insert_temp(inspector_open_id, inspector_open));
+                            }
                             if ui.small_button("Output").clicked() {
                                 self.ui.portrait_output_drawer = !self.ui.portrait_output_drawer;
                             }
                             if ui.small_button("Code").clicked() {
+                                self.ui.portrait_tool_panel = None;
                                 self.ui.portrait_tab = if self.ui.portrait_tab == PortraitTab::Code {
                                     PortraitTab::Viewport
                                 } else {
                                     PortraitTab::Code
                                 };
+                            }
+                            if ui.small_button("Workspace").clicked() {
+                                self.ui.portrait_tab = PortraitTab::Viewport;
+                                self.ui.portrait_tool_panel = None;
                             }
                         });
                     });
@@ -3086,13 +3060,13 @@ impl Editor {
                     );
                     ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("📟 Output")
+                            egui::RichText::new("Output")
                                 .strong()
                                 .size(12.0)
                                 .color(crate::wallpaper::LOGO_CYAN),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("✕").clicked() {
+                            if ui.small_button("x").clicked() {
                                 self.ui.portrait_output_drawer = false;
                             }
                         });

@@ -122,8 +122,8 @@ pub const SKY_NIGHT_SUN_Y: f32 = -0.1; // sky dark (stars) once the sun is this 
 pub const SKY_NIGHT_TINT: [f32; 3] = [0.051, 0.032, 0.049]; // dusk sky / day sky in linear light (before the tone curve), ClockTime 20.3: sky (10,14,27)/(17,18,31) vs (134,194,211)/(161,200,207); its light on a white face matches (0.048, 0.031, 0.046)
 pub const SKY_NIGHT_TINT_SUN_Y: f32 = -0.54; // sun height of that measurement
 pub const SKY_DARK_SUN_Y: f32 = -0.95; // sky black (00:00 at latitude 41.7: sky (0,0,0))
-pub const SKY_GRADIENT_TOP: [u8; 3] = [129, 195, 225]; // fallback sky (no skybox): Studio's displayed sky top (134,194,211) through the inverse tone curve
-pub const SKY_GRADIENT_HORIZON: [u8; 3] = [154, 204, 217]; // likewise for the horizon (161,200,207)
+pub const SKY_GRADIENT_TOP: [u8; 3] = [29, 45, 66]; // slate-blue #1D2D42
+pub const SKY_GRADIENT_HORIZON: [u8; 3] = [44, 57, 75]; // slate-blue #2C394B
 pub const MOON_IRRADIANCE_PER_BRIGHTNESS: f32 = 0.03; // night: the moon (−sun direction) lights at this × Brightness × N·L, tinted by ColorShift_Top like the sun (round 26, atmos calibration n0: the floor's top (56,55,91) under Brightness 2.6 needs 0.024–0.044 by channel; walls facing the horizon unchanged)
 pub const MOON_FADE_SUN_Y: f32 = 0.1; // the moon's light fades in as the sun sinks from the horizon to this far below (estimated)
 // Atmosphere (round 26, tools/fidelity atmos calibration: docs/MECHANICS.md "Round 26: sky and lighting")
