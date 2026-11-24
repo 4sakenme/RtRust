@@ -44,8 +44,15 @@ impl Editor {
             ctx.data_mut(|d| d.remove_temp::<(f64, egui::Pos2, bool)>(lp_down_id));
         }
 
-        if ctx.data(|d| d.get_temp::<bool>(lp_open_id).unwrap_or(false)) {
-            let pop_pos = ctx.data(|d| d.get_temp::<egui::Pos2>(lp_pos_id)).unwrap_or(response.rect.center());
+        let show_selection_pill = !self.game.doc.selection.is_empty()
+            && (cfg!(any(target_os = "ios", target_os = "android"))
+                || rustudio_core::mobile::is_drawer_mode()
+                || ctx.data(|d| d.get_temp::<bool>(lp_open_id).unwrap_or(false)));
+        if show_selection_pill {
+            let default_pos = egui::pos2(response.rect.center().x, response.rect.top() + 86.0);
+            let pop_pos = ctx
+                .data(|d| d.get_temp::<egui::Pos2>(lp_pos_id))
+                .unwrap_or(default_pos);
             let mut close = false;
             let mut lp_act: Option<&'static str> = None;
             let shown = egui::Area::new(egui::Id::new("vp_part_lp_popover"))
